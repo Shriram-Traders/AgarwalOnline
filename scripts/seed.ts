@@ -18,6 +18,9 @@ import { GuestCart } from "../src/lib/commerce/models";
 import { ProductReview, ReviewReport } from "../src/lib/reviews/models";
 if (process.env.NODE_ENV === "production" || process.env.SEED_DEMO !== "true")
   throw new Error("Fictional seed requires non-production SEED_DEMO=true.");
+// Demo accounts and orders are for local and test databases only: with mock OTP switched on,
+// anyone could sign in to a deployed site as the demo super-admin's phone number.
+const demoAccounts = process.argv.includes("--demo-accounts");
 await connectDB();
 for (const model of [
   User,
@@ -61,16 +64,14 @@ for (const [index, p] of seedProducts.entries()) {
         aliases: [...p.aliases],
         status: "published",
         featured: true,
-        bestseller:
-          index < 6 ||
-          ["stationery", "paper", "office", "art-craft"].includes(p.category),
+        // the photographed products lead the popular rail, with the gift sets
+        bestseller: index < 8 || p.category === "gift-sets",
       },
       $set: {
         highlights: [
           { en: "Selected for dependable everyday use", mr: "रोजच्या वापरासाठी विश्वासार्ह निवड" },
           { en: "Stored and handled by your local team", mr: "स्थानिक टीमकडून साठवण आणि हाताळणी" },
         ],
-        dietaryTags: p.category === "staples" ? ["Vegetarian"] : [],
         specifications: [
           { label: { en: "Pack size", mr: "पॅक आकार" }, value: { en: p.pack, mr: p.pack } },
           { label: { en: "Seller", mr: "विक्रेता" }, value: { en: "Agarwal General Stores", mr: "अग्रवाल जनरल स्टोअर्स" } },
@@ -102,12 +103,8 @@ for (const [index, p] of seedProducts.entries()) {
 }
 // Fictional staff exist only so demo orders and promotions have someone to reference.
 // They get no credential, so nobody can sign in as them. Create real staff from the Super Admin page.
-for (const [index, role] of [
-  "customer",
-  "delivery",
-  "admin",
-  "super-admin",
-].entries()) {
+const demoRoles = demoAccounts ? ["customer", "delivery", "admin", "super-admin"] : [];
+for (const [index, role] of demoRoles.entries()) {
   await User.findOneAndUpdate(
     { phone: `900000000${index + 1}` },
     {
@@ -175,17 +172,19 @@ if (superAdmin) {
   );
 }
 for (const [key, synonyms] of Object.entries({
-  rice: ["rice", "chawal", "chaval", "तांदूळ", "tandul"],
-  milk: ["milk", "doodh", "dudh", "दूध"],
-  tea: ["tea", "chai", "चहा"],
+  pen: ["pen", "kalam", "पेन"],
+  notebook: ["notebook", "vahi", "वही", "copy"],
+  gift: ["gift", "present", "bhet", "भेट"],
+  card: ["card", "greeting", "शुभेच्छापत्र"],
 })) {
+  if (!superAdmin) break; // synonyms record who set them
   await SearchSynonym.updateOne(
     { key },
     {
       $setOnInsert: {
         mappingType: "equivalent",
         synonyms,
-        updatedBy: superAdmin!._id,
+        updatedBy: superAdmin._id,
       },
     },
     { upsert: true },
@@ -203,7 +202,7 @@ const today = new Intl.DateTimeFormat("en-CA", {
   month: "2-digit",
   day: "2-digit",
 }).format(new Date());
-if (customer && deliveryPartner && demoArea && firstVariants.length) {
+if (demoAccounts && customer && deliveryPartner && demoArea && firstVariants.length) {
   const slot = await DeliverySlot.findOneAndUpdate(
     { areaId: demoArea._id, date: today, label: "4:00 PM – 7:00 PM" },
     { $setOnInsert: { capacity: 50, reserved: 0, enabled: true } },
@@ -301,7 +300,6 @@ if (customer && deliveryPartner && demoArea && firstVariants.length) {
   );
 }
 log("info", "seed.completed", {
-  message:
-    "Fictional catalog, accounts and demo analytics were seeded. Service areas remain disabled until PIN codes are confirmed.",
+  message: `Fictional catalog${demoAccounts ? ", accounts and demo orders were" : " and offers were"} seeded. Service areas remain disabled until PIN codes are confirmed.`,
 });
 await mongoose.disconnect();

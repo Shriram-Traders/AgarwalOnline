@@ -40,8 +40,8 @@ const samples: Record<string, string> = {};
 test.beforeAll(async () => {
   await mongoose.connect(uri);
   await mongoose.connection.dropDatabase();
-  // the fictional demo catalog: 20 products, 8 orders, promotions, staff
-  execFileSync("npx", ["tsx", "scripts/seed.ts"], {
+  // the fictional demo catalog: 41 products, 8 orders, promotions, staff
+  execFileSync("npx", ["tsx", "scripts/seed.ts", "--demo-accounts"], {
     env: {
       ...process.env,
       MONGODB_URI: uri,

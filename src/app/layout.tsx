@@ -48,7 +48,7 @@ export const metadata: Metadata = {
     template: "%s | Agarwal General Stores",
   },
   description:
-    "Stationery, office supplies, home care and everyday essentials from Agarwal General Stores, delivered across Nagothane, Roha, Pali, RIL Township and NMD.",
+    "Stationery, school supplies, gifts and party essentials from Agarwal General Stores, delivered across Nagothane, Roha, Pali, RIL Township and NMD.",
 };
 export const viewport: Viewport = {
   themeColor: "#0f172a",

@@ -31,7 +31,7 @@ function workspaceLinks(
 }
 
 /** Primary navigation is a fixed set of aisle groups; labels come from the catalog. */
-const NAV_SLUGS = ["stationery", "office", "household", "staples"];
+const NAV_SLUGS = ["stationery", "paper", "art-craft", "gift-sets", "gift-wrap"];
 
 export async function Header({
   locale,

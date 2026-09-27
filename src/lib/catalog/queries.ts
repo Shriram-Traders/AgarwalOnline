@@ -193,10 +193,15 @@ export async function catalogCategories() {
   const preferred = [
     "stationery",
     "paper",
-    "office",
+    "school",
     "art-craft",
-    "household",
-    "personal-care",
+    "gift-sets",
+    "gift-wrap",
+    "cards",
+    "decor",
+    "toys",
+    "party",
+    "office",
   ];
   return rows.map((row) => ({
     id: String(row._id),

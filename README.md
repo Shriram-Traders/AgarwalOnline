@@ -187,13 +187,15 @@ It asks for a name, email, mobile number and password. The password is typed hid
 npm run seed
 ```
 
-The seed loads a fictional catalog, demo orders and a demo customer. It only runs when `SEED_DEMO=true`, and never in production. It is safe to run again, because it keeps existing stock.
+The seed loads a fictional stationery and gift catalog (11 aisles, 41 products), two offers and the service areas (switched off). It only runs when `SEED_DEMO=true`, and never in production. It is safe to run again, because it keeps existing stock.
+
+For a local or test database, `npm run seed -- --demo-accounts` also adds a demo customer, fictional staff and eight demo orders:
 
 | Role | Sign in at | Demo account |
 |---|---|---|
 | Customer | `/login` | Phone `9000000001`, with the code in `MOCK_OTP_CODE` |
 
-The seed also creates fictional staff records so demo orders have a delivery partner, but they have no password and nobody can sign in as them. Every staff login is a real account: the owner from `npm run owner:create`, or people the owner gives a staff role on the Super Admin page.
+Never pass `--demo-accounts` against a deployed database: the demo staff have no password, but with mock OTP switched on anyone could sign in as them by phone. Every real staff login is the owner from `npm run owner:create`, or people the owner gives a staff role on the Super Admin page.
 
 ### 7. Run the app
 

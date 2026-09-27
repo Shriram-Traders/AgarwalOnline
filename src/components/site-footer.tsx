@@ -21,8 +21,8 @@ export function SiteFooter({
           </Link>
           <p>
             {mr
-              ? "नागोठण्यातील तुमच्या ओळखीच्या दुकानातून लेखन साहित्य, कार्यालयीन वस्तू, घरगुती आणि रोजच्या गरजेच्या वस्तू."
-              : "Stationery, office supplies, home care and everyday essentials from your neighbourhood store in Nagothane."}
+              ? "नागोठण्यातील तुमच्या ओळखीच्या दुकानातून लेखन साहित्य, शालेय वस्तू, भेटवस्तू आणि पार्टी साहित्य."
+              : "Stationery, school supplies, gifts and party essentials from your neighbourhood store in Nagothane."}
           </p>
           <p className="footer-areas">
             <MapPin size={14} aria-hidden="true" />

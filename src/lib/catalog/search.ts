@@ -8,6 +8,10 @@ export function normalizeSearch(value: string) {
     .slice(0, 100);
 }
 export const defaultSynonyms = [
+  ["pen", "kalam", "पेन"],
+  ["notebook", "vahi", "वही", "copy"],
+  ["gift", "present", "bhet", "भेट"],
+  ["card", "greeting", "शुभेच्छापत्र"],
   ["rice", "chawal", "chaval", "तांदूळ", "tandul"],
   ["milk", "doodh", "dudh", "दूध"],
   ["tea", "chai", "चहा"],
