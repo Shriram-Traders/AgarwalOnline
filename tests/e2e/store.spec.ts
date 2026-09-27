@@ -197,7 +197,10 @@ test("staff login and delivery role restrictions", async ({ page }) => {
   if (await page.locator(".account-menu").isVisible()) {
     await page.locator(".account-menu > summary").click();
     await page.getByRole("link", { name: "My deliveries" }).click();
-    await expect(page).toHaveURL(/\/delivery/);
+  } else {
+    // phones hide the menu; the You tab's account page carries the workspace tile
+    await page.getByRole("navigation", { name: "Mobile navigation" }).getByRole("link", { name: "You" }).click();
+    await page.getByRole("link", { name: /Open your workspace/ }).click();
   }
   await expect(page).toHaveURL("/delivery");
   await page.goto("/admin");

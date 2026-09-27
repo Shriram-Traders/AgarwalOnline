@@ -7,3 +7,11 @@ This version has breaking changes — APIs, conventions, and file structure may 
 This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
 
 <!-- END:nextjs-agent-rules -->
+
+# Every UI change ships for desktop and phone
+
+Anything new — a page, a section, a component, a form — must be designed for both widths in the same change, not "desktop now, phone later".
+
+- Phone rules live in the `@media (max-width: 760px)` block of `src/app/globals.css` (tablet steps at 1023/900px). Reuse the phone patterns already there before inventing one: bottom tab bar, collapsing header (search stays pinned), swipe rails (`.home .product-grid`, `.hubs`), sticky basket bar, pinned buy bar on product pages, `DataTable` rows that become cards below 900px.
+- Tap targets are at least 24px tall (44px for primary controls); no page may scroll sideways; fixed bars must not cover content (pad for `--bottom-nav-h` and `env(safe-area-inset-bottom)`).
+- `tests/e2e/layout.spec.ts` finds every `page.tsx` under `src/app` and checks it at desktop (chromium) and phone (Pixel 7) width for sideways scroll, content running off the edge and small tap targets. A new dynamic route fails until it gets a sample there. Run it after any UI change: `npx playwright test tests/e2e/layout.spec.ts` (needs the local test MongoDB on 27028). `SHOT_DIR=.local/shots` also saves a screenshot of every page at both widths — look at them.

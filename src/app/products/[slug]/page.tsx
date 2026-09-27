@@ -92,7 +92,7 @@ export default async function ProductPage({
           name={p.name.en}
           category={p.categorySlug}
         />
-        <div>
+        <div className="product-info">
           <div className="product-title-row">
             <span className="eyebrow">{categoryName}</span>
             <WishlistButton productId={p.id} saved={Boolean(saved)} />

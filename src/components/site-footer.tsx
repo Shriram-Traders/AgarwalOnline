@@ -29,7 +29,7 @@ export function SiteFooter({
             Nagothane · Roha · Pali · RIL Township · NMD
           </p>
         </div>
-        <nav aria-label={mr ? "खरेदी" : "Shop"}>
+        <nav className="footer-shop" aria-label={mr ? "खरेदी" : "Shop"}>
           <h2>{mr ? "खरेदी" : "Shop"}</h2>
           <ul>
             {categories.slice(0, 6).map((category) => (
