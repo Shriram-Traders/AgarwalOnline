@@ -5,6 +5,8 @@ import { z } from "zod";
 import { requirePermission } from "../auth/session";
 import type { MutationState } from "../commerce/actions";
 import { createVariant, saveCategory, updateProductMetadata } from "./manage";
+import { formWithPaise } from "../display";
+import { plainMessage } from "../form-errors";
 
 export async function catalogManagementAction(
   _state: MutationState,
@@ -15,7 +17,7 @@ export async function catalogManagementAction(
     const operation = z
       .enum(["category", "product", "variant"])
       .parse(form.get("operation"));
-    const raw = Object.fromEntries(form);
+    const raw = formWithPaise(form);
     if (operation === "category") await saveCategory(user.id, raw);
     else if (operation === "product")
       await updateProductMetadata(user.id, {
@@ -34,7 +36,7 @@ export async function catalogManagementAction(
       success: `${operation[0].toUpperCase()}${operation.slice(1)} saved.`,
     };
   } catch (error) {
-    if (error instanceof z.ZodError) return { error: error.issues[0].message };
+    if (error instanceof z.ZodError) return { error: plainMessage(error) };
     const message = error instanceof Error ? error.message : "";
     return {
       error:

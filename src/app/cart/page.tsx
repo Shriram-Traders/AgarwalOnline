@@ -12,9 +12,25 @@ import { productImages } from "@/lib/catalog/images";
 import { formatPrice } from "@/lib/display";
 import { ActionForm } from "@/components/action-form";
 import { CartLineControls } from "@/components/cart-line-controls";
+import { redirect } from "next/navigation";
+import { currentLocale } from "@/lib/i18n";
+import { listsFor, memberList } from "@/lib/lists/service";
+import { BasketPills, NewBasket, SharedBasket } from "./shared-basket";
+export const metadata = { title: "Basket", robots: { index: false } };
 
-export default async function Cart() {
+export default async function Cart({ searchParams }: { searchParams: Promise<{ basket?: string }> }) {
   const user = await currentUser();
+  const { basket } = await searchParams;
+  const mr = (await currentLocale()) === "mr";
+  // signed-in customers can keep more than one basket: theirs, plus ones they fill with other people
+  const baskets = user ? await listsFor(user.id, "basket") : null;
+  const others = baskets ? [...baskets.owned, ...baskets.shared] : [];
+  if (user && basket && basket !== "new") {
+    const shared = await memberList(user.id, basket);
+    if (!shared || shared.kind === "board") redirect("/cart");
+    return <SharedBasket userId={user.id} list={shared} baskets={others} mr={mr} />;
+  }
+  if (user && basket === "new") return <NewBasket baskets={others} mr={mr} />;
   const lines =
     user ? await cartFor(user.id) : await guestCartLines();
   const rules = await deliveryRules();
@@ -43,6 +59,14 @@ export default async function Cart() {
           ) : undefined
         }
       />
+      {user && (
+        <BasketPills
+          current="mine"
+          mine={lines.reduce((n, line) => n + line.quantity, 0)}
+          baskets={others}
+          mr={mr}
+        />
+      )}
       {lines.length ? (
         <div className="basket-layout">
           <div>

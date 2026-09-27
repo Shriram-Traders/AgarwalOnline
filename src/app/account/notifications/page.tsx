@@ -4,6 +4,7 @@ import { requirePage } from "@/lib/auth/session";
 import { Notification } from "@/lib/engagement/models";
 import { ActionForm } from "@/components/action-form";
 import { notificationAction } from "@/lib/engagement/actions";
+export const metadata = { title: "Notifications", robots: { index: false } };
 
 export default async function NotificationsPage() {
   const user = await requirePage("profile:own");

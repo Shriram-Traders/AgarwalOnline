@@ -6,6 +6,12 @@ const appEnv = {
   AUTH_SECRET: "e2e-local-only-secret-repeated-000000000",
   MOCK_OTP: "true",
   MOCK_OTP_CODE: "246810",
+  // fake credentials: the tests stop at Google's door, they never talk to Google
+  GOOGLE_CLIENT_ID: "e2e-google-client.apps.googleusercontent.com",
+  GOOGLE_CLIENT_SECRET: "e2e-google-secret",
+  // blank on purpose: a real Resend key in .env must never email the fake test addresses
+  RESEND_API_KEY: "",
+  EMAIL_FROM: "",
 };
 export default defineConfig({
   testDir: "./tests/e2e",

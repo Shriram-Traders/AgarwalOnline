@@ -22,9 +22,12 @@ describe.skipIf(!uri)("Better Auth MongoDB integration", () => {
       AUTH_SECRET: "test-secret-".repeat(4),
       MOCK_OTP: "true",
       MOCK_OTP_CODE: "246810",
+      GOOGLE_CLIENT_ID: "test-google-client.apps.googleusercontent.com",
+      GOOGLE_CLIENT_SECRET: "test-google-secret",
     });
     await connectDB();
     await User.init();
+    await User.syncIndexes();
   });
 
   beforeEach(async () => {
@@ -82,7 +85,7 @@ describe.skipIf(!uri)("Better Auth MongoDB integration", () => {
     ).toHaveLength(1);
   });
 
-  it("signs staff in through the same phone flow with a shorter session", async () => {
+  it("signs staff in through the same phone flow with the same 7-day session", async () => {
     await User.create({
       name: "Fictional Admin",
       email: "admin@example.test",
@@ -97,12 +100,12 @@ describe.skipIf(!uri)("Better Auth MongoDB integration", () => {
     const session = await mongoose.connection
       .collection("authSessions")
       .findOne({ userId: (await User.findOne({ phone: "9000000091" }))!._id });
-    const hours = (session!.expiresAt.getTime() - Date.now()) / 3600000;
-    expect(hours).toBeGreaterThan(11);
-    expect(hours).toBeLessThan(13);
+    const days = (session!.expiresAt.getTime() - Date.now()) / 86400000;
+    expect(days).toBeGreaterThan(6.9);
+    expect(days).toBeLessThan(7.1);
   });
 
-  it("ends a staff session 12 hours after sign-in even though activity extends it", async () => {
+  it("keeps a staff session past 12 hours: there is no separate staff limit", async () => {
     const staff = await User.create({
       name: "Night Admin",
       email: "night@example.test",
@@ -114,13 +117,46 @@ describe.skipIf(!uri)("Better Auth MongoDB integration", () => {
     const cookie = `${ctx.authCookies.sessionToken.name}=${token}.${await makeSignature(token, ctx.secret)}`;
     const headers = new Headers({ cookie });
     expect(await sessionUserId(headers)).toBe(String(staff._id));
-    // simulate what Better Auth's refresh does: a session from 13 hours ago whose expiry was pushed out again
     await mongoose.connection.collection("authSessions").updateOne(
       { token },
-      { $set: { createdAt: new Date(Date.now() - 13 * 3600000), expiresAt: new Date(Date.now() + 6 * 86400000) } },
+      { $set: { createdAt: new Date(Date.now() - 13 * 3600000) } },
     );
-    expect(await sessionUserId(headers)).toBeNull();
-    expect(await mongoose.connection.collection("authSessions").countDocuments({ token })).toBe(0);
+    expect(await sessionUserId(headers)).toBe(String(staff._id));
+  });
+
+  it("creates Google accounts as customers without a phone, and allows more than one", async () => {
+    const ctx = await getAuth().$context;
+    for (const [i, email] of ["first@gmail.test", "second@gmail.test"].entries()) {
+      const { user } = await ctx.internalAdapter.createOAuthUser(
+        { name: `Google Person ${i}`, email, emailVerified: true, image: null },
+        { providerId: "google", accountId: `google-sub-${i}` },
+      );
+      const stored = await User.findById(user.id).lean<{ roles: string[]; active: boolean; phone?: string }>();
+      expect(stored?.roles).toEqual(["customer"]);
+      expect(stored?.active).toBe(true);
+      expect(stored?.phone).toBeUndefined();
+      const { token } = await ctx.internalAdapter.createSession(user.id);
+      const cookie = `${ctx.authCookies.sessionToken.name}=${token}.${await makeSignature(token, ctx.secret)}`;
+      expect(await sessionUserId(new Headers({ cookie }))).toBe(user.id);
+    }
+    // a phone number, once set, is still unique
+    await User.create({ name: "A", phone: "9000000095", roles: ["customer"] });
+    await expect(User.create({ name: "B", phone: "9000000095", roles: ["customer"] })).rejects.toThrow(/duplicate key/);
+  });
+
+  it("links Google only to accounts whose email is verified, and lets a signed-in person connect Google", async () => {
+    const ctx = await getAuth().$context;
+    expect(ctx.socialProviders.map((provider) => provider.id)).toContain("google");
+    // read as the general option type: the inferred literal type omits the defaults being checked
+    const linking = ctx.options.account?.accountLinking as
+      | { enabled?: boolean; requireLocalEmailVerified?: boolean; disableImplicitLinking?: boolean; allowDifferentEmails?: boolean }
+      | undefined;
+    expect(linking?.enabled).toBe(true);
+    // default true: an unverified local email never inherits a Google sign-in
+    expect(linking?.requireLocalEmailVerified ?? true).toBe(true);
+    expect(linking?.disableImplicitLinking ?? false).toBe(false);
+    expect(ctx.trustedProviders).toEqual([]);
+    expect(linking?.allowDifferentEmails).toBe(true);
   });
 
   it("refuses the phone flow for a paused account", async () => {

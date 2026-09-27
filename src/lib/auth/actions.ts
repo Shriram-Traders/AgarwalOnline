@@ -17,6 +17,12 @@ import { digest } from "./crypto";
 import { log } from "../logger";
 import { isAllowedOrigin } from "./origin";
 import { staffHome, type Role } from "./permissions";
+import { listPath } from "../lists/links";
+import { currentUser } from "./session";
+import { absorbBlocker, absorbGoogleAccount } from "./merge";
+import { sendClaimCode } from "./claim";
+import { isPlaceholderEmail } from "../email/send";
+import type { MutationState } from "../commerce/actions";
 export type AuthState = {
   error?: string;
   challengeId?: string;
@@ -44,6 +50,14 @@ function safeError(error: unknown) {
 /** Staff go straight to their workspace; everyone else to the account, or the basket when a guest basket was merged. */
 function landing(roles: readonly Role[], mergedBasket: boolean) {
   return mergedBasket ? "/cart" : (staffHome(roles) ?? "/account");
+}
+/**
+ * Sign-in that started from "Continue with Google" on an existing email finishes by connecting Google;
+ * one that started from a shared-list link goes back to that list.
+ */
+function afterSignIn(form: FormData, target: string) {
+  if (form.get("then") === "connect-google") return "/account?connect=google";
+  return listPath(form.get("then")) ?? target;
 }
 export async function customerPasswordLoginAction(
   _previous: AuthState,
@@ -73,7 +87,7 @@ export async function customerPasswordLoginAction(
     }
     const { mergeGuestCart } = await import("../commerce/guest-cart");
     const merged = await mergeGuestCart(String(user._id));
-    target = landing(user.roles as Role[], merged.added > 0);
+    target = afterSignIn(form, landing(user.roles as Role[], merged.added > 0));
     await AuditLog.create({ actorId: user._id, action: "auth.customer.password_login" });
   } catch (error) {
     return { error: safeError(error) };
@@ -108,7 +122,7 @@ export async function customerEmailLoginAction(
     }
     const { mergeGuestCart } = await import("../commerce/guest-cart");
     const merged = await mergeGuestCart(String(user._id));
-    target = landing(user.roles as Role[], merged.added > 0);
+    target = afterSignIn(form, landing(user.roles as Role[], merged.added > 0));
     await AuditLog.create({ actorId: user._id, action: "auth.customer.email_login" });
   } catch (error) {
     return { error: safeError(error) };
@@ -201,10 +215,15 @@ export async function verifyOTPAction(
     }
     if (password)
       await upsertCredential(result.user.id, await hashStaffPassword(password));
+    // a new account's email starts unverified: send the confirmation link, but never fail sign-up over it
+    if (email)
+      await getAuth()
+        .api.sendVerificationEmail({ body: { email, callbackURL: "/auth/email-verified" } })
+        .catch((error: unknown) => log("error", "auth.verification-email-failed", { error }));
     const { mergeGuestCart } = await import("../commerce/guest-cart");
     const merged = await mergeGuestCart(result.user.id);
     const signedIn = await User.findById(result.user.id).select("roles");
-    target = landing((signedIn?.roles ?? []) as Role[], merged.added > 0);
+    target = afterSignIn(form, landing((signedIn?.roles ?? []) as Role[], merged.added > 0));
     await AuditLog.create({
       actorId: result.user.id,
       action: "auth.customer.login",
@@ -213,6 +232,121 @@ export async function verifyOTPAction(
     return { error: safeError(error) };
   }
   redirect(target);
+}
+/** Starts Google sign-in. Better Auth sets its state cookie through nextCookies(); we then follow its URL. */
+export async function googleSignInAction() {
+  await checkOrigin();
+  const { url } = await getAuth().api.signInSocial({
+    body: {
+      provider: "google",
+      callbackURL: "/auth/continue",
+      newUserCallbackURL: "/auth/continue?new=1",
+      errorCallbackURL: "/login",
+      disableRedirect: true,
+    },
+    headers: await headers(),
+  });
+  if (!url) throw new Error("Google sign-in is unavailable.");
+  redirect(url);
+}
+/** Connects Google to the signed-in account, so it can be used to sign in next time. */
+export async function linkGoogleAction() {
+  await checkOrigin();
+  const { url } = await getAuth().api.linkSocialAccount({
+    body: {
+      provider: "google",
+      callbackURL: "/account?google=linked",
+      errorCallbackURL: "/account",
+      disableRedirect: true,
+    },
+    headers: await headers(),
+  });
+  redirect(url);
+}
+/**
+ * Step 1 of "Ordered with us before?" for someone who joined with Google: sends a code to the
+ * mobile number. If that number already has an account, it is checked up front that the fresh
+ * Google account can be folded into it.
+ */
+export async function claimPhoneSendAction(
+  _previous: AuthState,
+  form: FormData,
+): Promise<AuthState> {
+  try {
+    await checkOrigin();
+    const user = await currentUser();
+    if (!user) return { error: "Please sign in again." };
+    if (user.phone) return { error: "Your account already has a mobile number." };
+    const phone = phoneSchema.parse(form.get("phone"));
+    const sent = await sendClaimCode(user.id, phone);
+    if ("error" in sent) return { error: sent.error, phone };
+    return { phone, challengeId: "better-auth", newAccount: sent.newAccount };
+  } catch (error) {
+    return { error: safeError(error) };
+  }
+}
+/**
+ * Step 2: checks the code. A number nobody uses is added to this account. A number that belongs
+ * to an existing account signs the person into that account and moves their Google sign-in there,
+ * so their earlier orders are what they see from now on.
+ */
+export async function claimPhoneVerifyAction(
+  _previous: AuthState,
+  form: FormData,
+): Promise<AuthState> {
+  let target = "/account?phone=added";
+  try {
+    await checkOrigin();
+    const user = await currentUser();
+    if (!user) return { error: "Please sign in again." };
+    const phone = phoneSchema.parse(form.get("phone"));
+    const code = z.string().regex(/^\d{6}$/, "Enter the 6-digit code.").parse(form.get("code"));
+    await rateLimit(`verify:${digest(phone)}`, 10);
+    const existing = await User.findOne({ phone });
+    if (!existing) {
+      await getAuth().api.verifyPhoneNumber({
+        body: { phoneNumber: phone, code, updatePhoneNumber: true },
+        headers: await headers(),
+      });
+      await AuditLog.create({ actorId: user.id, action: "profile.phone.add", target: user.id });
+    } else {
+      const blocker = await absorbBlocker(user.id, String(existing._id));
+      if (blocker) return { error: blocker, phone };
+      // signs in as the existing account (this replaces the Google-only session cookie)
+      await getAuth().api.verifyPhoneNumber({
+        body: { phoneNumber: phone, code },
+        headers: await headers(),
+      });
+      await absorbGoogleAccount(user.id, String(existing._id));
+      target = "/account?google=merged";
+    }
+  } catch (error) {
+    return { error: safeError(error), phone: String(form.get("phone") ?? "") };
+  }
+  redirect(target);
+}
+/** "Send verification email" on the account page. */
+export async function resendVerificationAction(): Promise<MutationState> {
+  try {
+    await checkOrigin();
+    const user = await currentUser();
+    if (!user) return { error: "Please sign in again." };
+    const account = await User.findById(user.id).select("email emailVerified");
+    if (!account?.email || isPlaceholderEmail(account.email))
+      return { error: "Your account has no email address yet." };
+    if (account.emailVerified) return { success: "Your email is already confirmed." };
+    await rateLimit(`verify-email:${digest(account.email)}`, 3);
+    await getAuth().api.sendVerificationEmail({
+      body: { email: account.email, callbackURL: "/auth/email-verified" },
+      headers: await headers(),
+    });
+    return { success: `We sent a confirmation link to ${account.email}. It works for 24 hours.` };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    if (/^(Too many|Unable to send)/.test(message)) return { error: message };
+    log("error", "auth.verification-email-failed", { error });
+    return { error: "Unable to send the email. Please try again later." };
+  }
 }
 export async function logoutAction() {
   await checkOrigin();

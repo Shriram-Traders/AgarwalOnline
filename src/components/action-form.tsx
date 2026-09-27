@@ -5,17 +5,27 @@ import type { MutationState } from "@/lib/commerce/actions";
 const FOCUSABLE =
   'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
 
+/**
+ * React 19 empties a form after every server action, failed or not, so one wrong field threw
+ * away everything else that had been typed. React does it through the native, cancelable
+ * `reset` event, so a form can refuse it. Use this on forms whose success navigates away or
+ * moves to another step, where there is nothing to clear.
+ */
+export const keepTyped = (event: React.FormEvent) => event.preventDefault();
+
 export function ActionForm({
   action,
   children,
   submit = "Save",
   className = "form-stack",
+  buttonClassName = "primary-button",
   confirmMessage,
 }: {
   action: (state: MutationState, form: FormData) => Promise<MutationState>;
   children: React.ReactNode;
   submit?: string;
   className?: string;
+  buttonClassName?: string;
   confirmMessage?: string;
 }) {
   const [state, dispatch, pending] = useActionState(action, {});
@@ -27,6 +37,10 @@ export function ActionForm({
   const opener = useRef<HTMLElement | null>(null);
   const titleId = useId();
   const messageId = useId();
+  // an "add" form should still empty itself once the save goes through
+  const keepAfterError = (event: React.FormEvent) => {
+    if (state.error) event.preventDefault();
+  };
 
   /** Close without submitting and hand focus back to whatever opened the dialog. */
   const dismiss = useCallback(() => {
@@ -70,6 +84,7 @@ export function ActionForm({
         ref={formRef}
         action={dispatch}
         className={className}
+        onReset={keepAfterError}
         onSubmit={(event) => {
           if (confirmMessage && !approved.current) {
             event.preventDefault();
@@ -81,7 +96,7 @@ export function ActionForm({
         {children}
         {state.error && <p role="alert" className="error-message">{state.error}</p>}
         {state.success && <p role="status" className="success-message">{state.success}</p>}
-        <button className="primary-button" disabled={pending} aria-busy={pending}>
+        <button className={buttonClassName} disabled={pending} aria-busy={pending}>
           {pending ? "Please wait…" : submit}
         </button>
       </form>
@@ -97,11 +112,12 @@ export function ActionForm({
             onMouseDown={(event) => event.stopPropagation()}
           >
             <span className="eyebrow">Please review</span>
-            <h2 id={titleId}>Confirm this action</h2>
+            {/* name the exact action: a generic "Are you sure?" gets clicked through */}
+            <h2 id={titleId}>{submit}?</h2>
             <p id={messageId}>{confirmMessage}</p>
             <div className="split-actions">
               <button type="button" className="secondary-button" onClick={dismiss}>
-                Go back
+                No, go back
               </button>
               <button
                 ref={confirmRef}
@@ -113,7 +129,7 @@ export function ActionForm({
                   formRef.current?.requestSubmit();
                 }}
               >
-                Confirm
+                Yes, {submit.charAt(0).toLowerCase() + submit.slice(1)}
               </button>
             </div>
           </div>

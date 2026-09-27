@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { connectDB } from "../db/connect";
 import {
   Product,
@@ -180,10 +181,11 @@ export async function catalog(
   }
   return result;
 }
-export async function productBySlug(slug: string) {
+/** Memoised per request: the page and its metadata both ask. */
+export const productBySlug = cache(async (slug: string) => {
   const all = await catalog({ slug });
   return all[0] ?? null;
-}
+});
 
 export async function catalogCategories() {
   await connectDB();

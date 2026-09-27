@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowUpRight, ChevronDown, MapPin, ShoppingBag, UserRound } from "lucide-react";
+import { ArrowUpRight, ChevronDown, MapPin, UserRound } from "lucide-react";
 import { SmartSearch } from "./smart-search";
 import { MobileNav } from "./mobile-nav";
 import { LocaleToggle } from "./locale-toggle";
@@ -7,8 +7,9 @@ import { AccountMenu, type MenuLink } from "./account-menu";
 import { staffRoleOf, type Role } from "@/lib/auth/permissions";
 import { currentUser } from "@/lib/auth/session";
 import { Promotion } from "@/lib/promotions/models";
-import { cartFor, deliveryRules } from "@/lib/commerce/service";
+import { deliveryRules } from "@/lib/commerce/service";
 import { CartBar } from "./cart-bar";
+import { BasketLink } from "./basket";
 import { formatPrice } from "@/lib/display";
 import { copy, type Locale } from "@/lib/locale-types";
 
@@ -22,8 +23,8 @@ function workspaceLinks(
   const role = staffRoleOf(roles);
   if (role === "super-admin")
     return [
-      { href: "/super-admin", label: text.governance },
       { href: "/admin", label: text.operations },
+      { href: "/super-admin", label: text.governance },
     ];
   if (role === "admin") return [{ href: "/admin", label: text.operations }];
   if (role === "delivery") return [{ href: "/delivery", label: text.deliveries }];
@@ -54,12 +55,7 @@ export async function Header({
       .select("code minimumSubtotalPaise"),
   ]);
   const text = copy[locale];
-  const lines = user
-    ? await cartFor(user.id)
-    : await (await import("@/lib/commerce/guest-cart")).guestCartLines();
   const workspace = workspaceLinks(user?.roles ?? [], text);
-  const count = lines.reduce((sum, line) => sum + line.quantity, 0);
-  const total = lines.reduce((sum, line) => sum + line.pricePaise * line.quantity, 0);
   const nav = NAV_SLUGS.map((slug) => categories.find((c) => c.slug === slug)).filter(
     (c): c is CategoryLink => Boolean(c),
   );
@@ -117,10 +113,11 @@ export async function Header({
               <AccountMenu
                 name={user.name}
                 phone={user.phone}
+                email={user.email}
                 links={[
                   { href: "/account", label: text.account },
                   { href: "/account/orders", label: text.orders },
-                  { href: "/account/wishlist", label: text.wishlist },
+                  { href: "/account/wishlist", label: text.saved },
                   { href: "/account/notifications", label: text.notifications },
                   { href: "/account/support", label: text.support },
                 ]}
@@ -134,20 +131,12 @@ export async function Header({
                 <span>{text.signIn}</span>
               </Link>
             )}
-            <Link
-              href="/cart"
-              className="cart-button"
-              aria-label={count > 0 ? `${text.basket}, ${count}` : text.basket}
-            >
-              <ShoppingBag size={20} aria-hidden="true" />
-              <span>{text.basket}</span>
-              {count > 0 && <b aria-hidden="true">{count}</b>}
-            </Link>
+            <BasketLink label={text.basket} />
           </div>
         </div>
       </header>
-      <MobileNav count={count} locale={locale} />
-      <CartBar count={count} totalPaise={total} locale={locale} />
+      <MobileNav locale={locale} />
+      <CartBar locale={locale} />
     </>
   );
 }

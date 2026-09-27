@@ -414,6 +414,16 @@ export async function cancelOrder(customerId: string, idInput: unknown) {
 export async function reorder(customerId: string, orderInput: unknown) {
   const orderId = objectId.parse(orderInput);
   await connectDB();
+  const order = await Order.findOne({ _id: orderId, customerId });
+  if (!order) throw Error("This order is unavailable.");
+  return addLinesToBasket(customerId, order.items);
+}
+/** Adds lines to the basket, each capped at stock and the per-order limit; lines that cannot be bought are skipped. */
+export async function addLinesToBasket(
+  customerId: string,
+  items: { variantId: unknown; quantity: number }[],
+) {
+  await connectDB();
   const user = await User.exists({
     _id: customerId,
     roles: "customer",
@@ -423,11 +433,10 @@ export async function reorder(customerId: string, orderInput: unknown) {
   let added = 0;
   let skipped = 0;
   await mongoose.connection.transaction(async (session) => {
-    const order = await Order.findOne({ _id: orderId, customerId }).session(
-      session,
-    );
-    if (!order) throw Error("This order is unavailable.");
-    for (const item of order.items) {
+    // the driver may retry this callback; count from zero each time
+    added = 0;
+    skipped = 0;
+    for (const item of items) {
       const variant = await ProductVariant.findById(item.variantId).session(
         session,
       );

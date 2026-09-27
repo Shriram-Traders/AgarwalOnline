@@ -3,6 +3,7 @@ import { formatPrice } from "@/lib/display";
 import { StatusStrip } from "@/components/status-pill";
 import { PageHeading } from "@/components/page-heading";
 import Link from "next/link";
+import { ChevronRight } from "lucide-react";
 import { requirePage } from "@/lib/auth/session";
 import { Order, OrderTimelineEvent } from "@/lib/commerce/models";
 import { User } from "@/lib/db/models";
@@ -13,6 +14,8 @@ import { RecordHistory } from "@/components/record-history";
 import { operationAction } from "@/lib/operations/actions";
 import { evidenceAction } from "@/lib/evidence/actions";
 import { UploadedEvidence } from "@/lib/evidence/models";
+import { MoneyInput } from "@/components/money-input";
+export const metadata = { title: "Order", robots: { index: false } };
 function Hidden({ id, operation }: { id: string; operation: string }) {
   return (
     <>
@@ -21,6 +24,14 @@ function Hidden({ id, operation }: { id: string; operation: string }) {
     </>
   );
 }
+/** Why each step matters, shown under the button that takes it. */
+const NEXT_HINTS: Record<string, string> = {
+  confirmed: "The customer is waiting to hear back. Confirm once the store can fulfil it in this delivery window.",
+  picking: "Start collecting the items; the packing checklist opens next.",
+  packed: "Mark it packed once every item in the checklist is counted.",
+  ready: "Set it aside for a delivery partner to collect.",
+  completed: "It has been delivered. Completing it closes the order.",
+};
 export default async function ManageOrder({
   params,
 }: {
@@ -58,15 +69,15 @@ export default async function ManageOrder({
               : null;
   return (
     <section className="page-container">
+      <nav className="breadcrumb" aria-label="Breadcrumb">
+        <Link href="/admin#orders">Orders</Link>
+        <ChevronRight size={14} aria-hidden="true" />
+        <span aria-current="page">{o.number}</span>
+      </nav>
       <PageHeading
         eyebrow="Order"
         title={o.number}
         lead={`${o.address.name} · ${o.deliveryDate} · ${o.deliveryWindow}`}
-        aside={
-          <Link href="/admin" className="secondary-button">
-            Back to orders
-          </Link>
-        }
       />
       <StatusStrip
         items={[
@@ -76,8 +87,46 @@ export default async function ManageOrder({
           { label: "Payment", value: o.paymentStatus },
         ]}
       />
-      <div className="basket-layout">
+      <div className="basket-layout order-layout">
         <div>
+          <div className="panel">
+            <h2>Items</h2>
+            <table className="order-lines">
+              <caption className="sr-only">Items in this order with quantity and price</caption>
+              <tbody>
+                {o.items.map((i: { variantId: string; name: string; label: string; quantity: number; linePaise: number }) => (
+                  <tr key={String(i.variantId)}>
+                    <td>{i.quantity} ×</td>
+                    <td>
+                      {i.name}
+                      <small>{i.label}</small>
+                    </td>
+                    <td>{formatPrice(i.linePaise)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <th scope="row" colSpan={2}>Items</th>
+                  <td>{formatPrice(o.subtotalPaise ?? 0)}</td>
+                </tr>
+                {(o.promotionDiscountPaise ?? 0) > 0 && (
+                  <tr>
+                    <th scope="row" colSpan={2}>Offer</th>
+                    <td>−{formatPrice(o.promotionDiscountPaise)}</td>
+                  </tr>
+                )}
+                <tr>
+                  <th scope="row" colSpan={2}>Delivery</th>
+                  <td>{o.deliveryPaise ? formatPrice(o.deliveryPaise) : "Free"}</td>
+                </tr>
+                <tr className="order-total">
+                  <th scope="row" colSpan={2}>Total · {o.paymentMethod === "cod" ? "cash on delivery" : "paid online"}</th>
+                  <td>{formatPrice(o.totalPaise)}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
           <div className="panel">
             <h2>Packing checklist</h2>
             <ActionForm action={evidenceAction} submit="Upload packing photo">
@@ -167,20 +216,11 @@ export default async function ManageOrder({
                 )}
               </ActionForm>
             ) : (
-              <ul>
-                {o.items.map(
-                  (i: {
-                    variantId: string;
-                    name: string;
-                    label: string;
-                    quantity: number;
-                  }) => (
-                    <li key={String(i.variantId)}>
-                      {i.quantity} × {i.name} · {i.label}
-                    </li>
-                  ),
-                )}
-              </ul>
+              <p className="muted">
+                {o.fulfilmentStatus === "unassigned"
+                  ? "The checklist opens when picking starts."
+                  : "Packing is done for this order."}
+              </p>
             )}
             {packing?.completedAt && (
               <p className="success-message">All quantities checked.</p>
@@ -204,30 +244,22 @@ export default async function ManageOrder({
           </div>
         </div>
         <div>
-          <div className="panel">
-            <h2>Customer & delivery</h2>
-            <p>
-              {o.address.name}
-              <br />
-              {o.address.line}
-              <br />
-              {o.address.pin}
-            </p>
-            <p>
-              {o.deliveryDate} · {o.deliveryWindow}
-            </p>
-            <strong>{formatPrice(o.totalPaise)}</strong>
-            {next && (
+          {next && (
+            <div className="panel next-step">
+              <span className="eyebrow">Next step</span>
+              <h2>{next.label}</h2>
+              <p className="muted">{NEXT_HINTS[next.next]}</p>
               <ActionForm action={operationAction} submit={next.label}>
                 <Hidden id={id} operation="status" />
                 <input type="hidden" name="dimension" value={next.dimension} />
                 <input type="hidden" name="next" value={next.next} />
               </ActionForm>
-            )}
-          </div>
+            </div>
+          )}
           {o.fulfilmentStatus === "ready" &&
             o.deliveryStatus === "unassigned" && (
-              <div className="panel">
+              <div className="panel next-step">
+                <span className="eyebrow">Next step</span>
                 <h2>Assign delivery partner</h2>
                 <ActionForm action={operationAction} submit="Assign delivery">
                   <Hidden id={id} operation="assign" />
@@ -245,6 +277,28 @@ export default async function ManageOrder({
                 </ActionForm>
               </div>
             )}
+          <div className="panel">
+            <h2>Customer</h2>
+            <p>
+              <strong>{o.address.name}</strong>
+              {o.address.phone && (
+                <>
+                  <br />
+                  <a href={`tel:+91${o.address.phone}`}>Call +91 {o.address.phone}</a>
+                </>
+              )}
+            </p>
+            <p>
+              {o.address.line}
+              <br />
+              {o.address.areaName ? `${o.address.areaName} · ` : ""}
+              {o.address.pin}
+            </p>
+            {o.address.instructions && <p className="muted">“{o.address.instructions}”</p>}
+            <p>
+              Delivery {o.deliveryDate} · {o.deliveryWindow}
+            </p>
+          </div>
           {cash && (
             <div className="panel">
               <h2>Cash handover</h2>
@@ -257,14 +311,8 @@ export default async function ManageOrder({
                 >
                   <Hidden id={id} operation="reconcile" />
                   <label>
-                    Cash received (paise)
-                    <input
-                      type="number"
-                      name="receivedPaise"
-                      min={0}
-                      defaultValue={cash.collectedPaise}
-                      required
-                    />
+                    Cash received (₹)
+                    <MoneyInput name="receivedRupees" defaultValue={cash.collectedPaise / 100} />
                   </label>
                   <label>
                     Notes

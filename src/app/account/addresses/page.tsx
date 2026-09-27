@@ -5,9 +5,25 @@ import { ServiceArea } from "@/lib/db/models";
 import { addressAction } from "@/lib/commerce/actions";
 import { ActionForm } from "@/components/action-form";
 import Link from "next/link";
-export default async function Addresses() {
+import { User } from "@/lib/db/models";
+import { ClaimPhone } from "@/components/claim-phone";
+export const metadata = { title: "Saved addresses", robots: { index: false } };
+export default async function Addresses({
+  searchParams,
+}: {
+  searchParams: Promise<{ verify?: string }>;
+}) {
   const user = await requirePage("order:own");
   const addresses = await Address.find({ customerId: user.id }).sort({ isDefault: -1, createdAt: -1 });
+  // after "Also use this number to sign in": the code went to the newest address's number
+  const newest = await Address.findOne({ customerId: user.id }).sort({ createdAt: -1 }).select("phone");
+  const verifying =
+    !user.phone && (await searchParams).verify === "1" && newest
+      ? {
+          phone: newest.phone,
+          newAccount: !(await User.exists({ phone: newest.phone, _id: { $ne: user.id } })),
+        }
+      : undefined;
   const areas = await ServiceArea.find({ enabled: true });
   return (
     <section className="page-container">
@@ -15,6 +31,7 @@ export default async function Addresses() {
         <div><span className="eyebrow">DELIVERY DETAILS</span><h1>Your addresses</h1><p>Save trusted addresses and choose your default for faster checkout.</p></div>
         <Link className="secondary-button" href="/account">Back to account</Link>
       </div>
+      {verifying && <ClaimPhone context="address" initial={verifying} />}
       <div className="basket-layout">
         <div>
           {addresses.map((a) => (
@@ -110,10 +127,20 @@ export default async function Addresses() {
                 <input
                   name="phone"
                   type="tel"
+                  inputMode="numeric"
                   pattern="[6-9][0-9]{9}"
+                  maxLength={10}
+                  autoComplete="tel-national"
+                  defaultValue={user.phone}
                   required
                 />
               </label>
+              {!user.phone && (
+                <label className="checkbox-label">
+                  <input type="checkbox" name="useForSignIn" /> Also use this number to sign in
+                  <small className="muted">We’ll send a code to check it. If it already has an account with us, that account’s orders come across.</small>
+                </label>
+              )}
               <label>
                 House, building, street
                 <input name="line" minLength={8} maxLength={250} required />

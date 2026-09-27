@@ -20,6 +20,12 @@ const schema = z
       .regex(/^\d{6}$/)
       .default("246810"),
     CRON_SECRET: z.string().min(16).optional(),
+    // Resend for email verification; both blank sends nothing in production and logs emails in development
+    RESEND_API_KEY: z.string().optional(),
+    EMAIL_FROM: z.string().optional(),
+    // Google sign-in; both blank hides the button
+    GOOGLE_CLIENT_ID: z.string().optional(),
+    GOOGLE_CLIENT_SECRET: z.string().optional(),
     SMS_API_URL: z.string().optional(),
     SMS_API_TOKEN: z.string().optional(),
     CLOUDINARY_CLOUD_NAME: z.string().optional(),
@@ -56,6 +62,18 @@ const schema = z
         code: "custom",
         message: "Production requires HTTPS",
         path: ["APP_ORIGIN"],
+      });
+    if (Boolean(env.RESEND_API_KEY) !== Boolean(env.EMAIL_FROM))
+      ctx.addIssue({
+        code: "custom",
+        message: "Resend API key and sender address must be configured together",
+        path: ["RESEND_API_KEY"],
+      });
+    if (Boolean(env.GOOGLE_CLIENT_ID) !== Boolean(env.GOOGLE_CLIENT_SECRET))
+      ctx.addIssue({
+        code: "custom",
+        message: "Google client ID and secret must be configured together",
+        path: ["GOOGLE_CLIENT_ID"],
       });
     if (Boolean(env.SMS_API_URL) !== Boolean(env.SMS_API_TOKEN))
       ctx.addIssue({

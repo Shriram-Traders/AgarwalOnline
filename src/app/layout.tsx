@@ -6,6 +6,10 @@ import { SiteFooter } from "@/components/site-footer";
 import { AdaptiveShell } from "@/components/adaptive-shell";
 import { currentLocale } from "@/lib/i18n";
 import { catalogCategories } from "@/lib/catalog/queries";
+import { currentUser } from "@/lib/auth/session";
+import { staffRoleOf } from "@/lib/auth/permissions";
+import { cartFor } from "@/lib/commerce/service";
+import { BasketProvider } from "@/components/basket";
 
 const body = localFont({
   src: "../../node_modules/@fontsource-variable/manrope/files/manrope-latin-wght-normal.woff2",
@@ -44,7 +48,7 @@ const devanagari = localFont({
 
 export const metadata: Metadata = {
   title: {
-    default: "Agarwal General Stores | Your neighbourhood store, delivered",
+    default: "Agarwal General Stores | Stationery & gifts delivered same day in Nagothane",
     template: "%s | Agarwal General Stores",
   },
   description:
@@ -58,10 +62,14 @@ export const viewport: Viewport = {
 export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
-  const [locale, categories] = await Promise.all([
+  const [locale, categories, user] = await Promise.all([
     currentLocale(),
     catalogCategories(),
+    currentUser(),
   ]);
+  const basket = user
+    ? await cartFor(user.id)
+    : await (await import("@/lib/commerce/guest-cart")).guestCartLines();
   return (
     <html
       lang={locale}
@@ -72,12 +80,22 @@ export default async function RootLayout({
         <a href="#main" className="skip-link">
           Skip to content
         </a>
-        <AdaptiveShell
-          header={<Header locale={locale} categories={categories} />}
-          footer={<SiteFooter locale={locale} categories={categories} />}
+        <BasketProvider
+          lines={Object.fromEntries(
+            basket.map((line) => [
+              line.variantId,
+              { quantity: line.quantity, pricePaise: line.pricePaise },
+            ]),
+          )}
         >
-          {children}
-        </AdaptiveShell>
+          <AdaptiveShell
+            staffRole={staffRoleOf(user?.roles ?? [])}
+            header={<Header locale={locale} categories={categories} />}
+            footer={<SiteFooter locale={locale} categories={categories} />}
+          >
+            {children}
+          </AdaptiveShell>
+        </BasketProvider>
       </body>
     </html>
   );

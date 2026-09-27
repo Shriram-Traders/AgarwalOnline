@@ -3,6 +3,8 @@ import { requirePermission } from "../auth/session";
 import { revalidatePath } from "next/cache";
 import type { MutationState } from "../commerce/actions";
 import { createComplaint, resolveComplaint, updateReturn } from "./service";
+import { ZodError } from "zod";
+import { plainMessage } from "../form-errors";
 export async function aftercareAction(
   _state: MutationState,
   form: FormData,
@@ -24,6 +26,7 @@ export async function aftercareAction(
     revalidatePath("/admin/complaints");
     return { success: "Your update has been saved." };
   } catch (e) {
+    if (e instanceof ZodError) return { error: plainMessage(e) };
     const message = e instanceof Error ? e.message : "";
     return {
       error: /^(Item complaints|This complaint|Choose the|This return)/.test(

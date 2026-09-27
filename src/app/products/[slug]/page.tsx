@@ -17,8 +17,22 @@ import { recommendationsFor } from "@/lib/catalog/recommendations";
 import { ProductCard } from "@/components/product-card";
 import { deliveryRules } from "@/lib/commerce/service";
 import { ProductGallery } from "@/components/product-gallery";
-import { discountPercent, formatPrice } from "@/lib/display";
+import { discountPercent, formatPrice, minutesUntilCutoff } from "@/lib/display";
+import { getEnv } from "@/lib/env";
+import { listsFor } from "@/lib/lists/service";
+import { AddToList } from "@/components/add-to-list";
+import { SaveToBoard } from "@/components/save-to-board";
 export const dynamic = "force-dynamic";
+
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
+  const p = await productBySlug((await params).slug);
+  if (!p) return { title: "Product not found" };
+  const v = p.variants[0];
+  return {
+    title: `${p.name.en} – ${formatPrice(v.pricePaise)}`,
+    description: `${p.name.en} (${v.label}) from Agarwal General Stores, delivered across Nagothane and nearby areas. ${p.description.en}`.slice(0, 300),
+  };
+}
 export default async function ProductPage({
   params,
   searchParams,
@@ -37,7 +51,7 @@ export default async function ProductPage({
     : await currentLocale();
   const mr = locale === "mr";
   const image = p.image ?? productImages[p.slug];
-  const [reviews, related, rules, saved, categories] = await Promise.all([
+  const [reviews, related, rules, saved, categories, myLists] = await Promise.all([
     ProductReview.find({ productId: p.id, status: "published" })
       .sort({ createdAt: -1 })
       .limit(20),
@@ -52,7 +66,18 @@ export default async function ProductPage({
       ? WishlistItem.exists({ customerId: user.id, productId: p.id })
       : null,
     catalogCategories(),
+    user ? Promise.all([listsFor(user.id, "basket"), listsFor(user.id, "board")]) : null,
   ]);
+  const [myBaskets, myBoards] = myLists ?? [null, null];
+  const listChoices = myBaskets ? [...myBaskets.owned, ...myBaskets.shared] : [];
+  const packIds = new Set(p.variants.map((v) => v.id));
+  const boardChoices = myBoards
+    ? [...myBoards.owned, ...myBoards.shared].map((board) => ({
+        id: String(board._id),
+        name: board.name as string,
+        has: board.items.some((item: { variantId: unknown }) => packIds.has(String(item.variantId))),
+      }))
+    : [];
   const categoryName =
     categories.find((category) => category.slug === p.categorySlug)?.[locale] ?? p.categorySlug;
   // the shop is the only seller; saying so is a row of noise
@@ -71,9 +96,31 @@ export default async function ProductPage({
   const averageRating = reviews.length
     ? reviews.reduce((sum, review) => sum + review.rating, 0) / reviews.length
     : 0;
-  const deliveryDay = rules.cutoffHour > new Date().getHours() ? "today" : "tomorrow";
+  // the cutoff is an IST hour; the server clock is UTC on Vercel
+  const deliveryDay = minutesUntilCutoff(rules.cutoffHour) > 0 ? "today" : "tomorrow";
+  const v = p.variants[0];
+  const structuredData = {
+    "@context": "https://schema.org",
+    "@type": "Product",
+    name: p.name.en,
+    description: p.description.en,
+    brand: { "@type": "Brand", name: p.brand },
+    ...(image ? { image: [image] } : {}),
+    offers: {
+      "@type": "Offer",
+      url: `${getEnv().APP_ORIGIN}/products/${p.slug}`,
+      priceCurrency: "INR",
+      price: (v.pricePaise / 100).toFixed(2),
+      availability: `https://schema.org/${v.available > 0 ? "InStock" : "OutOfStock"}`,
+    },
+  };
   return (
     <section className="page-container">
+      <script
+        type="application/ld+json"
+        // escaped so a product name can never close the script tag
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData).replace(/</g, "\\u003c") }}
+      />
       <nav className="breadcrumb" aria-label="Breadcrumb">
         <Link href="/catalog">{mr ? "सर्व उत्पादने" : "All products"}</Link>
         <ChevronRight size={14} aria-hidden="true" />
@@ -95,7 +142,11 @@ export default async function ProductPage({
         <div className="product-info">
           <div className="product-title-row">
             <span className="eyebrow">{categoryName}</span>
-            <WishlistButton productId={p.id} saved={Boolean(saved)} />
+            {user ? (
+              <SaveToBoard productId={p.id} variantId={p.variants[0].id} saved={Boolean(saved)} boards={boardChoices} mr={mr} />
+            ) : (
+              <WishlistButton productId={p.id} name={p.name[locale]} saved={Boolean(saved)} />
+            )}
           </div>
           <h1 lang={locale}>{p.name[locale]}</h1>
           <p className="muted" lang={mr ? "en" : "mr"}>
@@ -111,7 +162,9 @@ export default async function ProductPage({
             </span>
           </div>
           <p className="description">{p.description[locale]}</p>
-          <h2 className="variant-heading">{mr ? "पॅक आकार निवडा" : "Choose your pack"}</h2>
+          {p.variants.length > 1 && (
+            <h2 className="variant-heading">{mr ? "पॅक आकार निवडा" : "Choose your pack"}</h2>
+          )}
           <div className="variant-list">
             {p.variants.map((v) => {
               const off = discountPercent(v.pricePaise, v.mrpPaise);
@@ -161,6 +214,13 @@ export default async function ProductPage({
           <p className="notice product-delivery-note">
             Live stock and delivery charges are confirmed at checkout.
           </p>
+          {user && (
+            <AddToList
+              mr={mr}
+              variants={p.variants.map((v) => ({ id: v.id, label: v.label, price: formatPrice(v.pricePaise) }))}
+              lists={listChoices.map((list) => ({ id: String(list._id), name: list.name }))}
+            />
+          )}
           {specs.length > 0 && (
             <dl className="product-specs">
               {specs.map((specification) => (

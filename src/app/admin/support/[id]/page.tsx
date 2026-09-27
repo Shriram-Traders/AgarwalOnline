@@ -9,6 +9,7 @@ import {
 import { ChatPanel } from "@/components/chat-panel";
 import { ActionForm } from "@/components/action-form";
 import { conversationStatusAction } from "@/lib/chat/actions";
+export const metadata = { title: "Support conversation", robots: { index: false } };
 export default async function SupportConversation({
   params,
 }: {

@@ -38,6 +38,15 @@ export async function toggleWishlist(
   return true;
 }
 
+/** Saves a product without toggling: filing it on a board keeps it in Saved too. */
+export async function ensureSaved(customerId: string, productInput: unknown) {
+  await customer(customerId);
+  const productId = recordId.parse(productInput);
+  if (!(await Product.exists({ _id: productId, status: "published" })))
+    throw Error("This product is unavailable.");
+  await WishlistItem.updateOne({ customerId, productId }, { $setOnInsert: { customerId, productId } }, { upsert: true });
+}
+
 export async function markNotification(customerId: string, input: unknown) {
   await customer(customerId);
   const data = z.object({ notificationId: recordId.optional() }).parse(input);

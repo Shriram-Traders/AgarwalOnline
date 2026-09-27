@@ -64,16 +64,10 @@ export function staffRoleOf(userRoles: readonly Role[]): StaffRole | null {
     ) ?? null
   );
 }
-/** Where a staff member's workspace lives, or null for a plain customer. */
+/** Where a staff member's workspace opens, or null for a plain customer. Owners start on the day's orders too. */
 export function staffHome(userRoles: readonly Role[]) {
   const role = staffRoleOf(userRoles);
-  return role === "super-admin"
-    ? "/super-admin"
-    : role === "admin"
-      ? "/admin"
-      : role === "delivery"
-        ? "/delivery"
-        : null;
+  return role === "super-admin" || role === "admin" ? "/admin" : role === "delivery" ? "/delivery" : null;
 }
 /** The full roles array for a person with this staff role (or none). */
 export function rolesFor(staffRole: StaffRole | null): Role[] {

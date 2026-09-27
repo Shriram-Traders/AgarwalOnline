@@ -8,6 +8,7 @@ import { Complaint, ReturnRequest } from "@/lib/aftercare/models";
 import { ActionForm } from "@/components/action-form";
 import { aftercareAction } from "@/lib/aftercare/actions";
 import { UploadedEvidence } from "@/lib/evidence/models";
+export const metadata = { title: "Complaints & returns", robots: { index: false } };
 export default async function Complaints() {
   const user = await requirePage("complaint:manage");
   const complaints = await Complaint.find({})

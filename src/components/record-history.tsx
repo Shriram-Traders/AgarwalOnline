@@ -1,5 +1,7 @@
 import { AuditLog, User } from "@/lib/db/models";
 import { connectDB } from "@/lib/db/connect";
+import { auditLabel } from "@/lib/audit-labels";
+import { When } from "./when";
 
 /** The audit entries recorded against one record, newest first, so history reads next to the thing it describes. */
 export async function RecordHistory({
@@ -29,14 +31,9 @@ export async function RecordHistory({
       <ol>
         {entries.map((entry) => (
           <li key={String(entry._id)}>
-            <strong>{entry.action}</strong>
+            <strong>{auditLabel(entry.action)}</strong>
             <small>
-              {names.get(String(entry.actorId)) ?? "System"} ·{" "}
-              {new Date(entry.at).toLocaleString("en-IN", {
-                timeZone: "Asia/Kolkata",
-                dateStyle: "medium",
-                timeStyle: "short",
-              })}
+              {names.get(String(entry.actorId)) ?? "System"} · <When at={entry.at} /> · <code>{entry.action}</code>
             </small>
           </li>
         ))}

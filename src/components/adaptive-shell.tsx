@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import type { StaffRole } from "@/lib/auth/permissions";
 import {
   Activity,
   BadgeIndianRupee,
@@ -10,14 +11,12 @@ import {
   ClipboardCheck,
   Headphones,
   LayoutDashboard,
-  LogOut,
   MessageSquareWarning,
-  ShieldCheck,
+  Settings,
   Sparkles,
-  Store,
+  Star,
   Truck,
   UserCog,
-  UserRound,
   UsersRound,
 } from "lucide-react";
 
@@ -31,9 +30,9 @@ type NavItem = {
 type NavGroup = { label: string; items: NavItem[] };
 
 const operations: NavGroup = {
-  label: "Operations",
+  label: "Run the store",
   items: [
-    { href: "/admin", label: "Overview", icon: LayoutDashboard },
+    { href: "/admin", label: "Overview & orders", icon: LayoutDashboard },
     {
       href: "/admin/products",
       label: "Catalog & stock",
@@ -41,20 +40,20 @@ const operations: NavGroup = {
       also: ["/admin/categories", "/admin/inventory"],
     },
     { href: "/admin/customers", label: "Customers", icon: UsersRound },
-    { href: "/admin/cod", label: "COD desk", icon: BadgeIndianRupee },
-    { href: "/admin/support", label: "Support", icon: Headphones },
-    { href: "/admin/complaints", label: "Aftercare", icon: MessageSquareWarning },
-    { href: "/admin/reviews", label: "Reviews", icon: Sparkles },
+    { href: "/admin/cod", label: "Cash on delivery", icon: BadgeIndianRupee },
+    { href: "/admin/support", label: "Support chats", icon: Headphones },
+    { href: "/admin/complaints", label: "Complaints & returns", icon: MessageSquareWarning },
+    { href: "/admin/reviews", label: "Reviews", icon: Star },
     { href: "/admin/analytics", label: "Analytics", icon: ChartNoAxesCombined },
   ],
 };
-const governance: NavGroup = {
-  label: "Governance",
+const owner: NavGroup = {
+  label: "Owner",
   items: [
-    { href: "/super-admin", label: "Control centre", icon: ShieldCheck },
+    { href: "/super-admin", label: "Store settings", icon: Settings },
     { href: "/super-admin/staff", label: "Staff & roles", icon: UserCog },
     { href: "/super-admin/approvals", label: "Approvals", icon: ClipboardCheck },
-    { href: "/super-admin/promotions", label: "Promotions", icon: Sparkles },
+    { href: "/super-admin/promotions", label: "Offers", icon: Sparkles },
     { href: "/super-admin/refunds", label: "Refunds", icon: BadgeIndianRupee },
     { href: "/super-admin/audit", label: "Audit trail", icon: Activity },
   ],
@@ -65,84 +64,63 @@ const delivery: NavGroup = {
 };
 const roots = new Set(["/admin", "/super-admin", "/delivery"]);
 
+/**
+ * Staff pages live inside the same storefront header and footer that shoppers
+ * see; only a light workspace menu is added beside the page. The owner's menu
+ * shows both groups because owners also run the day's orders.
+ */
 export function AdaptiveShell({
   header,
   footer,
+  staffRole,
   children,
 }: {
   header: React.ReactNode;
   footer: React.ReactNode;
+  staffRole: StaffRole | null;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
-  const isGovernance = pathname.startsWith("/super-admin");
-  const isDelivery = pathname.startsWith("/delivery");
-  const isStaff = isGovernance || isDelivery || pathname.startsWith("/admin");
-  if (!isStaff)
-    return (
-      <>
-        {header}
-        <main id="main">{children}</main>
-        {footer}
-      </>
-    );
-  const groups = isDelivery
-    ? [delivery]
-    : isGovernance
-      ? [governance, operations]
-      : [operations];
-  const home = isGovernance ? "/super-admin" : isDelivery ? "/delivery" : "/admin";
+  const isStaff = Boolean(staffRole) && ["/admin", "/super-admin", "/delivery"].some(
+    (root) => pathname === root || pathname.startsWith(`${root}/`),
+  );
+  const groups =
+    staffRole === "super-admin" ? [operations, owner] : staffRole === "admin" ? [operations] : [delivery];
   return (
-    <div className="ops-shell">
-      <aside className="ops-sidebar">
-        <Link href={home} className="ops-brand">
-          <span className="brand-mark" aria-hidden="true">
-            <Store size={18} />
-          </span>
-          <span>
-            Agarwal
-            <small>{isGovernance ? "Governance" : isDelivery ? "Delivery" : "Operations"}</small>
-          </span>
-        </Link>
-        <Link href="/account" className="ops-account-mini" aria-label="Account and sign out">
-          <UserRound size={20} />
-        </Link>
-        <nav aria-label="Staff workspace" className="ops-nav">
-          {groups.map((group) => (
-            <div className="ops-group" key={group.label}>
-              <span className="ops-group-label">{group.label}</span>
-              {group.items.map(({ href, label, icon: Icon, also }) => {
-                const active =
-                  href === pathname ||
-                  (!roots.has(href) && pathname.startsWith(`${href}/`)) ||
-                  (also ?? []).some(
-                    (sibling) =>
-                      sibling === pathname || pathname.startsWith(`${sibling}/`),
-                  );
-                return (
-                  <Link key={href} href={href} aria-current={active ? "page" : undefined}>
-                    <Icon size={18} aria-hidden="true" />
-                    <span>{label}</span>
-                  </Link>
-                );
-              })}
-            </div>
-          ))}
-        </nav>
-        <div className="ops-foot">
-          <Link href="/">
-            <Store size={18} aria-hidden="true" />
-            <span>Storefront</span>
-          </Link>
-          <Link href="/account">
-            <LogOut size={18} aria-hidden="true" />
-            <span>Account &amp; sign out</span>
-          </Link>
-        </div>
-      </aside>
-      <main id="main" className="ops-main">
-        {children}
+    <>
+      {header}
+      <main id="main">
+        {isStaff ? (
+          <div className="workspace-layout">
+            <nav aria-label="Staff workspace" className="workspace-nav">
+              {groups.map((group) => (
+                <div className="workspace-group" key={group.label}>
+                  <span className="workspace-group-label">{group.label}</span>
+                  {group.items.map(({ href, label, icon: Icon, also }) => {
+                    const active =
+                      href === pathname ||
+                      (!roots.has(href) && pathname.startsWith(`${href}/`)) ||
+                      (href === "/admin" && pathname.startsWith("/admin/orders/")) ||
+                      (also ?? []).some(
+                        (sibling) => sibling === pathname || pathname.startsWith(`${sibling}/`),
+                      );
+                    return (
+                      <Link key={href} href={href} aria-current={active ? "page" : undefined}>
+                        <Icon size={18} aria-hidden="true" />
+                        <span>{label}</span>
+                      </Link>
+                    );
+                  })}
+                </div>
+              ))}
+            </nav>
+            <div className="workspace-main">{children}</div>
+          </div>
+        ) : (
+          children
+        )}
       </main>
-    </div>
+      {footer}
+    </>
   );
 }

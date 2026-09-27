@@ -6,6 +6,8 @@ import { formatPrice } from "@/lib/display";
 import { HandCoins } from "lucide-react";
 import { requirePage } from "@/lib/auth/session";
 import { CODCollection } from "@/lib/operations/models";
+import { PageHeading } from "@/components/page-heading";
+export const metadata = { title: "Cash on delivery", robots: { index: false } };
 
 export default async function CODPage() {
   await requirePage("cod:reconcile");
@@ -20,13 +22,11 @@ export default async function CODPage() {
   );
   return (
     <section className="page-container">
-      <div className="workspace-heading">
-        <div>
-          <span className="eyebrow">CASH CONTROL</span>
-          <h1>COD reconciliation</h1>
-          <p>Collected cash, handovers and discrepancy resolution.</p>
-        </div>
-      </div>
+      <PageHeading
+        eyebrow="Run the store"
+        title="Cash on delivery"
+        lead="Cash the delivery partners collected, what was handed over at the counter, and any difference still to settle. Open an order to record a handover."
+      />
       <div className="analytics-cards">
         <article className="panel">
           <small>Waiting for handover</small>

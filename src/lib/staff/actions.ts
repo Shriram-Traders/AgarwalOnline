@@ -1,15 +1,18 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requirePermission } from "../auth/session";
 import type { MutationState } from "../commerce/actions";
-import { createStaff, updateStaff } from "./service";
+import { createStaff, grantStaffRole, updateStaff } from "./service";
+import { plainMessage } from "../form-errors";
 
 export async function staffAction(
   _state: MutationState,
   form: FormData,
 ): Promise<MutationState> {
+  let granted = "";
   try {
     const actor = await requirePermission("staff:manage");
     const operation = String(form.get("operation"));
@@ -22,14 +25,18 @@ export async function staffAction(
       success = (await createStaff(actor.id, input)).created
         ? "Staff account created."
         : "Staff access added to the existing account.";
+    else if (operation === "grant") {
+      await grantStaffRole(actor.id, input);
+      granted = String(form.get("userId"));
+    }
     else if (operation === "update") await updateStaff(actor.id, input);
     else throw Error("Invalid operation.");
     revalidatePath("/super-admin/staff");
     revalidatePath("/super-admin/audit");
     revalidatePath("/super-admin");
-    return { success };
+    if (!granted) return { success };
   } catch (error) {
-    if (error instanceof z.ZodError) return { error: error.issues[0].message };
+    if (error instanceof z.ZodError) return { error: plainMessage(error) };
     const message = error instanceof Error ? error.message : "";
     if (/^(Manage your|Keep at least|Staff account|Name, work)/.test(message))
       return { error: message };
@@ -37,4 +44,6 @@ export async function staffAction(
       return { error: "That email or phone number is already in use." };
     return { error: "Unable to save this staff account." };
   }
+  // the picked person leaves the candidate list, so the confirmation lives on the page
+  redirect(`/super-admin/staff?added=${granted}#team`);
 }

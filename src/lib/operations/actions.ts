@@ -14,6 +14,8 @@ import {
   reconcileCOD,
   resolveCODDiscrepancy,
 } from "./service";
+import { paiseFromRupees } from "../display";
+import { plainMessage } from "../form-errors";
 export async function operationAction(
   _state: MutationState,
   form: FormData,
@@ -76,13 +78,13 @@ export async function operationAction(
         await completeDelivery(user.id, {
           orderId,
           code: form.get("code"),
-          cashPaise: form.get("cashPaise"),
+          cashPaise: paiseFromRupees(form.get("cashRupees")) ?? null,
         });
         break;
       case "reconcile":
         await reconcileCOD(user.id, {
           orderId,
-          receivedPaise: form.get("receivedPaise"),
+          receivedPaise: paiseFromRupees(form.get("receivedRupees")) ?? null,
           note: form.get("note") ?? "",
         });
         break;
@@ -104,8 +106,7 @@ export async function operationAction(
     delivered = operation === "deliver";
     result = { success };
   } catch (error) {
-    if (error instanceof z.ZodError)
-      return { error: "Check the form values and try again." };
+    if (error instanceof z.ZodError) return { error: plainMessage(error) };
     const message = error instanceof Error ? error.message : "";
     return {
       error:

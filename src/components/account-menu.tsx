@@ -11,13 +11,15 @@ export type MenuLink = { href: string; label: string };
 export function AccountMenu({
   name,
   phone,
+  email,
   links,
   workspace,
   workspaceLabel,
   signOutLabel,
 }: {
   name: string;
-  phone: string;
+  phone?: string;
+  email?: string;
   links: MenuLink[];
   workspace: MenuLink[];
   workspaceLabel: string;
@@ -57,7 +59,7 @@ export function AccountMenu({
       <div className="account-menu-panel">
         <p className="account-menu-name">
           {name}
-          <small>+91 ••••••{phone.slice(-4)}</small>
+          <small>{phone ? `+91 ••••••${phone.slice(-4)}` : email}</small>
         </p>
         <ul>
           {links.map((link) => (

@@ -5,7 +5,11 @@ import { requirePage } from "@/lib/auth/session";
 import { Order } from "@/lib/commerce/models";
 import { CODCollection } from "@/lib/operations/models";
 import { istDate } from "@/lib/commerce/delivery";
-import { displayStatus } from "@/lib/display";
+import { PageHeading } from "@/components/page-heading";
+import { StatTiles } from "@/components/stat-tiles";
+import { StatusPill } from "@/components/status-pill";
+import { formatPrice } from "@/lib/display";
+export const metadata = { title: "My deliveries", robots: { index: false } };
 export default async function Delivery() {
   const user = await requirePage("delivery:assigned");
   const orders = await Order.find({
@@ -43,40 +47,43 @@ export default async function Delivery() {
   ]);
   return (
     <section className="page-container">
-      <div className="workspace-heading">
-        <div><span className="eyebrow">YOUR DELIVERY DAY</span><h1>Hello, {user.name}</h1><p>Prioritised stops, collections and completed deliveries.</p></div>
-        <span className="live-chip"><i /> Live queue</span>
-      </div>
-      <div className="status-strip">
-        <span>{orders.length} active deliveries</span>
-        <span>{deliveredToday} delivered today</span>
-        <span>{attemptsToday} need another attempt</span>
-        <span>
-          Cash to hand over: ₹
-          {cash.reduce((n, c) => n + c.collectedPaise, 0) / 100}
-        </span>
-      </div>
-      <h2 className="queue-heading">Your queue</h2>
+      <PageHeading
+        eyebrow="Your delivery day"
+        title={`Hello, ${user.name}`}
+        lead="Your stops in order, the cash you are carrying and what you delivered today."
+        aside={
+          <span className="live-chip">
+            <i /> Updates when you come back
+          </span>
+        }
+      />
+      <StatTiles
+        items={[
+          { label: "Stops to make", value: orders.length },
+          { label: "Delivered today", value: deliveredToday },
+          { label: "Need another try", value: attemptsToday },
+          { label: "Cash to hand over", value: formatPrice(cash.reduce((n, c) => n + c.collectedPaise, 0)) },
+        ]}
+      />
+      <h2 className="queue-heading">Your stops</h2>
       {orders.length ? (
-        orders.map((o) => (
-          <Link
-            className="panel order-row"
-            key={String(o._id)}
-            href={`/delivery/orders/${o._id}`}
-          >
-            <strong>{o.number}</strong>
-            <span>
-              {o.deliveryDate} · {o.deliveryWindow}
-            </span>
-            <span>{displayStatus(o.deliveryStatus)}</span>
-            <strong>
-              {o.paymentMethod === "cod"
-                ? `Collect ₹${o.totalPaise / 100}`
-                : "Prepaid"}{" "}
-              →
-            </strong>
-          </Link>
-        ))
+        <div className="stop-list">
+          {orders.map((o) => (
+            <Link className="panel stop-row" key={String(o._id)} href={`/delivery/orders/${o._id}`}>
+              <span>
+                <strong>{o.address.name}</strong>
+                <small>
+                  {o.address.areaName ? `${o.address.areaName} · ` : ""}
+                  {o.deliveryWindow} · {o.number}
+                </small>
+              </span>
+              <StatusPill value={o.deliveryStatus} />
+              <strong className="stop-collect">
+                {o.paymentMethod === "cod" ? `Collect ${formatPrice(o.totalPaise)}` : "Already paid"} →
+              </strong>
+            </Link>
+          ))}
+        </div>
       ) : (
         <div className="panel">
           <h3>You’re all caught up.</h3>
@@ -85,10 +92,11 @@ export default async function Delivery() {
       )}
       <h2>Recently delivered</h2>
       {history.length ? (
-        <ul>
+        <ul className="settings-list">
           {history.map((o) => (
             <li key={String(o._id)}>
-              {o.number} · {o.deliveryDate}
+              <Link href={`/delivery/orders/${o._id}`}>{o.number}</Link>
+              <small>{o.deliveryDate}</small>
             </li>
           ))}
         </ul>

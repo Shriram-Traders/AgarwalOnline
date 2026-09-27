@@ -5,6 +5,23 @@ import { ProductCard } from "@/components/product-card";
 import { currentLocale } from "@/lib/i18n";
 import { CatalogFilterPanel } from "@/components/catalog-filter-panel";
 export const dynamic = "force-dynamic";
+
+export async function generateMetadata({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | undefined>>;
+}) {
+  const params = await searchParams;
+  const category = (await catalogCategories()).find((item) => item.slug === params.category);
+  if (params.q) return { title: `Results for “${params.q.slice(0, 60)}”`, robots: { index: false } };
+  if (category)
+    return {
+      title: `${category.en} online in Nagothane`,
+      description: `Shop ${category.en.toLowerCase()} from Agarwal General Stores with same-day delivery across Nagothane, Roha, Pali, RIL Township and NMD.`,
+    };
+  if (params.sort === "discount") return { title: "Today’s offers and discounts" };
+  return { title: "All products" };
+}
 export default async function Catalog({
   searchParams,
 }: {

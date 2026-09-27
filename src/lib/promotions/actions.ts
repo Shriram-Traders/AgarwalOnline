@@ -10,6 +10,8 @@ import { cartFor } from "../commerce/service";
 import { quoteCart } from "./service";
 import { Promotion } from "./models";
 import { AuditLog } from "../db/models";
+import { formWithPaise, paiseFromRupees } from "../display";
+import { plainMessage } from "../form-errors";
 
 const PROMOTION_COOKIE = "ags_promotion";
 
@@ -97,7 +99,17 @@ export async function promotionAdminAction(
       .refine((value) => value.kind !== "code" || Boolean(value.code), {
         message: "Coupon promotions need a code.",
       })
-      .parse(Object.fromEntries(form));
+      .parse({
+        ...formWithPaise(form),
+        // one field serves both kinds: a percentage, or a fixed amount typed in rupees
+        discountValue:
+          form.get("discountType") === "fixed"
+            ? paiseFromRupees(form.get("discountValue"))
+            : form.get("discountValue"),
+        // the form sends the store's local time with no zone; the server clock is UTC
+        startsAt: `${form.get("startsAt")}:00+05:30`,
+        endsAt: `${form.get("endsAt")}:00+05:30`,
+      });
     const promotion = await Promotion.create({
       ...data,
       code: data.kind === "code" ? data.code : undefined,
@@ -119,7 +131,7 @@ export async function promotionAdminAction(
     return {
       error:
         error instanceof z.ZodError
-          ? error.issues[0].message
+          ? plainMessage(error)
           : "Unable to update this promotion.",
     };
   }

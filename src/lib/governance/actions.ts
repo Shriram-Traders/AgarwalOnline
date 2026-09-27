@@ -8,6 +8,9 @@ import {
   adjustStock,
   reviewApproval,
 } from "./service";
+import { formWithPaise } from "../display";
+import { ZodError } from "zod";
+import { plainMessage } from "../form-errors";
 export async function governanceAction(
   _state: MutationState,
   form: FormData,
@@ -15,7 +18,10 @@ export async function governanceAction(
   try {
     const user = await requirePermission("profile:own");
     const operation = String(form.get("operation"));
-    const data = Object.fromEntries(form);
+    const data = formWithPaise(form);
+    // a publish time from datetime-local is the store's IST wall time with no zone
+    if (typeof data.scheduledAt === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(data.scheduledAt))
+      data.scheduledAt = `${data.scheduledAt}:00+05:30`;
     if (operation === "product") await submitProduct(user.id, data);
     else if (operation === "price") await requestPrice(user.id, data);
     else if (operation === "stock") await adjustStock(user.id, data);
@@ -35,6 +41,7 @@ export async function governanceAction(
             : "Request sent for approval.",
     };
   } catch (e) {
+    if (e instanceof ZodError) return { error: plainMessage(e) };
     const message = e instanceof Error ? e.message : "";
     return {
       error:

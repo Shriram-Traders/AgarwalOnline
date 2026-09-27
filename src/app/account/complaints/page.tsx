@@ -10,6 +10,7 @@ import { aftercareAction } from "@/lib/aftercare/actions";
 import { UploadedEvidence } from "@/lib/evidence/models";
 import { evidenceAction } from "@/lib/evidence/actions";
 import { displayStatus } from "@/lib/display";
+export const metadata = { title: "Complaints & returns", robots: { index: false } };
 export default async function Complaints() {
   const user = await requirePage("complaint:own");
   const orders = await Order.find({ customerId: user.id })

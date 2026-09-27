@@ -7,6 +7,8 @@ import { ActionForm } from "@/components/action-form";
 import { operationAction } from "@/lib/operations/actions";
 import { evidenceAction } from "@/lib/evidence/actions";
 import { UploadedEvidence } from "@/lib/evidence/models";
+import { MoneyInput } from "@/components/money-input";
+export const metadata = { title: "Delivery", robots: { index: false } };
 export default async function DeliveryOrder({
   params,
 }: {
@@ -111,14 +113,8 @@ export default async function DeliveryOrder({
                 page after receiving the items.
               </p>
               <label>
-                Cash collected (paise)
-                <input
-                  name="cashPaise"
-                  type="number"
-                  min={0}
-                  defaultValue={o.paymentMethod === "cod" ? o.totalPaise : 0}
-                  required
-                />
+                Cash collected (₹)
+                <MoneyInput name="cashRupees" defaultValue={o.paymentMethod === "cod" ? o.totalPaise / 100 : 0} />
               </label>
               <label>
                 <input type="checkbox" required />I have handed over the

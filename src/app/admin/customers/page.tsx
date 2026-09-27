@@ -6,6 +6,8 @@ import { UsersRound } from "lucide-react";
 import { requirePage } from "@/lib/auth/session";
 import { User } from "@/lib/db/models";
 import { Address, Order } from "@/lib/commerce/models";
+import { PageHeading } from "@/components/page-heading";
+export const metadata = { title: "Customers", robots: { index: false } };
 
 function safeRegex(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -44,14 +46,12 @@ export default async function CustomersPage({
     orders.filter((order) => String(order.customerId) === String(id));
   return (
     <section className="page-container">
-      <div className="workspace-heading">
-        <div>
-          <span className="eyebrow">CUSTOMER CARE</span>
-          <h1>Customers</h1>
-          <p>Purchase context for support and fulfilment.</p>
-        </div>
-        <span className="live-chip">{customers.length} shown</span>
-      </div>
+      <PageHeading
+        eyebrow="Run the store"
+        title="Customers"
+        lead="Who orders from the store, how much and how recently, for support and delivery questions."
+        aside={<span className="live-chip">{customers.length} shown</span>}
+      />
       <form className="audit-filters">
         <label>
           Name or phone
@@ -77,7 +77,9 @@ export default async function CustomersPage({
             cell: (customer) => (
               <>
                 <strong>{customer.name}</strong>
-                <small>+91 ••••••{customer.phone.slice(-4)}</small>
+                <small>
+                  {customer.phone ? `+91 ••••••${customer.phone.slice(-4)}` : "Google sign-in, no mobile yet"}
+                </small>
               </>
             ),
           },

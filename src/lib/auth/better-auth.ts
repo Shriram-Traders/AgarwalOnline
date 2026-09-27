@@ -8,6 +8,8 @@ import { mongodbAdapter } from "@better-auth/mongo-adapter";
 import { getEnv } from "../env";
 import { originVariants } from "./origin";
 import { sendLoginCode } from "./sms";
+import { sendEmail } from "../email/send";
+import { verificationEmail } from "../email/templates";
 
 type AuthInstance = ReturnType<typeof buildAuth>;
 const instances = new Map<string, AuthInstance>();
@@ -41,6 +43,44 @@ function buildAuth() {
         verify: ({ hash, password }) => bcrypt.compare(password, hash),
       },
     },
+    ...(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET
+      ? {
+          socialProviders: {
+            google: {
+              clientId: env.GOOGLE_CLIENT_ID,
+              clientSecret: env.GOOGLE_CLIENT_SECRET,
+              prompt: "select_account" as const,
+            },
+          },
+        }
+      : {}),
+    emailVerification: {
+      // a signed 24-hour link; clicking it only confirms the email and never signs anyone in
+      expiresIn: 24 * 60 * 60,
+      autoSignInAfterVerification: false,
+      sendVerificationEmail: async ({ user, url }) => {
+        await sendEmail({ to: user.email, ...verificationEmail(user.name, url) });
+      },
+      afterEmailVerification: async (user) => {
+        await db.collection("auditlogs").insertOne({
+          actorId: objectId(user.id),
+          action: "auth.email.verified",
+          target: user.id,
+          at: new Date(),
+        });
+      },
+    },
+    account: {
+      modelName: "authAccounts",
+      accountLinking: {
+        enabled: true,
+        // Signing in with Google joins an existing account only when that account's email is verified
+        // (requireLocalEmailVerified, the default), so nobody can pre-register someone else's email and
+        // inherit their Google sign-in. A signed-in person can still connect Google from the account page,
+        // whatever email the account holds, because they have already proved they own it.
+        allowDifferentEmails: true,
+      },
+    },
     user: {
       modelName: "users",
       additionalFields: {
@@ -70,7 +110,6 @@ function buildAuth() {
       updateAge: 24 * 60 * 60,
       freshAge: 12 * 60 * 60,
     },
-    account: { modelName: "authAccounts" },
     verification: {
       modelName: "authVerifications",
       storeIdentifier: "hashed",
@@ -106,13 +145,6 @@ function buildAuth() {
               active: true,
             });
             if (!user) return false;
-            if ((user.roles as string[] | undefined)?.some((role) => role !== "customer"))
-              return {
-                data: {
-                  ...session,
-                  expiresAt: new Date(Date.now() + 12 * 60 * 60 * 1000),
-                },
-              };
           },
         },
       },
@@ -205,25 +237,22 @@ function buildAuth() {
   });
 }
 
-/** Staff sessions last 12 hours from sign-in. Better Auth extends `expiresAt` on activity, so the create hook alone
- *  cannot enforce that; the cap is checked on every read and an over-age staff session is deleted. */
-export const STAFF_SESSION_MS = 12 * 60 * 60 * 1000;
+/** Everyone, staff included, stays signed in for the 7-day session; deactivating a user still ends it on the next request. */
 export async function sessionUserId(headers: Headers): Promise<string | null> {
-  const auth = getAuth();
-  const found = await auth.api.getSession({ headers });
-  if (!found) return null;
-  const roles = (found.user as { roles?: string[] }).roles ?? [];
-  const age = Date.now() - new Date(found.session.createdAt).getTime();
-  if (roles.some((role) => role !== "customer") && age > STAFF_SESSION_MS) {
-    await (await auth.$context).internalAdapter.deleteSession(found.session.token);
-    return null;
-  }
-  return found.user.id;
+  const found = await getAuth().api.getSession({ headers });
+  return found?.user.id ?? null;
+}
+
+/** True when Google sign-in is configured; the buttons only appear then. */
+export function googleEnabled() {
+  const env = getEnv();
+  return Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET);
 }
 
 export function getAuth() {
   const env = getEnv();
-  const key = `${env.MONGODB_URI}|${env.APP_ORIGIN}|${env.BETTER_AUTH_SECRET ?? env.AUTH_SECRET}`;
+  // Google credentials are part of the key, so adding them to .env takes effect without a restart
+  const key = `${env.MONGODB_URI}|${env.APP_ORIGIN}|${env.BETTER_AUTH_SECRET ?? env.AUTH_SECRET}|${env.GOOGLE_CLIENT_ID ?? ""}`;
   let auth = instances.get(key);
   if (!auth) {
     auth = buildAuth();

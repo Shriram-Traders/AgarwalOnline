@@ -1,4 +1,5 @@
 import Link from "next/link";
+export const metadata = { title: "Access restricted", robots: { index: false } };
 
 export default function Forbidden() {
   return (

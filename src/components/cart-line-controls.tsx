@@ -9,13 +9,18 @@ export function CartLineControls({
   quantity,
   max,
   name,
+  action: save = cartAction,
+  fields = {},
 }: {
   variantId: string;
   quantity: number;
   max: number;
   name: string;
+  /** The same stepper edits a shared list when given the list action and its hidden fields. */
+  action?: typeof cartAction;
+  fields?: Record<string, string>;
 }) {
-  const [state, action, pending] = useActionState(cartAction, {});
+  const [state, action, pending] = useActionState(save, {});
   return (
     <form
       action={action}
@@ -24,6 +29,9 @@ export function CartLineControls({
       aria-label={`Quantity for ${name}`}
     >
       <input type="hidden" name="variantId" value={variantId} />
+      {Object.entries(fields).map(([key, value]) => (
+        <input key={key} type="hidden" name={key} value={value} />
+      ))}
       <button
         name="quantity"
         value={quantity - 1}

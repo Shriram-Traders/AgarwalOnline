@@ -11,6 +11,7 @@ import { ServiceArea, User } from "@/lib/db/models";
 import { CheckoutForm } from "@/components/checkout-form";
 import { cookies } from "next/headers";
 import { quoteCart } from "@/lib/promotions/service";
+export const metadata = { title: "Checkout", robots: { index: false } };
 export default async function Checkout() {
   const user = await requirePage("order:own");
   const profile = await User.findById(user.id).select("preferredPaymentMethod");

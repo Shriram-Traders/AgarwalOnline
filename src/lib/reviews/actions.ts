@@ -8,6 +8,7 @@ import { objectId } from "../commerce/service";
 import { Order } from "../commerce/models";
 import { ProductReview, ReviewReport } from "./models";
 import { AuditLog } from "../db/models";
+import { plainMessage } from "../form-errors";
 
 export async function reviewAction(
   _state: MutationState,
@@ -49,7 +50,7 @@ export async function reviewAction(
     return {
       error:
         error instanceof z.ZodError
-          ? error.issues[0].message
+          ? plainMessage(error)
           : "Unable to save your review.",
     };
   }

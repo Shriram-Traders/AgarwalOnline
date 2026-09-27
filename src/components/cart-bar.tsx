@@ -4,17 +4,11 @@ import { usePathname } from "next/navigation";
 import { ArrowRight } from "lucide-react";
 import { formatPrice } from "@/lib/display";
 import { copy, type Locale } from "@/lib/locale-types";
+import { useBasket } from "./basket";
 
 /** Sticky basket summary on phones (quick-commerce pattern); hidden where it would be redundant. */
-export function CartBar({
-  count,
-  totalPaise,
-  locale,
-}: {
-  count: number;
-  totalPaise: number;
-  locale: Locale;
-}) {
+export function CartBar({ locale }: { locale: Locale }) {
+  const { count, totalPaise } = useBasket();
   const pathname = usePathname();
   const quiet = ["/cart", "/checkout", "/staff", "/admin", "/super-admin", "/delivery"];
   if (count === 0 || quiet.some((p) => pathname.startsWith(p))) return null;

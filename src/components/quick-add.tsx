@@ -1,45 +1,53 @@
 "use client";
-import { useActionState } from "react";
+import { startTransition, useState } from "react";
 import { Minus, Plus } from "lucide-react";
-import { cartAction, quickAddAction } from "@/lib/commerce/actions";
+import { quickAddAction } from "@/lib/commerce/actions";
+import { useBasket } from "./basket";
 
-type State = { qty: number; error?: string };
-
-/** Quick-commerce style ADD that turns into an in-place stepper once the item is in the basket. */
+/** Quick-commerce ADD that becomes a stepper on tap; the save runs behind it and rolls back if refused. */
 export function QuickAdd({
   variantId,
+  pricePaise,
   available,
   max,
   name,
 }: {
   variantId: string;
+  pricePaise: number;
   available: number;
   max: number;
   name: string;
 }) {
-  const [state, action, pending] = useActionState<State, FormData>(
-    async (prev, form) => {
-      const next = Number(form.get("next"));
-      const payload = new FormData();
-      payload.set("variantId", variantId);
-      payload.set("quantity", String(next));
-      const result =
-        next > prev.qty
-          ? await quickAddAction({}, payload)
-          : await cartAction({}, payload);
-      return result.error ? { qty: prev.qty, error: result.error } : { qty: next };
-    },
-    { qty: 0 },
-  );
+  const { lines, preview, commit } = useBasket();
+  const [error, setError] = useState<string>();
+  const qty = lines[variantId]?.quantity ?? 0;
   const limit = Math.min(max, available);
+
+  function change(quantity: number) {
+    const line = { variantId, quantity, pricePaise };
+    startTransition(async () => {
+      preview(line);
+      const form = new FormData();
+      form.set("variantId", variantId);
+      form.set("quantity", String(quantity));
+      const result = await quickAddAction({}, form).catch(() => ({
+        error: "Could not reach the store. Check your connection and try again.",
+      }));
+      startTransition(() => {
+        setError(result.error);
+        if (!result.error) commit(line);
+      });
+    });
+  }
+
   return (
-    <form action={action} className="quick-add" data-pending={pending}>
-      {state.qty === 0 ? (
+    <div className="quick-add">
+      {qty === 0 ? (
         <button
+          type="button"
           className="add-button"
-          name="next"
-          value={1}
-          disabled={pending || available === 0}
+          disabled={available === 0}
+          onClick={() => change(1)}
           aria-label={available ? `Add ${name} to basket` : `${name} is out of stock`}
         >
           {available ? "Add" : "Sold out"}
@@ -47,29 +55,28 @@ export function QuickAdd({
       ) : (
         <span className="qty-stepper compact" aria-label={`Quantity of ${name} in basket`}>
           <button
-            name="next"
-            value={state.qty - 1}
-            disabled={pending}
-            aria-label={state.qty === 1 ? `Remove ${name} from basket` : "Decrease quantity"}
+            type="button"
+            onClick={() => change(qty - 1)}
+            aria-label={qty === 1 ? `Remove ${name} from basket` : "Decrease quantity"}
           >
             <Minus size={16} />
           </button>
-          <output aria-live="polite">{state.qty}</output>
+          <output aria-live="polite">{qty}</output>
           <button
-            name="next"
-            value={state.qty + 1}
-            disabled={pending || state.qty >= limit}
+            type="button"
+            onClick={() => change(qty + 1)}
+            disabled={qty >= limit}
             aria-label="Increase quantity"
           >
             <Plus size={16} />
           </button>
         </span>
       )}
-      {state.error && (
+      {error && (
         <span role="alert" className="quick-error">
-          {state.error}
+          {error}
         </span>
       )}
-    </form>
+    </div>
   );
 }

@@ -6,6 +6,8 @@ export type Stat = {
   value: ReactNode;
   /** Present on the linked "stats" variant, omitted on the read-only "cards" variant. */
   href?: string;
+  /** A comparison line under the label, e.g. "Yesterday 4". */
+  note?: string;
 };
 
 /**
@@ -41,11 +43,13 @@ export function StatTiles({
           <Link href={item.href} key={item.label} aria-label={`${item.label}: ${item.value}`}>
             <span>{item.value}</span>
             <small>{item.label}</small>
+            {item.note && <em>{item.note}</em>}
           </Link>
         ) : (
           <div key={item.label}>
             <span>{item.value}</span>
             <small>{item.label}</small>
+            {item.note && <em>{item.note}</em>}
           </div>
         ),
       )}

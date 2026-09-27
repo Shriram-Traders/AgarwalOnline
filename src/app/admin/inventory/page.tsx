@@ -1,8 +1,14 @@
+import Link from "next/link";
+import { History, PackageSearch } from "lucide-react";
+import mongoose from "mongoose";
 import { ActionForm } from "@/components/action-form";
 import { DataTable } from "@/components/data-table";
 import { EmptyState } from "@/components/empty-state";
-import { formatIst, displayStatus } from "@/lib/display";
-import { History } from "lucide-react";
+import { FilterBar } from "@/components/filter-bar";
+import { MoneyInput } from "@/components/money-input";
+import { StatusPill } from "@/components/status-pill";
+import { When } from "@/components/when";
+import { displayStatus } from "@/lib/display";
 import { PageHeading } from "@/components/page-heading";
 import { CatalogAdminNav } from "@/components/catalog-admin-nav";
 import { requirePage } from "@/lib/auth/session";
@@ -10,89 +16,256 @@ import { catalogManagementAction } from "@/lib/catalog/manage-actions";
 import { governanceAction } from "@/lib/governance/actions";
 import { InventoryMovement } from "@/lib/commerce/models";
 import { InventoryItem, Product, ProductVariant } from "@/lib/db/models";
+export const metadata = { title: "Stock", robots: { index: false } };
 
-export default async function InventoryPage() {
+const LOW = 10;
+
+export default async function InventoryPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | undefined>>;
+}) {
   await requirePage("inventory:adjust");
+  const params = await searchParams;
   const [products, variants, inventory, movements] = await Promise.all([
-    Product.find({}).sort({ "name.en": 1 }).limit(200),
-    ProductVariant.find({}).sort({ sku: 1 }).limit(500),
-    InventoryItem.find({}).limit(500),
+    Product.find({}).sort({ "name.en": 1 }).limit(500),
+    ProductVariant.find({}).sort({ sku: 1 }).limit(2000),
+    InventoryItem.find({}).limit(2000),
     InventoryMovement.find({}).sort({ at: -1 }).limit(50).populate("variantId", "sku label"),
   ]);
+  const rows = variants.map((variant) => {
+    const product = products.find((item) => String(item._id) === String(variant.productId));
+    const stock = inventory.find((item) => String(item.variantId) === String(variant._id));
+    const onHand = stock?.onHand ?? 0;
+    const reserved = stock?.reserved ?? 0;
+    return { variant, product, onHand, reserved, available: Math.max(0, onHand - reserved) };
+  });
+  const q = params.q?.trim().toLowerCase();
+  const shown = rows.filter(
+    (row) =>
+      (!q || [row.product?.name.en ?? "", row.variant.sku, row.variant.label].some((text) => text.toLowerCase().includes(q))) &&
+      (params.stock !== "low" || (row.available > 0 && row.available <= LOW)) &&
+      (params.stock !== "out" || row.available === 0),
+  );
+  // the pack being adjusted opens above the table, one at a time
+  const adjusting =
+    params.adjust && mongoose.isValidObjectId(params.adjust)
+      ? rows.find((row) => String(row.variant._id) === params.adjust)
+      : undefined;
+  const filters = new URLSearchParams(
+    Object.entries({ q: params.q, stock: params.stock }).filter(([, value]) => value) as [string, string][],
+  );
+  const adjustHref = (id: string) => `/admin/inventory?${new URLSearchParams({ ...Object.fromEntries(filters), adjust: id })}#adjust`;
+  const filtered = Boolean(q || params.stock);
   return (
     <section className="page-container">
       <PageHeading
-        eyebrow="Store control"
-        title="Inventory"
-        lead="Create pack sizes, track reservations and record every adjustment."
+        eyebrow="Catalog"
+        title="Stock"
+        lead="How many of each pack you have, how many are held for open orders, and every change."
       />
       <CatalogAdminNav />
-      <details className="panel create-staff">
-        <summary>Create a pack size</summary>
-        <ActionForm action={catalogManagementAction} submit="Create pack size">
+      {adjusting && (
+        <div className="panel adjust-panel" id="adjust">
+          <div className="panel-heading">
+            <div>
+              <span className="eyebrow">Adjust stock</span>
+              <h2>
+                {adjusting.product?.name.en} · {adjusting.variant.label}
+              </h2>
+            </div>
+            <Link href={`/admin/inventory${filters.size ? `?${filters}` : ""}`} className="text-button">
+              Close
+            </Link>
+          </div>
+          <p className="muted">
+            {adjusting.onHand} on the shelf · {adjusting.reserved} held for open orders · {adjusting.available} can be sold
+          </p>
+          <ActionForm
+            action={governanceAction}
+            submit="Record the change"
+            confirmMessage="This changes how many shoppers can buy and is written to the audit trail. Large changes wait for a second owner."
+          >
+            <input type="hidden" name="operation" value="stock" />
+            <input type="hidden" name="variantId" value={String(adjusting.variant._id)} />
+            <div className="staff-form-grid">
+              <label>
+                Change <small>Add with a number, remove with a minus sign: 12 or -3</small>
+                {/* a text field: phone number pads have no minus key */}
+                <input name="delta" pattern="-?[0-9]+" required autoComplete="off" />
+              </label>
+              <label>
+                Reason <small>For example: new delivery from the supplier, or damaged</small>
+                <input name="reason" minLength={5} maxLength={500} required />
+              </label>
+            </div>
+          </ActionForm>
+        </div>
+      )}
+      <details className="panel create-staff" id="new-pack" open={params.new === "pack"}>
+        <summary>Add a pack size</summary>
+        <ActionForm action={catalogManagementAction} submit="Add pack size">
           <input type="hidden" name="operation" value="variant" />
           <div className="staff-form-grid">
-            <label>Product<select name="productId">{products.filter((item) => item.status === "published").map((item) => <option value={String(item._id)} key={String(item._id)}>{item.name.en}</option>)}</select></label>
-            <label>SKU<input name="sku" required /></label><label>Pack label<input name="label" required /></label>
-            <label>Unit<select name="unit">{["piece", "kg", "g", "l", "ml"].map((unit) => <option key={unit}>{unit}</option>)}</select></label>
-            <label>Pack quantity<input name="packQuantity" type="number" min="0.001" step="any" required /></label>
-            <label>Price (paise)<input name="pricePaise" type="number" min={1} required /></label>
-            <label>MRP (paise)<input name="mrpPaise" type="number" min={1} required /></label>
-            <label>Purchase limit<input name="maxQuantity" type="number" min={1} defaultValue={10} required /></label>
-            <label>Opening stock<input name="stock" type="number" min={0} required /></label>
+            <label>
+              Product
+              <select name="productId" defaultValue={params.product}>
+                {products
+                  .filter((item) => item.status === "published")
+                  .map((item) => (
+                    <option value={String(item._id)} key={String(item._id)}>
+                      {item.name.en}
+                    </option>
+                  ))}
+              </select>
+            </label>
+            <label>
+              SKU <small>Letters, numbers and dashes</small>
+              <input name="sku" pattern="[A-Za-z0-9-]+" spellCheck={false} required />
+            </label>
+            <label>
+              Pack label <small>What shoppers see, like “Pack of 10”</small>
+              <input name="label" required />
+            </label>
+            <label>
+              Unit
+              <select name="unit">
+                {["piece", "kg", "g", "l", "ml"].map((unit) => (
+                  <option key={unit}>{unit}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Pack quantity
+              <input name="packQuantity" inputMode="decimal" pattern="[0-9]+(\.[0-9]+)?" required />
+            </label>
+            <label>
+              Price (₹)
+              <MoneyInput name="priceRupees" />
+            </label>
+            <label>
+              MRP (₹)
+              <MoneyInput name="mrpRupees" />
+            </label>
+            <label>
+              Most one shopper can buy
+              <input name="maxQuantity" inputMode="numeric" pattern="[0-9]+" defaultValue={10} required />
+            </label>
+            <label>
+              Opening stock
+              <input name="stock" inputMode="numeric" pattern="[0-9]+" required />
+            </label>
           </div>
         </ActionForm>
       </details>
-      <div className="inventory-grid">
-        {variants.map((variant) => {
-          const product = products.find((item) => String(item._id) === String(variant.productId));
-          const stock = inventory.find((item) => String(item.variantId) === String(variant._id));
-          const available = Math.max(0, (stock?.onHand ?? 0) - (stock?.reserved ?? 0));
-          return <article className="panel" key={String(variant._id)}><div className="panel-heading"><div><span className="eyebrow">{variant.sku}</span><h2>{product?.name.en}</h2><p>{variant.label}</p></div><span className={`staff-state ${available <= 10 ? "inactive" : "active"}`}>{available} available</span></div><p className="muted">On hand {stock?.onHand ?? 0} · reserved {stock?.reserved ?? 0}</p><details><summary>Adjust inventory</summary><ActionForm action={governanceAction} submit="Record adjustment" confirmMessage="Review the quantity and reason. This changes sellable stock and is written to the audit trail."><input type="hidden" name="operation" value="stock" /><input type="hidden" name="variantId" value={String(variant._id)} /><label>Quantity change<input name="delta" type="number" required /></label><label>Reason<textarea name="reason" minLength={5} maxLength={500} required /></label></ActionForm></details></article>;
-        })}
-      </div>
-      <div className="panel">
-        <div className="panel-heading">
-          <div>
-            <span className="eyebrow">Traceability</span>
-            <h2>Movement history</h2>
-          </div>
+      <FilterBar label="Filter stock" submitLabel="Show stock" clearHref={filtered ? "/admin/inventory" : undefined}>
+        <label>
+          Search <small>product, pack or SKU</small>
+          <input name="q" defaultValue={params.q} maxLength={80} />
+        </label>
+        <label>
+          Show
+          <select name="stock" defaultValue={params.stock ?? ""}>
+            <option value="">Every pack</option>
+            <option value="low">Running low ({LOW} or fewer)</option>
+            <option value="out">Sold out</option>
+          </select>
+        </label>
+      </FilterBar>
+      <p className="results-line" role="status">
+        <span>
+          <strong>{shown.length}</strong> of {rows.length} packs
+        </span>
+      </p>
+      <DataTable
+        caption="Stock for every pack: on the shelf, held for orders and available to sell"
+        rows={shown}
+        rowKey={(row) => String(row.variant._id)}
+        columns={[
+          {
+            header: "Pack",
+            cell: ({ product, variant }) => (
+              <span className="product-cell">
+                <span>
+                  {product ? <Link href={`/admin/products/${product._id}`}>{product.name.en}</Link> : "Unknown product"}
+                  <small>
+                    {variant.label} · <code>{variant.sku}</code>
+                  </small>
+                </span>
+              </span>
+            ),
+          },
+          { header: "On the shelf", numeric: true, cell: ({ onHand }) => onHand },
+          { header: "Held for orders", numeric: true, cell: ({ reserved }) => reserved },
+          {
+            header: "Can be sold",
+            numeric: true,
+            cell: ({ available }) =>
+              available === 0 ? (
+                <StatusPill tone="bad">Sold out</StatusPill>
+              ) : available <= LOW ? (
+                <StatusPill tone="warn">{available} left</StatusPill>
+              ) : (
+                available
+              ),
+          },
+          {
+            header: "Action",
+            cell: ({ variant, product }) => (
+              <Link href={adjustHref(String(variant._id))} aria-label={`Adjust stock of ${product?.name.en ?? "pack"} ${variant.label}`}>
+                Adjust
+              </Link>
+            ),
+          },
+        ]}
+        empty={
+          <EmptyState
+            icon={PackageSearch}
+            title={filtered ? "No packs match" : "No packs yet"}
+            body={filtered ? "Try another name or stock filter." : "Add a pack size to start selling a product."}
+            heading="h3"
+          />
+        }
+      />
+      <div className="section-heading">
+        <div>
+          <h2>Recent changes</h2>
+          <span className="muted">Sales, releases and adjustments, newest first</span>
         </div>
-        <DataTable
-          bare
-          caption="Every recorded stock movement with time, pack, type and quantity"
-          rows={movements}
-          rowKey={(movement) => String(movement._id)}
-          columns={[
-            { header: "When", cell: (movement) => formatIst(movement.at) },
-            {
-              header: "SKU",
-              cell: (movement) => {
-                const variant = movement.variantId as unknown as {
-                  sku?: string;
-                  label?: string;
-                };
-                return `${variant?.sku} · ${variant?.label}`;
-              },
-            },
-            { header: "Type", cell: (movement) => displayStatus(movement.kind) },
-            {
-              header: "Quantity",
-              numeric: true,
-              cell: (movement) =>
-                `${movement.quantity > 0 ? "+" : ""}${movement.quantity}`,
-            },
-          ]}
-          empty={
-            <EmptyState
-              icon={History}
-              title="No movements recorded yet"
-              body="Every stock adjustment, sale and release is logged here."
-              heading="h3"
-            />
-          }
-        />
       </div>
+      <DataTable
+        caption="Every recorded stock change with time, pack, kind and quantity"
+        rows={movements}
+        rowKey={(movement) => String(movement._id)}
+        columns={[
+          { header: "When", cell: (movement) => <When at={movement.at} /> },
+          {
+            header: "Pack",
+            cell: (movement) => {
+              const variant = movement.variantId as unknown as { sku?: string; label?: string };
+              return (
+                <>
+                  {variant?.label} · <code>{variant?.sku}</code>
+                </>
+              );
+            },
+          },
+          { header: "What", cell: (movement) => displayStatus(movement.kind) },
+          {
+            header: "Change",
+            numeric: true,
+            cell: (movement) => `${movement.quantity > 0 ? "+" : ""}${movement.quantity}`,
+          },
+        ]}
+        empty={
+          <EmptyState
+            icon={History}
+            title="No changes recorded yet"
+            body="Every stock adjustment, sale and release is logged here."
+            heading="h3"
+          />
+        }
+      />
     </section>
   );
 }

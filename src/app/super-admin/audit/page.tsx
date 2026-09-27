@@ -1,8 +1,23 @@
 import { staffRoleOf, type Role } from "@/lib/auth/permissions";
 import Link from "next/link";
 import mongoose from "mongoose";
+import { ScrollText } from "lucide-react";
 import { requirePage } from "@/lib/auth/session";
 import { AuditLog, User } from "@/lib/db/models";
+import { AUDIT_GROUPS, auditLabel, type AuditGroup } from "@/lib/audit-labels";
+import { PageHeading } from "@/components/page-heading";
+import { FilterBar } from "@/components/filter-bar";
+import { DataTable } from "@/components/data-table";
+import { EmptyState } from "@/components/empty-state";
+import { When } from "@/components/when";
+export const metadata = { title: "Audit trail", robots: { index: false } };
+
+const ROLE_NAMES: Record<string, string> = {
+  "super-admin": "Owner",
+  admin: "Admin",
+  delivery: "Delivery partner",
+  customer: "Customer",
+};
 
 function escapeRegex(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -14,9 +29,7 @@ function redact(value: unknown): unknown {
   return Object.fromEntries(
     Object.entries(value as Record<string, unknown>).map(([key, entry]) => [
       key,
-      /password|secret|token|code|signature/i.test(key)
-        ? "[redacted]"
-        : redact(entry),
+      /password|secret|token|code|signature/i.test(key) ? "[redacted]" : redact(entry),
     ]),
   );
 }
@@ -28,52 +41,65 @@ export default async function AuditPage({
 }) {
   await requirePage("audit:read");
   const params = await searchParams;
+  const group = (params.type && params.type in AUDIT_GROUPS ? params.type : null) as AuditGroup | null;
   const query: Record<string, unknown> = {};
-  if (params.actor && mongoose.isValidObjectId(params.actor))
-    query.actorId = params.actor;
+  if (params.actor && mongoose.isValidObjectId(params.actor)) query.actorId = params.actor;
+  if (group)
+    query.action = {
+      $regex: `^(${AUDIT_GROUPS[group].prefixes.map(escapeRegex).join("|")})`,
+    };
   if (params.q) {
-    const term = new RegExp(escapeRegex(params.q.trim().slice(0, 80)), "i");
-    query.$or = [{ action: term }, { target: term }];
+    const text = params.q.trim().slice(0, 80);
+    const term = new RegExp(escapeRegex(text), "i");
+    // people search in words ("stock"), the log stores codes ("inventory.adjust")
+    const codes = (await AuditLog.distinct("action")).filter((code: string) => term.test(auditLabel(code)));
+    query.$or = [{ action: term }, { target: term }, { action: { $in: codes } }];
   }
   const from = params.from ? new Date(`${params.from}T00:00:00+05:30`) : null;
   const to = params.to ? new Date(`${params.to}T23:59:59.999+05:30`) : null;
-  if (
-    (from && !Number.isNaN(from.getTime())) ||
-    (to && !Number.isNaN(to.getTime()))
-  )
-    query.at = {
-      ...(from && !Number.isNaN(from.getTime()) ? { $gte: from } : {}),
-      ...(to && !Number.isNaN(to.getTime()) ? { $lte: to } : {}),
-    };
+  const validFrom = from && !Number.isNaN(from.getTime()) ? from : null;
+  const validTo = to && !Number.isNaN(to.getTime()) ? to : null;
+  if (validFrom || validTo)
+    query.at = { ...(validFrom ? { $gte: validFrom } : {}), ...(validTo ? { $lte: validTo } : {}) };
   const [events, actors, total] = await Promise.all([
-    AuditLog.find(query)
-      .sort({ at: -1 })
-      .limit(200)
-      .populate("actorId", "name email roles"),
+    AuditLog.find(query).sort({ at: -1 }).limit(200).populate("actorId", "name email roles"),
     User.find({ roles: { $in: ["delivery", "admin", "super-admin"] } })
       .sort({ name: 1 })
       .select("name roles"),
     AuditLog.countDocuments(query),
   ]);
+  const filtered = Boolean(group || params.q || params.actor || validFrom || validTo);
+  const keep = (extra: Record<string, string>) =>
+    `/super-admin/audit?${new URLSearchParams(
+      Object.fromEntries(
+        Object.entries({ q: params.q, actor: params.actor, from: params.from, to: params.to, ...extra }).filter(
+          ([, value]) => Boolean(value),
+        ),
+      ) as Record<string, string>,
+    )}`;
   return (
     <section className="page-container">
-      <div className="workspace-heading">
-        <div>
-          <span className="eyebrow">ACCOUNTABILITY</span>
-          <h1>Audit trail</h1>
-          <p>Immutable records of sensitive store and staff actions.</p>
-        </div>
-        <span className="live-chip">{total} matching</span>
-      </div>
-      <form className="audit-filters">
+      <PageHeading
+        eyebrow="Owner"
+        title="Audit trail"
+        lead="Every sensitive action, who took it and when. Entries cannot be edited or deleted."
+        aside={<span className="live-chip">{total} {total === 1 ? "entry" : "entries"}</span>}
+      />
+      <nav className="catalog-chips" aria-label="Show a kind of activity">
+        <Link href={keep({})} aria-current={!group ? "page" : undefined}>
+          Everything
+        </Link>
+        {(Object.keys(AUDIT_GROUPS) as AuditGroup[]).map((key) => (
+          <Link key={key} href={keep({ type: key })} aria-current={group === key ? "page" : undefined}>
+            {AUDIT_GROUPS[key].label}
+          </Link>
+        ))}
+      </nav>
+      <FilterBar label="Filter the audit trail" submitLabel="Filter" clearHref="/super-admin/audit">
+        {group && <input type="hidden" name="type" value={group} />}
         <label>
-          Action or target
-          <input
-            name="q"
-            defaultValue={params.q}
-            placeholder="staff.update"
-            maxLength={80}
-          />
+          Search <small>an action in words, or an order or record id</small>
+          <input name="q" defaultValue={params.q} maxLength={80} />
         </label>
         <label>
           Team member
@@ -81,7 +107,7 @@ export default async function AuditPage({
             <option value="">Everyone</option>
             {actors.map((actor) => (
               <option key={String(actor._id)} value={String(actor._id)}>
-                {actor.name} · {staffRoleOf(actor.roles as Role[]) ?? "customer"}
+                {actor.name} · {ROLE_NAMES[staffRoleOf(actor.roles as Role[]) ?? "customer"]}
               </option>
             ))}
           </select>
@@ -94,56 +120,62 @@ export default async function AuditPage({
           To
           <input name="to" type="date" defaultValue={params.to} />
         </label>
-        <button className="primary-button">Filter</button>
-        <Link className="secondary-button" href="/super-admin/audit">
-          Clear
-        </Link>
-      </form>
-      <div className="panel audit-list">
-        {events.length ? (
-          events.map((event) => {
-            const actor = event.actorId as unknown as {
-              name?: string;
-              email?: string;
-              roles?: string[];
-            } | null;
-            return (
-              <article className="audit-row" key={String(event._id)}>
-                <span className="audit-icon" aria-hidden="true">
-                  {event.action.split(".")[0].slice(0, 1).toUpperCase()}
+      </FilterBar>
+      <DataTable
+        caption="Audit entries, newest first: when, who, what happened and to which record"
+        rows={events}
+        rowKey={(event) => String(event._id)}
+        columns={[
+          { header: "When", cell: (event) => <When at={event.at} /> },
+          {
+            header: "Who",
+            cell: (event) => {
+              const actor = event.actorId as unknown as { name?: string; roles?: string[] } | null;
+              return (
+                <span className="audit-who">
+                  <strong>{actor?.name ?? "System"}</strong>
+                  {actor?.roles && <small>{ROLE_NAMES[staffRoleOf(actor.roles as Role[]) ?? "customer"]}</small>}
                 </span>
-                <div className="audit-copy">
-                  <strong>{event.action}</strong>
-                  <small>
-                    {actor?.name ?? "System"}
-                    {actor?.roles ? ` · ${staffRoleOf(actor.roles as Role[]) ?? "customer"}` : ""} ·{" "}
-                    {new Date(event.at).toLocaleString("en-IN", {
-                      timeZone: "Asia/Kolkata",
-                      dateStyle: "medium",
-                      timeStyle: "short",
-                    })}
-                  </small>
-                  {event.target && <span>Target: {event.target}</span>}
-                </div>
-                {event.details && (
-                  <details>
-                    <summary>Details</summary>
-                    <pre>{JSON.stringify(redact(event.details), null, 2)}</pre>
-                  </details>
-                )}
-              </article>
-            );
-          })
-        ) : (
-          <div className="empty-state">
-            <h2>No matching activity</h2>
-            <p>Try a broader action, person or date range.</p>
-          </div>
-        )}
-      </div>
-      {total > events.length && (
-        <p className="muted">Showing the newest {events.length} records.</p>
-      )}
+              );
+            },
+          },
+          {
+            header: "What happened",
+            cell: (event) => (
+              <span className="audit-what">
+                <strong>{auditLabel(event.action)}</strong>
+                <code>{event.action}</code>
+              </span>
+            ),
+          },
+          { header: "Record", cell: (event) => (event.target ? <code>{event.target}</code> : "—") },
+          {
+            header: "Details",
+            cell: (event) =>
+              event.details ? (
+                <details className="audit-details">
+                  <summary>Show</summary>
+                  <pre>{JSON.stringify(redact(event.details), null, 2)}</pre>
+                </details>
+              ) : (
+                "—"
+              ),
+          },
+        ]}
+        empty={
+          <EmptyState
+            icon={ScrollText}
+            title={filtered ? "Nothing matches these filters" : "No activity yet"}
+            body={
+              filtered
+                ? "Try a different kind of activity, person or date range."
+                : "Sign-ins, stock changes, refunds and staff changes appear here as they happen."
+            }
+            heading="h3"
+          />
+        }
+      />
+      {total > events.length && <p className="muted">Showing the newest {events.length} of {total} entries.</p>}
     </section>
   );
 }

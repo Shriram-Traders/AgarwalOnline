@@ -6,6 +6,7 @@ import { requirePage } from "@/lib/auth/session";
 import { chatIdentity, scope } from "@/lib/chat/service";
 import { ChatConversation, ChatMessage, ChatReceipt } from "@/lib/chat/models";
 import { displayStatus } from "@/lib/display";
+export const metadata = { title: "Support chats", robots: { index: false } };
 export default async function SupportQueue() {
   const current = await requirePage("chat:support");
   const user = await chatIdentity(current.id);

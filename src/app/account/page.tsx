@@ -11,15 +11,27 @@ import {
 } from "lucide-react";
 import { requirePage } from "@/lib/auth/session";
 import { staffHome } from "@/lib/auth/permissions";
-import { logoutAction } from "@/lib/auth/actions";
+import { linkGoogleAction, logoutAction, resendVerificationAction } from "@/lib/auth/actions";
+import { emailEnabled, isPlaceholderEmail } from "@/lib/email/send";
+import { MailCheck } from "lucide-react";
+import { googleEnabled } from "@/lib/auth/better-auth";
+import { GoogleMark, googleErrorMessage } from "@/components/google-button";
+import { ClaimPhone } from "@/components/claim-phone";
+import mongoose from "mongoose";
 import { ActionForm } from "@/components/action-form";
 import { profileAction } from "@/lib/profile/actions";
 import { Order } from "@/lib/commerce/models";
 import { WishlistItem, Notification } from "@/lib/engagement/models";
 import { User } from "@/lib/db/models";
 import { currentLocale } from "@/lib/i18n";
-export default async function Account() {
+export const metadata = { title: "Your account", robots: { index: false } };
+export default async function Account({
+  searchParams,
+}: {
+  searchParams: Promise<{ google?: string; error?: string; connect?: string; welcome?: string; phone?: string; email?: string }>;
+}) {
   const user = await requirePage("profile:own");
+  const query = await searchParams;
   const home = staffHome(user.roles);
   const locale = await currentLocale();
   const mr = locale === "mr";
@@ -41,12 +53,25 @@ export default async function Account() {
         <div>
           <span className="eyebrow">{mr ? "माझे खाते" : "MY ACCOUNT"}</span>
           <h1>{mr ? `नमस्कार, ${user.name}` : `Hello, ${user.name}`}</h1>
-          <p>+91 ••••••{user.phone.slice(-4)}</p>
+          <p>{user.phone ? `+91 ••••••${user.phone.slice(-4)}` : user.email}</p>
         </div>
         <span className="profile-mark" aria-hidden="true">
           {user.name.slice(0, 1).toUpperCase()}
         </span>
       </div>
+      {query.google === "merged" && (
+        <p role="status" className="success-message">
+          {mr
+            ? "तुमचे Google आता या खात्यात साइन इन करते. तुमच्या सर्व ऑर्डर येथे आहेत."
+            : "Your Google sign-in now opens this account. All your orders are here."}
+        </p>
+      )}
+      {query.phone === "added" && (
+        <p role="status" className="success-message">
+          {mr ? "मोबाईल क्रमांक जोडला." : "Mobile number added."}
+        </p>
+      )}
+      {!user.phone && <ClaimPhone mr={mr} welcome={query.welcome === "google"} />}
       {customerOverview && (
         <>
           <div className="governance-stats account-stats">
@@ -96,8 +121,8 @@ export default async function Account() {
                 MapPinned,
               ],
               [
-                mr ? "इच्छायादी" : "Wishlist",
-                mr ? "लक्षात ठेवायच्या सर्व वस्तू" : "Everything you want to remember",
+                mr ? "जतन केलेले" : "Saved",
+                mr ? "आवडलेल्या वस्तूंचे बोर्ड" : "Boards of things you like",
                 "/account/wishlist",
                 Heart,
               ],
@@ -142,6 +167,15 @@ export default async function Account() {
           </Link>
         ))}
       </div>
+      <GoogleSignInPanel
+        userId={user.id}
+        mr={mr}
+        google={googleEnabled()}
+        emailResult={query.email}
+        linked={query.google === "linked"}
+        nudge={query.connect === "google"}
+        error={googleErrorMessage(query.error, mr)}
+      />
       <details className="panel profile-settings">
         <summary>{mr ? "प्रोफाइल सेटिंग्ज" : "Profile settings"}</summary>
         <ActionForm action={profileAction} submit={mr ? "प्रोफाइल जतन करा" : "Save profile"}>
@@ -178,6 +212,126 @@ export default async function Account() {
       <form action={logoutAction}>
         <button className="secondary-button">{mr ? "साइन आउट" : "Sign out"}</button>
       </form>
+    </section>
+  );
+}
+
+/** Shows whether Google is connected, and lets a signed-in person connect it. */
+/** What a verification link came back with, as Better Auth reports it. */
+function emailResultMessage(result: string | undefined, mr: boolean) {
+  if (!result) return null;
+  if (result === "verified")
+    return { ok: true, text: mr ? "ईमेल पडताळला." : "Email confirmed." };
+  if (result === "TOKEN_EXPIRED")
+    return { ok: false, text: mr ? "ही लिंक जुनी झाली आहे. नवीन लिंक पाठवा." : "That link has expired. Send a new one below." };
+  return { ok: false, text: mr ? "ही लिंक चालली नाही. नवीन लिंक पाठवा." : "That link didn’t work. Send a new one below." };
+}
+
+async function GoogleSignInPanel({
+  userId,
+  mr,
+  google,
+  emailResult,
+  linked,
+  nudge,
+  error,
+}: {
+  userId: string;
+  mr: boolean;
+  google: boolean;
+  emailResult: string | undefined;
+  linked: boolean;
+  nudge: boolean;
+  error: string | null;
+}) {
+  const [connected, account] = await Promise.all([
+    mongoose.connection
+      .collection("authAccounts")
+      .findOne({ userId: new mongoose.Types.ObjectId(userId), providerId: "google" })
+      .then(Boolean),
+    User.findById(userId).select("email emailVerified"),
+  ]);
+  const email = isPlaceholderEmail(account?.email) ? null : account!.email;
+  const emailMessage = emailResultMessage(emailResult, mr);
+  if (!google && !email) return null;
+  return (
+    <section
+      className={`panel signin-methods${nudge && !connected ? " attention" : ""}`}
+      aria-labelledby="signin-methods-title"
+    >
+      <h2 id="signin-methods-title">{mr ? "साइन इन पद्धती" : "Sign-in methods"}</h2>
+      {nudge && !connected && (
+        <p className="notice">
+          {mr
+            ? "आणखी एक पायरी: Google जोडा, म्हणजे पुढच्या वेळी Google थेट या खात्यात साइन इन करेल."
+            : "One more step: connect Google, and next time Google signs you straight in to this account."}
+        </p>
+      )}
+      {error && (
+        <p role="alert" className="error-message">
+          {error}
+        </p>
+      )}
+      {emailMessage && (
+        <p role={emailMessage.ok ? "status" : "alert"} className={emailMessage.ok ? "success-message" : "error-message"}>
+          {emailMessage.text}
+        </p>
+      )}
+      {email && (
+        <div className="signin-method">
+          <MailCheck size={18} aria-hidden="true" />
+          <span>
+            <strong>{mr ? "ईमेल" : "Email"}</strong>
+            <small>
+              {email} ·{" "}
+              {account?.emailVerified
+                ? mr
+                  ? "पडताळलेले"
+                  : "Confirmed"
+                : mr
+                  ? "पडताळलेले नाही"
+                  : "Not confirmed yet"}
+            </small>
+          </span>
+          {!account?.emailVerified && emailEnabled() && (
+            <ActionForm
+              action={resendVerificationAction}
+              submit={mr ? "पडताळणी लिंक पाठवा" : "Send confirmation link"}
+              className="signin-method-action"
+            >
+              {null}
+            </ActionForm>
+          )}
+        </div>
+      )}
+      {google && (
+      <div className="signin-method">
+        <GoogleMark />
+        <span>
+          <strong>Google</strong>
+          <small>
+            {connected
+              ? mr
+                ? "जोडलेले: Google ने साइन इन करू शकता."
+                : "Connected. You can sign in with Google."
+              : mr
+                ? "जोडलेले नाही."
+                : "Not connected."}
+          </small>
+        </span>
+        {connected ? (
+          linked && (
+            <span role="status" className="success-message">
+              {mr ? "Google जोडले." : "Google connected."}
+            </span>
+          )
+        ) : (
+          <form action={linkGoogleAction}>
+            <button className="secondary-button">{mr ? "Google जोडा" : "Connect Google"}</button>
+          </form>
+        )}
+      </div>
+      )}
     </section>
   );
 }

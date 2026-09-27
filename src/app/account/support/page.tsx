@@ -7,6 +7,7 @@ import { ChatConversation, ChatMessage, ChatReceipt } from "@/lib/chat/models";
 import { ActionForm } from "@/components/action-form";
 import { conversationAction } from "@/lib/chat/actions";
 import { displayStatus } from "@/lib/display";
+export const metadata = { title: "Talk to the store", robots: { index: false } };
 export default async function Support() {
   const user = await requirePage("chat:own");
   const conversations = await ChatConversation.find({ customerId: user.id })

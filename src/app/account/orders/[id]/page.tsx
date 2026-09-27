@@ -11,6 +11,7 @@ import { objectId } from "@/lib/commerce/service";
 import { cancelAction, reorderAction } from "@/lib/commerce/actions";
 import { ActionForm } from "@/components/action-form";
 import { displayStatus, formatPrice} from "@/lib/display";
+export const metadata = { title: "Order details", robots: { index: false } };
 export default async function OrderDetail({
   params,
 }: {

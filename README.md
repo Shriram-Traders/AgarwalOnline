@@ -30,6 +30,8 @@ All seeded brands, products, people, addresses, orders and analytics are fiction
 - Check out with cash on delivery or Razorpay. The server calculates the quote and applies the best valid promotion.
 - Track, cancel and reorder orders, and download invoices.
 - Save a wishlist, addresses and preferences.
+- Save things to boards (Diwali gifts, school ideas), invite people to them, and buy a whole board in one tap.
+- Keep more than one basket: fill a shared one (School list, Family monthly) with family or colleagues, and anyone on it can order it. Sharing is one link, sent on WhatsApp or copied, with one switch for whether it lets people edit.
 - Review verified purchases, chat with support, raise complaints and request returns or refunds with photo evidence.
 
 **Admins**
@@ -179,7 +181,7 @@ Every variable is described in [Environment variables](#environment-variables).
 npm run owner:create
 ```
 
-It asks for a name, email, mobile number and password. The password is typed hidden and never printed. The account becomes a super admin who signs in at `/login` like everyone else, opens Governance from the account menu, and gives other people staff roles from the Super Admin page. Running it again for the same email resets that password and signs out its old sessions.
+It asks for a name, email, mobile number and password. The password is typed hidden and never printed. The account becomes a super admin who signs in at `/login` like everyone else, lands on the store overview, keeps the owner pages (Store settings, Staff & roles, Approvals, Offers, Refunds, Audit trail) in the same workspace menu, and gives other people staff roles from Staff & roles. Running it again for the same email resets that password and signs out its old sessions.
 
 ### 6. Load demo data (optional)
 
@@ -216,6 +218,8 @@ The app validates these on startup and refuses to run with an invalid combinatio
 | `AUTH_SECRET` | Yes | 32 or more random characters. Also hashes delivery handover codes, so don't rotate it casually. |
 | `BETTER_AUTH_SECRET` | Production | 32 or more random characters. It signs session cookies. It falls back to `AUTH_SECRET` when blank. |
 | `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` | With more than one server | Base64 AES key, 16, 24 or 32 bytes. It must be identical on every instance and at build time. |
+| `RESEND_API_KEY`, `EMAIL_FROM` | For email confirmation | Set both. `EMAIL_FROM` looks like `Agarwal General Stores <orders@yourdomain.in>` and must use a domain verified in Resend. Blank in development prints each email, with its link, in the dev-server log. |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | For Google sign-in | Set both, or leave both blank to hide the Google buttons. |
 | `MOCK_OTP` | No | `true` accepts `MOCK_OTP_CODE` instead of sending SMS. Forbidden in production. |
 | `MOCK_OTP_CODE` | No | Six-digit code used when mock OTP is on. Defaults to `246810`. |
 | `ALLOW_MOCK_OTP_IN_PRODUCTION` | Pre-launch testing only | `true` lets mock OTP run on a Vercel test deployment, which always runs in production mode. Any `MOCK_OTP_CODE` is accepted, and anyone who knows it can sign in as any phone number. Remove it before real customers use the site. |
@@ -243,6 +247,7 @@ Tests use `TEST_MONGODB_URI`, passed on the command line. Vitest does not read `
 | `npm run test:e2e` | Runs Playwright on desktop Chromium and a Pixel 7 profile. |
 | `npm run owner:create` | Creates or resets the owner account, prompting for the password. |
 | `npm run seed` | Loads fictional demo data. |
+| `npm run migrate:phone-index` | One-time upgrade for databases created before 27 September 2026, so accounts made with Google can exist without a phone number. |
 | `npm run migrate:roles` | One-time upgrade for databases created before 24 September 2026, which stored a single `role` per user. |
 | `npm run reservations:expire` | Releases stock held by abandoned checkouts. |
 | `npm run approvals:publish` | Publishes approved changes whose scheduled time has passed. |
@@ -328,6 +333,8 @@ Put HTTPS in front of it, and set the same environment variables.
 
 ### Third-party services
 
+- **Resend (email confirmation).** Create an account at [resend.com](https://resend.com), add your domain under **Domains**, and add the DNS records it shows at your domain provider until the domain reads **Verified**. Then create an API key under **API Keys** with sending access. Put the key in `RESEND_API_KEY` and the sender in `EMAIL_FROM`, both locally and in Vercel's Production variables. New accounts get a confirmation link after sign-up, and the account page has a **Send confirmation link** button. The link works for 24 hours and only confirms the address; it never signs anyone in. Once an email is confirmed, Google sign-in with that address opens the existing account directly.
+- **Google sign-in.** In the Google Cloud Console, open **APIs & Services**, set up the **OAuth consent screen**, then under **Credentials** create an **OAuth client ID** of type **Web application**. Add one **Authorised redirect URI** per address the site runs on: `http://localhost:3000/api/auth/callback/google` for local work and `https://YOUR_DOMAIN/api/auth/callback/google` for each live address. Copy the client ID and secret into `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`. The redirect address is built from `APP_ORIGIN`, so the two must match exactly. Google signs a person in to an existing account only when that account's email is verified. Anyone else sees a message asking them to sign in another way first and connect Google from the account page. People who join with Google have no mobile number on their account; delivery addresses still carry their own number.
 - **Cloudinary.** Copy the cloud name, API key and API secret from **Settings**, then **API Keys**. There's nothing else to configure, because the server signs each upload.
 - **Razorpay.** Add the key ID and secret from the dashboard. Create a webhook pointing at `https://YOUR_DOMAIN/api/payments/razorpay/webhook` with a secret of your choice. Subscribe to `payment.authorized`, `payment.captured`, `payment.failed`, `refund.processed` and `refund.failed`.
 - **SMS.** The app sends `POST SMS_API_URL` with `Authorization: Bearer SMS_API_TOKEN` and a JSON body of `{ "to": "+91XXXXXXXXXX", "message": "..." }`. Most Indian gateways use their own format, so a small relay may be needed. Transactional SMS in India also needs DLT registration of the sender ID and template. The OTP text is fixed in `src/lib/auth/sms.ts`.
@@ -367,8 +374,8 @@ On other hosts, run the npm scripts from cron instead.
 ## Security
 
 - **Never commit secrets.** Git ignores `.env` and every other `.env.*` file except `.env.example`. Keep production values in your host's secret settings.
-- **Sessions.** better-auth stores sessions in the database and sets signed, HTTP-only, SameSite=Lax cookies. Customer sessions last 7 days, and staff sessions last 12 hours. Deactivating a user or revoking their sessions takes effect on the next request.
-- **One sign-in for everyone.** Every account holds the customer role. Staff hold one extra role, sign in on `/login` like any customer, and open their workspace from the top-right account menu. Sessions for anyone with a staff role expire after 12 hours instead of 7 days. Mock OTP therefore also opens staff workspaces, which is one more reason to remove it before launch.
+- **Sessions.** better-auth stores sessions in the database and sets signed, HTTP-only, SameSite=Lax cookies. Every session, staff included, lasts 7 days. Deactivating a user or revoking their sessions takes effect on the next request.
+- **One sign-in for everyone.** Every account holds the customer role. Staff hold one extra role, sign in on `/login` like any customer, and open their workspace from the top-right account menu. Mock OTP therefore also opens staff workspaces, which is one more reason to remove it before launch.
 - **Every protected page, action, API route and chat poll checks the session and permissions on the server.** Form posts and chat posts from other sites are rejected.
 - **Rate limits.** Sign-in, OTP, chat and search endpoints are rate limited.
 - **Minimum password length.** Customer and staff passwords need at least 8 characters.

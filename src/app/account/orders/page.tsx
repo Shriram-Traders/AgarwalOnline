@@ -3,6 +3,7 @@ import { Receipt } from "lucide-react";
 import { requirePage } from "@/lib/auth/session";
 import { Order } from "@/lib/commerce/models";
 import { displayStatus, formatPrice} from "@/lib/display";
+export const metadata = { title: "Your orders", robots: { index: false } };
 export default async function Orders() {
   const user = await requirePage("order:own");
   const orders = await Order.find({ customerId: user.id })

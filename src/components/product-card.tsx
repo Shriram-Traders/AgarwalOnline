@@ -21,10 +21,9 @@ export function ProductCard({
   const v = p.variants[0];
   const image = p.image ?? productImages[p.slug];
   const off = discountPercent(v.pricePaise, v.mrpPaise);
-  const other = locale === "en" ? "mr" : "en";
   return (
     <article className="product-card">
-      <WishlistButton productId={p.id} saved={saved} />
+      <WishlistButton productId={p.id} name={p.name[locale]} saved={saved} />
       <Link href={`/products/${p.slug}?lang=${locale}`} className="product-link">
         <div className={`product-art${image ? "" : " quiet"}`}>
           {image ? (
@@ -43,10 +42,8 @@ export function ProductCard({
           {off > 0 && <span className="discount">−{off}%</span>}
           {!v.available && <span className="stock-badge">Sold out</span>}
         </div>
+        {/* the shopper's chosen language only; the product page shows both names */}
         <h3 lang={locale}>{p.name[locale]}</h3>
-        <p className="product-marathi" lang={other}>
-          {p.name[other]}
-        </p>
         {p.reviewCount > 0 && (
           <span
             className="product-rating"
@@ -62,7 +59,7 @@ export function ProductCard({
           <strong>{formatPrice(v.pricePaise)}</strong>
           {off > 0 && <del>{formatPrice(v.mrpPaise)}</del>}
         </div>
-        <QuickAdd variantId={v.id} available={v.available} max={v.maxQuantity} name={p.name.en} />
+        <QuickAdd variantId={v.id} pricePaise={v.pricePaise} available={v.available} max={v.maxQuantity} name={p.name.en} />
       </div>
     </article>
   );

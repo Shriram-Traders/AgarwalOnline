@@ -1,12 +1,15 @@
 import "server-only";
+import { cache } from "react";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { connectDB } from "../db/connect";
 import { User } from "../db/models";
 import { assertPermission, hasPermission, type Permission, type Role } from "./permissions";
 import { sessionUserId } from "./better-auth";
-export type Identity = { id: string; name: string; phone: string; roles: Role[] };
-export async function currentUser(): Promise<Identity | null> {
+/** `phone` is missing for people who joined with Google and have not added a number yet. */
+export type Identity = { id: string; name: string; phone?: string; email?: string; roles: Role[] };
+/** Memoised per request: the layout, header and page all ask. */
+export const currentUser = cache(async (): Promise<Identity | null> => {
   await connectDB();
   const userId = await sessionUserId(await headers());
   if (!userId) return null;
@@ -15,11 +18,12 @@ export async function currentUser(): Promise<Identity | null> {
     ? {
         id: String(user._id),
         name: user.name,
-        phone: user.phone,
+        phone: user.phone ?? undefined,
+        email: user.email ?? undefined,
         roles: user.roles as Role[],
       }
     : null;
-}
+});
 export async function requirePermission(permission: Permission) {
   const user = await currentUser();
   if (!user) throw new Error("UNAUTHENTICATED");

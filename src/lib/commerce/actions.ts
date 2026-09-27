@@ -13,13 +13,15 @@ import {
   cancelOrder,
   reorder,
 } from "./service";
+import { plainMessage } from "../form-errors";
+import { sendClaimCode } from "../auth/claim";
 export type MutationState = {
   error?: string;
   success?: string;
   saved?: boolean;
 };
 function errorMessage(e: unknown) {
-  if (e instanceof z.ZodError) return e.issues[0].message;
+  if (e instanceof z.ZodError) return plainMessage(e);
   const message = e instanceof Error ? e.message : "";
   return /^(Select|Cash|This|Your|Too many basket|A basket|Insufficient|Order exceeds|UNAUTHENTICATED|FORBIDDEN)/.test(
     message,
@@ -28,27 +30,18 @@ function errorMessage(e: unknown) {
     : "Unable to save. Please try again.";
 }
 export async function cartAction(
-  _state: MutationState,
+  state: MutationState,
   form: FormData,
 ): Promise<MutationState> {
-  try {
-    const user = await currentUser();
-    if (user)
-      await setCartLine(user.id, form.get("variantId"), form.get("quantity"));
-    else {
-      const { setGuestCartLine } = await import("./guest-cart");
-      await setGuestCartLine(form.get("variantId"), form.get("quantity"));
-    }
-    revalidatePath("/", "layout");
-    return { success: "Basket updated." };
-  } catch (e) {
-    return { error: errorMessage(e) };
-  }
+  const result = await quickAddAction(state, form);
+  if (!result.error) revalidatePath("/", "layout");
+  return result;
 }
 export async function addressAction(
   _state: MutationState,
   form: FormData,
 ): Promise<MutationState> {
+  let verifySignInNumber = false;
   try {
     const user = await requirePermission("order:own");
     const operation = z
@@ -108,12 +101,21 @@ export async function addressAction(
       await Address.create({ ...data, customerId: user.id });
     }
     revalidatePath("/account/addresses");
-    return {
-      success: operation === "update" ? "Address updated." : "Address saved.",
-    };
+    // "Also use this number to sign in": only offered to accounts without a sign-in number
+    if (operation === "create" && form.get("useForSignIn") === "on" && !user.phone) {
+      const sent = await sendClaimCode(user.id, data.phone);
+      if ("error" in sent)
+        return { success: "Address saved.", error: `We couldn’t use this number to sign in: ${sent.error}` };
+      verifySignInNumber = true;
+    }
+    if (!verifySignInNumber)
+      return {
+        success: operation === "update" ? "Address updated." : "Address saved.",
+      };
   } catch (e) {
     return { error: errorMessage(e) };
   }
+  redirect("/account/addresses?verify=1");
 }
 
 export async function reorderAction(
@@ -164,51 +166,20 @@ export async function cancelAction(
     return { error: errorMessage(e) };
   }
 }
+/** Sets a basket line without re-rendering the page: the basket provider already shows the change. */
 export async function quickAddAction(
   _state: MutationState,
   form: FormData,
 ): Promise<MutationState> {
-  const user = await currentUser();
   try {
-    if (!user) {
-      const { guestCartLines, setGuestCartLine } = await import("./guest-cart");
-      const variantId = objectId.parse(form.get("variantId"));
-      const current = (await guestCartLines()).find(
-        (line) => line.variantId === variantId,
-      );
-      await setGuestCartLine(variantId, (current?.quantity ?? 0) + 1);
-      revalidatePath("/", "layout");
-      return { success: "Added" };
+    const user = await currentUser();
+    if (user)
+      await setCartLine(user.id, form.get("variantId"), form.get("quantity"));
+    else {
+      const { setGuestCartLine } = await import("./guest-cart");
+      await setGuestCartLine(form.get("variantId"), form.get("quantity"));
     }
-    const variantId = objectId.parse(form.get("variantId"));
-    const { CartLine } = await import("./models");
-    const mongoose = (await import("mongoose")).default;
-    await mongoose.connection.transaction(async (session) => {
-      const line = await CartLine.findOne({
-        customerId: user.id,
-        variantId,
-      }).session(session);
-      const { ProductVariant, Product } = await import("../db/models");
-      const variant = await ProductVariant.findById(variantId).session(session);
-      if (
-        !variant ||
-        !(await Product.exists({
-          _id: variant.productId,
-          status: "published",
-        }).session(session))
-      )
-        throw Error("This product is unavailable.");
-      const quantity = (line?.quantity ?? 0) + 1;
-      if (quantity > variant.maxQuantity)
-        throw Error("This item has reached its purchase limit.");
-      await CartLine.updateOne(
-        { customerId: user.id, variantId },
-        { $set: { quantity } },
-        { upsert: true, session, runValidators: true },
-      );
-    });
-    revalidatePath("/", "layout");
-    return { success: "Added" };
+    return { success: "Basket updated." };
   } catch (e) {
     return { error: errorMessage(e) };
   }

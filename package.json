@@ -17,6 +17,7 @@
     "seed": "tsx --env-file=.env scripts/seed.ts",
     "owner:create": "tsx --env-file=.env scripts/create-owner.ts",
     "migrate:roles": "tsx --env-file=.env scripts/migrate-roles.ts",
+    "migrate:phone-index": "tsx --env-file=.env scripts/migrate-phone-index.ts",
     "test:e2e": "playwright test",
     "reservations:expire": "tsx --env-file=.env scripts/expire-reservations.ts",
     "approvals:publish": "tsx --env-file=.env scripts/publish-scheduled.ts",

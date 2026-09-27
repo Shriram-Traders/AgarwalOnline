@@ -1,245 +1,206 @@
+import Image from "next/image";
+import Link from "next/link";
+import { PackageOpen, Plus } from "lucide-react";
 import { requirePage } from "@/lib/auth/session";
-import {
-  Category,
-  Product,
-  ProductVariant,
-  InventoryItem,
-} from "@/lib/db/models";
-import { ActionForm } from "@/components/action-form";
-import { governanceAction } from "@/lib/governance/actions";
-import { catalogManagementAction } from "@/lib/catalog/manage-actions";
-import { evidenceAction } from "@/lib/evidence/actions";
+import { Category, InventoryItem, Product, ProductVariant } from "@/lib/db/models";
+import { productImages } from "@/lib/catalog/images";
+import { formatPrice } from "@/lib/display";
 import { CatalogAdminNav } from "@/components/catalog-admin-nav";
 import { PageHeading } from "@/components/page-heading";
+import { FilterBar } from "@/components/filter-bar";
+import { DataTable } from "@/components/data-table";
 import { EmptyState } from "@/components/empty-state";
-import { Boxes, PackageOpen } from "lucide-react";
-export default async function Products() {
+import { StatusPill } from "@/components/status-pill";
+import { AisleIcon } from "@/components/aisle-icon";
+export const metadata = { title: "Catalog", robots: { index: false } };
+
+const LOW = 10;
+const STATUSES = [
+  ["published", "Live in the shop"],
+  ["pending", "Waiting for approval"],
+  ["approved", "Approved, not live"],
+  ["draft", "Draft"],
+  ["rejected", "Rejected"],
+] as const;
+
+export default async function Products({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | undefined>>;
+}) {
   await requirePage("catalog:write");
-  const categories = await Category.find({});
-  const products = await Product.find({}).limit(100);
-  const variants = await ProductVariant.find({
-    productId: { $in: products.map((p) => p._id) },
+  const params = await searchParams;
+  // ponytail: filters run in memory; move them into the query once the catalog passes a few hundred products
+  const [categories, products, variants, stock] = await Promise.all([
+    Category.find({}).sort({ "name.en": 1 }),
+    Product.find({}).sort({ "name.en": 1 }).limit(500),
+    ProductVariant.find({}).limit(2000),
+    InventoryItem.find({}).limit(2000),
+  ]);
+  const available = new Map(
+    stock.map((item) => [String(item.variantId), Math.max(0, item.onHand - item.reserved)]),
+  );
+  const rows = products.map((product) => {
+    const packs = variants.filter((variant) => String(variant.productId) === String(product._id));
+    return {
+      product,
+      packs,
+      available: packs.reduce((sum, pack) => sum + (available.get(String(pack._id)) ?? 0), 0),
+      category: categories.find((category) => String(category._id) === String(product.categoryId)),
+    };
   });
-  const stock = await InventoryItem.find({
-    variantId: { $in: variants.map((v) => v._id) },
-  });
+  const q = params.q?.trim().toLowerCase();
+  const shown = rows.filter(
+    (row) =>
+      (!q ||
+        [row.product.name.en, row.product.name.mr, row.product.brand ?? "", ...row.packs.map((pack) => pack.sku)].some(
+          (text) => text.toLowerCase().includes(q),
+        )) &&
+      (!params.category || row.category?.slug === params.category) &&
+      (!params.status || row.product.status === params.status) &&
+      (params.stock !== "low" || (row.available > 0 && row.available <= LOW)) &&
+      (params.stock !== "out" || row.available === 0),
+  );
+  const filtered = Boolean(q || params.category || params.status || params.stock);
   return (
     <section className="page-container">
       <PageHeading
-        eyebrow="Catalog & inventory"
-        title="Your shelves"
-        lead="Edit live products and request price changes. Categories, new products and stock live on their own tabs."
+        eyebrow="Catalog"
+        title="Products"
+        lead="Everything on your shelves. Open a product to change its details, photos or prices."
+        aside={
+          <Link href="/admin/products/new" className="primary-button">
+            <Plus size={18} aria-hidden="true" /> Add a product
+          </Link>
+        }
       />
       <CatalogAdminNav />
-      <div className="section-heading">
-        <div>
-          <span className="eyebrow">Live catalog</span>
-          <h2>Products</h2>
-        </div>
-      </div>
-      {products.length ? (
-      <div className="settings-grid">
-        {products.map((product) => (
-          <details
-            className="panel product-admin-card"
-            key={String(product._id)}
-          >
-            <summary>
-              <span>
-                <strong>{product.name.en}</strong>
-                <small>
-                  {product.status} · {product.categorySlug}
-                </small>
-              </span>
-              <span>Edit</span>
-            </summary>
-            <ActionForm
-              action={catalogManagementAction}
-              submit="Save product details"
-            >
-              <input type="hidden" name="operation" value="product" />
-              <input
-                type="hidden"
-                name="productId"
-                value={String(product._id)}
-              />
-              <label>
-                English name
-                <input name="nameEn" defaultValue={product.name.en} required />
-              </label>
-              <label>
-                Marathi name
-                <input name="nameMr" defaultValue={product.name.mr} required />
-              </label>
-              <label>
-                English description
-                <textarea
-                  name="descriptionEn"
-                  defaultValue={product.description.en}
-                  required
-                />
-              </label>
-              <label>
-                Marathi description
-                <textarea
-                  name="descriptionMr"
-                  defaultValue={product.description.mr}
-                  required
-                />
-              </label>
-              <label>
-                Brand
-                <input name="brand" defaultValue={product.brand} />
-              </label>
-              <label>
-                Category
-                <select
-                  name="categoryId"
-                  defaultValue={String(product.categoryId)}
-                >
-                  {categories.map((category) => (
-                    <option
-                      value={String(category._id)}
-                      key={String(category._id)}
-                    >
-                      {category.name.en}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                Aliases
-                <input
-                  name="aliases"
-                  defaultValue={product.aliases.join(", ")}
-                />
-              </label>
-              <label>
-                Gallery image URLs <small>One per line, up to 8</small>
-                <textarea name="images" defaultValue={(product.images ?? []).join("\n")} />
-              </label>
-              <label>
-                English highlights <small>One per line</small>
-                <textarea name="highlightsEn" defaultValue={(product.highlights ?? []).map((item: { en: string }) => item.en).join("\n")} />
-              </label>
-              <label>
-                Marathi highlights <small>One per line</small>
-                <textarea name="highlightsMr" defaultValue={(product.highlights ?? []).map((item: { mr: string }) => item.mr).join("\n")} />
-              </label>
-              <label>
-                Dietary tags <small>Comma separated</small>
-                <input name="dietaryTags" defaultValue={(product.dietaryTags ?? []).join(", ")} />
-              </label>
-              <label>
-                Specifications <small>Label EN | Label MR | Value EN | Value MR</small>
-                <textarea name="specifications" defaultValue={(product.specifications ?? []).map((item: { label: { en: string; mr: string }; value: { en: string; mr: string } }) => `${item.label.en} | ${item.label.mr} | ${item.value.en} | ${item.value.mr}`).join("\n")} />
-              </label>
-              <label className="checkbox-label">
-                <input
-                  type="checkbox"
-                  name="featured"
-                  defaultChecked={product.featured}
-                />{" "}
-                Featured
-              </label>
-              <label className="checkbox-label">
-                <input
-                  type="checkbox"
-                  name="bestseller"
-                  defaultChecked={product.bestseller}
-                />{" "}
-                Bestseller
-              </label>
-              <label className="checkbox-label">
-                <input
-                  type="checkbox"
-                  name="published"
-                  defaultChecked={product.status === "published"}
-                  disabled={product.status !== "published"}
-                />{" "}
-                Published
-              </label>
-            </ActionForm>
-            <ActionForm action={evidenceAction} submit="Upload product photo">
-              <input type="hidden" name="purpose" value="product" />
-              <input
-                type="hidden"
-                name="productId"
-                value={String(product._id)}
-              />
-              <label>
-                JPG, PNG or WebP · maximum 5 MB
-                <input
-                  type="file"
-                  name="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  required
-                />
-              </label>
-            </ActionForm>
-          </details>
-        ))}
-      </div>
-      ) : (
-        <EmptyState icon={PackageOpen} title="No products yet" body="Add your first product from the Add product tab." heading="h3" />
-      )}
-      <div className="section-heading">
-        <div>
-          <span className="eyebrow">Pack sizes</span>
-          <h2>Pricing per pack</h2>
-        </div>
-      </div>
-      {variants.length ? (
-      <div className="settings-grid">
-        {variants.map((v) => {
-          const p = products.find((p) => String(p._id) === String(v.productId));
-          const inventory = stock.find(
-            (s) => String(s.variantId) === String(v._id),
-          );
-          return (
-            <article className="panel" key={String(v._id)}>
-              <h2>{p?.name.en}</h2>
-              <p className="muted">
-                {v.sku} · {v.label} · {p?.status}
-              </p>
-              <p>
-                Stock: {inventory?.onHand ?? 0} · Reserved:{" "}
-                {inventory?.reserved ?? 0}
-              </p>
-              <details>
-                <summary>Request price change</summary>
-                <ActionForm action={governanceAction} submit="Request approval">
-                  <input type="hidden" name="operation" value="price" />
-                  <input type="hidden" name="variantId" value={String(v._id)} />
-                  <label>
-                    Price (paise)
-                    <input
-                      type="number"
-                      name="pricePaise"
-                      min={1}
-                      defaultValue={v.pricePaise}
-                      required
-                    />
-                  </label>
-                  <label>
-                    MRP (paise)
-                    <input
-                      type="number"
-                      name="mrpPaise"
-                      min={1}
-                      defaultValue={v.mrpPaise}
-                      required
-                    />
-                  </label>
-                </ActionForm>
-              </details>
-            </article>
-          );
-        })}
-      </div>
-      ) : (
-        <EmptyState icon={Boxes} title="No pack sizes yet" body="Create one from the Inventory tab to start selling a product." heading="h3" />
-      )}
+      <FilterBar label="Filter products" submitLabel="Show products" clearHref={filtered ? "/admin/products" : undefined}>
+        <label>
+          Search <small>name, brand or SKU</small>
+          <input name="q" defaultValue={params.q} maxLength={80} />
+        </label>
+        <label>
+          Aisle
+          <select name="category" defaultValue={params.category ?? ""}>
+            <option value="">All aisles</option>
+            {categories.map((category) => (
+              <option key={category.slug} value={category.slug}>
+                {category.name.en}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Stock
+          <select name="stock" defaultValue={params.stock ?? ""}>
+            <option value="">Any stock</option>
+            <option value="low">Running low ({LOW} or fewer)</option>
+            <option value="out">Sold out</option>
+          </select>
+        </label>
+        <label>
+          Status
+          <select name="status" defaultValue={params.status ?? ""}>
+            <option value="">Any status</option>
+            {STATUSES.map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </label>
+      </FilterBar>
+      <p className="results-line" role="status">
+        <span>
+          <strong>{shown.length}</strong> of {rows.length} products
+        </span>
+      </p>
+      <DataTable
+        caption="Products with price, stock and status"
+        rows={shown}
+        rowKey={(row) => String(row.product._id)}
+        columns={[
+          {
+            header: "Product",
+            cell: ({ product, category }) => {
+              const image = product.image ?? productImages[product.slug];
+              return (
+                <span className="product-cell">
+                  <span className={`product-thumb${image ? "" : " quiet"}`}>
+                    {image ? (
+                      <Image src={image} alt="" width={44} height={44} unoptimized />
+                    ) : (
+                      <AisleIcon slug={product.categorySlug} />
+                    )}
+                  </span>
+                  <span>
+                    <Link href={`/admin/products/${product._id}`}>{product.name.en}</Link>
+                    <small>
+                      {category?.name.en ?? product.categorySlug}
+                      {product.brand ? ` · ${product.brand}` : ""}
+                    </small>
+                  </span>
+                </span>
+              );
+            },
+          },
+          {
+            header: "Price",
+            numeric: true,
+            cell: ({ packs }) =>
+              packs.length === 0 ? (
+                "No pack yet"
+              ) : packs.length === 1 ? (
+                <>
+                  {formatPrice(packs[0].pricePaise)}
+                  {packs[0].mrpPaise > packs[0].pricePaise && <del> {formatPrice(packs[0].mrpPaise)}</del>}
+                </>
+              ) : (
+                `${packs.length} packs from ${formatPrice(Math.min(...packs.map((pack) => pack.pricePaise)))}`
+              ),
+          },
+          {
+            header: "In stock",
+            numeric: true,
+            cell: ({ available: count }) =>
+              count === 0 ? (
+                <StatusPill tone="bad">Sold out</StatusPill>
+              ) : count <= LOW ? (
+                <StatusPill tone="warn">{count} left</StatusPill>
+              ) : (
+                count
+              ),
+          },
+          {
+            header: "Status",
+            cell: ({ product }) => (
+              <StatusPill value={product.status}>
+                {STATUSES.find(([value]) => value === product.status)?.[1] ?? product.status}
+              </StatusPill>
+            ),
+          },
+        ]}
+        empty={
+          <EmptyState
+            icon={PackageOpen}
+            title={filtered ? "No products match" : "No products yet"}
+            body={filtered ? "Try another name, aisle or stock filter." : "Add your first product to start selling."}
+            action={
+              filtered ? (
+                <Link href="/admin/products" className="secondary-button">
+                  Clear filters
+                </Link>
+              ) : (
+                <Link href="/admin/products/new" className="primary-button">
+                  Add a product
+                </Link>
+              )
+            }
+            heading="h3"
+          />
+        }
+      />
     </section>
   );
 }

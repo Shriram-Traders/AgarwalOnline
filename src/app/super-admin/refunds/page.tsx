@@ -5,6 +5,9 @@ import { Refund } from "@/lib/payments/models";
 import { ActionForm } from "@/components/action-form";
 import { refundAction } from "@/lib/payments/refund-actions";
 import { displayStatus, formatPrice} from "@/lib/display";
+import { MoneyInput } from "@/components/money-input";
+import { PageHeading } from "@/components/page-heading";
+export const metadata = { title: "Refunds", robots: { index: false } };
 
 export default async function RefundsPage({
   searchParams,
@@ -25,20 +28,16 @@ export default async function RefundsPage({
   ]);
   return (
     <section className="page-container">
-      <div className="workspace-heading">
-        <div>
-          <span className="eyebrow">PAYMENT AFTERCARE</span>
-          <h1>Refunds</h1>
-          <p>Create partial or full refunds and track every handoff.</p>
-        </div>
-        <span className="live-chip">
-          {
-            refunds.filter((item) => !["processed"].includes(item.status))
-              .length
-          }{" "}
-          pending
-        </span>
-      </div>
+      <PageHeading
+        eyebrow="Owner"
+        title="Refunds"
+        lead="Give money back for a paid order, in full or in part, and follow it until it reaches the customer."
+        aside={
+          <span className="live-chip">
+            {refunds.filter((item) => item.status !== "processed").length} in progress
+          </span>
+        }
+      />
       <details className="panel create-staff">
         <summary>Start a refund</summary>
         <ActionForm action={refundAction} submit="Create refund request">
@@ -57,8 +56,8 @@ export default async function RefundsPage({
               </select>
             </label>
             <label>
-              Amount (paise)
-              <input name="amountPaise" type="number" min={1} required />
+              Amount (₹)
+              <MoneyInput name="amountRupees" />
             </label>
             <label>
               Reason

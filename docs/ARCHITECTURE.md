@@ -28,6 +28,7 @@ Browser → Next.js → domain services → MongoDB. Next.js → SMS, Razorpay, 
 | InventoryReservation   | orderId, variantId, quantity, expiresAt, status                                     | unique order/variant; status/expiry (NO automatic TTL deletion)       |
 | Cart                   | customerId, variant/quantity lines                                                  | unique customerId                                                     |
 | Wishlist               | customerId, productId                                                               | unique customer/product                                               |
+| ShoppingList           | ownerId, name, kind (board or basket), collaborators, linkCanEdit, shareToken, inviteToken, items (variant, qty, addedBy) | unique shareToken and inviteToken; owner/time; owner/kind; collaborator/time |
 | Order                  | customerId, number, idempotencyKey, four statuses, address snapshot, totals, slotId | unique number and customer/idempotencyKey; customer/time; status/time |
 | OrderItem              | orderId, variantId, immutable names, quantity and price snapshot                    | orderId (embedded for transaction consistency)                        |
 | OrderTimelineEvent     | orderId, dimension, previous/next, actorId, at, notes                               | order/time; append-only                                               |
@@ -64,7 +65,7 @@ Reservations have a worker-managed expiry: release stock and slot capacity trans
 
 Every timeline/audit/movement write is append-only through domain services and database roles. Reject illegal state transitions, requester self-approval, and rejection without a reason. Publish approved changes with optimistic version checks. Delivery queries include assignee and active-status predicates; customers cannot access another customer's records. Internal chat notes are excluded at the query layer from customer history, broadcasts, search, and sync. Store messages before broadcast; sync through a monotonically increasing conversation sequence, not timestamps alone.
 
-Default proposed retention: OTP 5 minutes, rate counters 15 minutes, sessions 7 days (staff 12 hours), delivery photos/GPS 30 days unless a dispute hold applies, closed chat 180 days, application logs 30 days. Orders, invoices, tax and payment records require a store-approved retention policy before launch. Expired photo metadata triggers provider deletion; TTL alone does not delete the remote asset. Never log codes, tokens, passwords, payment secrets, or full addresses. Phone/email masking applies to logs. Account deletion anonymizes eligible data and preserves required financial records.
+Default proposed retention: OTP 5 minutes, rate counters 15 minutes, sessions 7 days (staff included), delivery photos/GPS 30 days unless a dispute hold applies, closed chat 180 days, application logs 30 days. Orders, invoices, tax and payment records require a store-approved retention policy before launch. Expired photo metadata triggers provider deletion; TTL alone does not delete the remote asset. Never log codes, tokens, passwords, payment secrets, or full addresses. Phone/email masking applies to logs. Account deletion anonymizes eligible data and preserves required financial records.
 
 ## Permission matrix
 
@@ -86,8 +87,9 @@ Ownership and transition conditions further restrict every grant. Anonymous acce
 
 - `/`: service area selector, categories, promotions, featured/deals/new/bestsellers, authenticated reorders.
 - `/catalog`, `/products/[slug]`: filters, search, bilingual content, variants, stock.
-- `/cart`, `/checkout`, `/checkout/confirmation/[id]`.
-- `/login` (staff too; `/staff/login` redirects there); `/account`, `/account/addresses`, `/account/wishlist`, `/account/orders`, `/account/orders/[id]`, `/account/support`, `/account/complaints`.
+- `/cart` (pills switch between My basket and shared baskets: `?basket=<id>`, `?basket=new`), `/checkout`, `/checkout/confirmation/[id]`.
+- `/lists/[token]`: a shared board or basket opened from its link; it lets people join only while the owner's "they can add and change things" switch is on. Signing in from it returns there.
+- `/login` (staff too; `/staff/login` redirects there); `/account`, `/account/addresses`, `/account/wishlist` (Saved: boards plus everything hearted), `/account/lists/[id]` (a board), `/account/orders`, `/account/orders/[id]`, `/account/support`, `/account/complaints`.
 - `/delivery`: assigned queue, `/delivery/orders/[id]`, history, cash summary.
 - `/admin`: orders, packing, products, categories, inventory, customers, delivery, COD, support, complaints, returns, coupons, analytics.
 - `/super-admin`: approvals, staff/permissions, delivery rules, synonyms, settings, audit, revenue/refunds/COD reports.

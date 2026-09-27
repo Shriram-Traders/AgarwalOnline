@@ -2,6 +2,7 @@ import { deliveryRules } from "@/lib/commerce/service";
 import { connectDB } from "@/lib/db/connect";
 import { ServiceArea } from "@/lib/db/models";
 import { currentLocale } from "@/lib/i18n";
+export const metadata = { title: "Check your delivery area", description: "Enter your PIN code to see whether Agarwal General Stores delivers to you: Nagothane, Roha, Pali, RIL Township and NMD." };
 export const dynamic = "force-dynamic";
 export default async function Serviceability({
   searchParams,

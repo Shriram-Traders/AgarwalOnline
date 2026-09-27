@@ -3,6 +3,8 @@ import { DataTable } from "@/components/data-table";
 import { PackageCheck } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { analytics } from "@/lib/analytics/service";
+import { PageHeading } from "@/components/page-heading";
+export const metadata = { title: "Analytics", robots: { index: false } };
 
 const money = (paise: number) =>
   new Intl.NumberFormat("en-IN", {
@@ -34,13 +36,11 @@ export default async function AnalyticsPage({
   ];
   return (
     <section className="page-container">
-      <div className="workspace-heading">
-        <div>
-          <span className="eyebrow">STORE PULSE · DEMO DATA WHEN SEEDED</span>
-          <h1>Operations analytics</h1>
-          <p>Sales, stock, customers and delivery performance.</p>
-        </div>
-      </div>
+      <PageHeading
+        eyebrow="Run the store"
+        title="Analytics"
+        lead="Sales, stock, customers and delivery for the dates you choose. Demo orders count when the demo data is loaded."
+      />
       <form className="audit-filters">
         <label>
           From

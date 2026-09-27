@@ -4,6 +4,8 @@ import { ProductReview, ReviewReport } from "@/lib/reviews/models";
 import { Product, User } from "@/lib/db/models";
 import { moderateReviewAction } from "@/lib/reviews/actions";
 import { ActionForm } from "@/components/action-form";
+import { PageHeading } from "@/components/page-heading";
+export const metadata = { title: "Reviews", robots: { index: false } };
 
 export default async function ReviewModerationPage() {
   await requirePage("review:moderate");
@@ -15,7 +17,12 @@ export default async function ReviewModerationPage() {
   ]);
   return (
     <section className="page-container">
-      <div className="workspace-heading"><div><span className="eyebrow">TRUST & SAFETY</span><h1>Review moderation</h1><p>Only reported verified-purchase reviews appear here.</p></div><span className="order-count">{reports.length} open</span></div>
+      <PageHeading
+        eyebrow="Run the store"
+        title="Reviews"
+        lead="Reviews a shopper has reported. Only people who bought the product can review it."
+        aside={<span className="order-count">{reports.length} to check</span>}
+      />
       {reports.map((report) => {
         const review = reviews.find((item) => String(item._id) === String(report.reviewId));
         if (!review) return null;
@@ -23,7 +30,7 @@ export default async function ReviewModerationPage() {
         const customer = customers.find((item) => String(item._id) === String(review.customerId));
         return (
           <article className="panel" key={String(report._id)}>
-            <div className="panel-heading"><div><span className="eyebrow">{"★".repeat(review.rating)} · VERIFIED PURCHASE</span><h2>{product?.name.en ?? "Product review"}</h2></div><span className="status-pill">Reported</span></div>
+            <div className="panel-heading"><div><span className="eyebrow">{"★".repeat(review.rating)} · Verified purchase</span><h2>{product?.name.en ?? "Product review"}</h2></div><span className="status-pill">Reported</span></div>
             <h3>{review.title}</h3><p>{review.body}</p><p className="muted">By {customer?.name ?? "Customer"} · Report reason: {report.reason}</p>
             <ActionForm action={moderateReviewAction} submit="Save moderation">
               <input type="hidden" name="reviewId" value={String(review._id)} />
@@ -33,7 +40,7 @@ export default async function ReviewModerationPage() {
           </article>
         );
       })}
-      {!reports.length && <div className="panel empty-state"><Sparkles size={40} strokeWidth={1.5} className="empty-icon" aria-hidden="true" /><h2>Moderation queue is clear</h2><p>Reported reviews will appear here for staff review.</p></div>}
+      {!reports.length && <div className="panel empty-state"><Sparkles size={40} strokeWidth={1.5} className="empty-icon" aria-hidden="true" /><h2>Nothing to check</h2><p>When a shopper reports a review, it appears here for a decision.</p></div>}
     </section>
   );
 }

@@ -36,6 +36,48 @@ const blank = <T extends z.ZodTypeAny>(schema: T) =>
     .union([z.literal(""), schema])
     .transform((value) => (value === "" ? undefined : value) as z.output<T> | undefined);
 
+type Person = InstanceType<typeof User>;
+/** Gives an existing account a staff role, signs it out so the new role applies, and records who did it. */
+async function giveRole(
+  actorId: string,
+  person: Person,
+  role: (typeof staffRoles)[number],
+  session: mongoose.ClientSession,
+  details: Record<string, unknown> = {},
+) {
+  const previousRole = staffRoleOf(person.roles as Role[]);
+  person.roles = rolesFor(role);
+  await person.save({ session });
+  await revokeStaffSessions(String(person._id), session);
+  await AuditLog.create(
+    [
+      {
+        actorId,
+        action: "staff.grant",
+        target: String(person._id),
+        details: { phone: person.phone, email: person.email, role, previousRole, ...details },
+      },
+    ],
+    { session },
+  );
+}
+
+/** Gives someone picked from the list of existing accounts a staff role. Works for accounts without a phone number. */
+export async function grantStaffRole(actorId: string, input: unknown) {
+  await authorize(actorId);
+  const data = z.object({ userId: objectId, role: z.enum(staffRoles) }).parse(input);
+  if (data.userId === actorId)
+    throw Error("Manage your own account through a separate verified flow.");
+  let name = "";
+  await mongoose.connection.transaction(async (session) => {
+    const person = await User.findOne({ _id: data.userId, active: true }).session(session);
+    if (!person) throw Error("Staff account not found, or the account is paused.");
+    name = person.name;
+    await giveRole(actorId, person, data.role, session);
+  });
+  return { name };
+}
+
 /** Gives the account on this phone number a staff role, creating the account if nobody has it yet. */
 export async function createStaff(actorId: string, input: unknown) {
   await authorize(actorId);
@@ -55,35 +97,14 @@ export async function createStaff(actorId: string, input: unknown) {
   await mongoose.connection.transaction(async (session) => {
     const existing = await User.findOne({ phone: data.phone }).session(session);
     if (existing) {
-      const previousRole = staffRoleOf(existing.roles as Role[]);
-      existing.roles = rolesFor(data.role);
       if (data.name) existing.name = data.name;
       if (data.email) {
         existing.email = data.email;
         existing.emailVerified = true;
       }
-      await existing.save({ session });
       if (passwordHash)
         await setStaffCredential(String(existing._id), passwordHash, session);
-      // staff sessions are shorter, so the person signs in again under the new rules
-      await revokeStaffSessions(String(existing._id), session);
-      await AuditLog.create(
-        [
-          {
-            actorId,
-            action: "staff.grant",
-            target: String(existing._id),
-            details: {
-              phone: data.phone,
-              email: existing.email,
-              role: data.role,
-              previousRole,
-              passwordReset: Boolean(passwordHash),
-            },
-          },
-        ],
-        { session },
-      );
+      await giveRole(actorId, existing, data.role, session, { passwordReset: Boolean(passwordHash) });
       return;
     }
     if (!data.name || !data.email || !passwordHash)

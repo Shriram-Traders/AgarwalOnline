@@ -222,9 +222,9 @@ test("whole journey: sign up, shop, pay, pack, deliver, reconcile", async ({ bro
   const rider = await van.newPage();
   watch(rider, "delivery");
   await staffSignIn(rider, "delivery@e2e.test");
-  await expect(rider.locator(".order-row")).toHaveCount(1);
+  await expect(rider.locator(".stop-row")).toHaveCount(1);
   await shot(rider, "delivery-queue-populated");
-  await rider.locator(".order-row").first().click();
+  await rider.locator(".stop-row").first().click();
   await rider.getByRole("button", { name: "Start delivery", exact: true }).click();
   await expect(rider.getByLabel("Customer delivery code")).toBeVisible();
   await shot(rider, "delivery-order-detail");
@@ -241,7 +241,7 @@ test("whole journey: sign up, shop, pay, pack, deliver, reconcile", async ({ bro
   await admin.goto(orderUrl.replace("/account/orders/", "/admin/orders/"));
   await admin.getByRole("button", { name: "Complete order", exact: true }).click();
   await admin.getByRole("button", { name: "Record cash handover" }).click();
-  await admin.getByRole("button", { name: "Confirm", exact: true }).click();
+  await admin.getByRole("button", { name: /^Yes, / }).click();
   await expect(admin.getByText("Cash reconciled", { exact: true })).toBeVisible();
 
   // --- cash comes back to the desk ---------------------------------------

@@ -78,6 +78,21 @@ test.beforeAll(async () => {
       roles: ["customer", "super-admin"],
       passwordHash: await bcrypt.hash("Local-test-password-123", 12),
     },
+    {
+      phone: "9000000089",
+      name: "Fictional Friend",
+      email: "friend@e2e.test",
+      roles: ["customer"],
+      passwordHash: await bcrypt.hash("Local-test-password-123", 12),
+    },
+    // signs in by password: one-time codes for the shared test number are rate limited across this file
+    {
+      phone: "9000000090",
+      name: "Fictional Planner",
+      email: "planner@e2e.test",
+      roles: ["customer"],
+      passwordHash: await bcrypt.hash("Local-test-password-123", 12),
+    },
   ]);
 });
 test.afterAll(async () => {
@@ -130,6 +145,16 @@ test("customer OTP, basket, address, COD, tracking and cancellation", async ({
   await page
     .getByLabel("House, building, street")
     .fill("Fictional House 1, Test Street");
+  // a rejected save keeps everything that was typed
+  await page.getByLabel("PIN code").fill("111111");
+  await page.getByRole("button", { name: "Save address" }).click();
+  await expect(
+    page.getByText("This PIN code is not enabled for the selected area."),
+  ).toBeVisible();
+  await expect(page.getByLabel("Recipient name")).toHaveValue("Fictional Neighbour");
+  await expect(page.getByLabel("House, building, street")).toHaveValue(
+    "Fictional House 1, Test Street",
+  );
   await page.getByLabel("PIN code").fill("999999");
   await page.getByRole("button", { name: "Save address" }).click();
   await expect(page.getByRole("status")).toContainText("Address saved");
@@ -150,7 +175,7 @@ test("customer OTP, basket, address, COD, tracking and cancellation", async ({
   await page.getByRole("button", { name: "Cancel this order" }).click();
   // the confirm dialog is aria-modal, so it must take focus and close on Escape
   await expect(
-    page.getByRole("button", { name: "Confirm", exact: true }),
+    page.getByRole("button", { name: /^Yes, / }),
   ).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(page.locator(".confirm-modal")).toHaveCount(0);
@@ -158,7 +183,7 @@ test("customer OTP, basket, address, COD, tracking and cancellation", async ({
     page.getByRole("button", { name: "Cancel this order" }),
   ).toBeFocused();
   await page.getByRole("button", { name: "Cancel this order" }).click();
-  await page.getByRole("button", { name: "Confirm", exact: true }).click();
+  await page.getByRole("button", { name: /^Yes, / }).click();
   await expect(
     page.getByText(/^Order: cancelled$/i),
   ).toBeVisible();
@@ -223,16 +248,37 @@ test("Super Admin manages staff and reviews the audit trail", async ({
     .getByLabel("Password", { exact: true })
     .fill("Local-test-password-123");
   await page.getByRole("button", { name: "Sign in with email" }).click();
-  await expect(page).toHaveURL("/super-admin");
+  // owners open on the day's orders, with their settings one link away
+  await expect(page).toHaveURL("/admin");
   await expect(
-    page.getByRole("heading", { name: "Good morning, Fictional Owner" }),
+    page.getByRole("heading", { name: /^Good (morning|afternoon|evening), Fictional Owner$/ }),
   ).toBeVisible();
 
+  await User.create({
+    phone: "9000000085",
+    name: "Picker Candidate",
+    email: "picker@e2e.test",
+    roles: ["customer"],
+  });
   await page
     .getByRole("link", { name: /Staff & roles/ })
     .first()
     .click();
-  await page.getByText("Add a staff member").click();
+  // an existing account is picked from the list and given a role
+  await page.getByLabel("Name, phone or email").fill("Picker");
+  await page.getByRole("button", { name: "Find", exact: true }).click();
+  await page.getByLabel("Role for Picker Candidate").selectOption("delivery");
+  await page
+    .locator("form", { has: page.getByLabel("Role for Picker Candidate") })
+    .getByRole("button", { name: "Add to team" })
+    .click();
+  await page.getByRole("button", { name: /^Yes, / }).click();
+  await expect(page.getByRole("status")).toContainText("Picker Candidate is now on the team");
+  expect((await User.findOne({ phone: "9000000085" }))!.roles).toEqual(["customer", "delivery"]);
+
+  // someone with no account yet gets a new one
+  await page.goto("/super-admin/staff");
+  await page.getByText("Not in the list? Create a new account").click();
   const form = page.locator(".create-staff form");
   await form.getByLabel("Name").fill("New Delivery Partner");
   await form.getByLabel("Work email").fill("new-delivery@e2e.test");
@@ -413,7 +459,7 @@ test("admin packing through partner delivery and cash reconciliation", async ({
     await adminPage
       .getByRole("button", { name: "Record cash handover" })
       .click();
-  await adminPage.getByRole("button", { name: "Confirm", exact: true }).click();
+  await adminPage.getByRole("button", { name: /^Yes, / }).click();
     await expect(
       adminPage.getByText("Cash reconciled", { exact: true }),
     ).toBeVisible();
@@ -484,4 +530,91 @@ test("customer and support exchange messages in real time", async ({
   } finally {
     await context.close();
   }
+});
+
+/** Opt-in screenshots of states a page crawl never reaches (an open sheet or menu): set SHOT_DIR. */
+async function shot(page: import("@playwright/test").Page, name: string) {
+  if (process.env.SHOT_DIR)
+    await page.screenshot({ path: `${process.env.SHOT_DIR}/${test.info().project.name}-${name}.png` });
+}
+
+/** Fills the email sign-in form on the page already showing it. */
+async function emailSignIn(page: import("@playwright/test").Page, email: string) {
+  await page.getByRole("button", { name: "Email", exact: true }).click();
+  await page.getByLabel("Email address").fill(email);
+  await page.getByLabel("Password", { exact: true }).fill("Local-test-password-123");
+  await page.getByRole("button", { name: "Sign in with email" }).click();
+}
+
+test("a board saves things and friends join it", async ({ page, browser }) => {
+  await page.goto("/login");
+  await emailSignIn(page, "planner@e2e.test");
+  await page.waitForURL((url) => url.pathname !== "/login");
+  // Save → "Save to…" → a new board, right from the product page
+  await page.goto("/products/everyday-basmati-rice");
+  await page.locator("summary", { hasText: "Save" }).click();
+  await page.getByLabel("New board").fill("Diwali gifts");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.getByText("Saved to the board.")).toBeVisible();
+  await shot(page, "save-to-board");
+  await page.goto("/account/wishlist");
+  await expect(page.getByRole("link", { name: /All saved/ })).toContainText("1 item");
+  await page.getByRole("link", { name: /Diwali gifts/ }).click();
+  await expect(page.getByRole("heading", { name: "Diwali gifts", level: 1 })).toBeVisible();
+  await page.getByRole("button", { name: "Invite", exact: true }).click();
+  const invite = new URL(await page.getByLabel("Link", { exact: true }).inputValue()).pathname;
+  await shot(page, "board-invite");
+
+  // a neighbour opens it signed out, signs in, lands back on it and joins
+  const context = await browser.newContext({
+    baseURL: "http://127.0.0.1:3002",
+    viewport: page.viewportSize()!,
+  });
+  const friend = await context.newPage();
+  try {
+    await friend.goto(invite);
+    await friend.getByRole("link", { name: "Sign in to join" }).click();
+    await emailSignIn(friend, "friend@e2e.test");
+    await expect(friend).toHaveURL(invite);
+    await friend.getByRole("button", { name: "Join this board" }).click();
+    await expect(friend.getByRole("heading", { name: "Diwali gifts", level: 1 })).toBeVisible();
+    await friend.getByRole("button", { name: "Increase quantity" }).click();
+    await expect(friend.locator(".board-item output")).toHaveText("2");
+  } finally {
+    await context.close();
+  }
+
+  // the owner sees the change and who joined
+  await page.reload();
+  await expect(page.locator(".board-item output")).toHaveText("2");
+  await expect(page.getByText(/You, Fictional/)).toBeVisible();
+  // "Buy this board" fills the basket and goes straight to checkout
+  await page.getByRole("button", { name: /Buy this board/ }).click();
+  await expect(page).toHaveURL(/\/checkout$/);
+});
+
+test("a second basket is filled from a product page and ordered", async ({ page }) => {
+  await page.goto("/login");
+  await emailSignIn(page, "planner@e2e.test");
+  await page.waitForURL((url) => url.pathname !== "/login");
+  await page.goto("/products/everyday-basmati-rice");
+  await page.locator("summary", { hasText: "Add to a different basket" }).click();
+  await page.getByLabel("New basket").fill("Family monthly");
+  await page.getByRole("button", { name: "Create & add" }).click();
+  await expect(page.getByText("Added to Family monthly.")).toBeVisible();
+  await page.goto("/cart");
+  const pills = page.getByRole("navigation", { name: "Your baskets" });
+  await expect(pills.getByRole("link", { name: /My basket/ })).toHaveAttribute("aria-current", "page");
+  await pills.getByRole("link", { name: /Family monthly/ }).click();
+  await expect(page.locator(".basket-line")).toHaveCount(1);
+  // sharing: one switch decides whether the link lets people edit
+  await page.getByRole("button", { name: "Share this basket" }).click();
+  const toggle = page.getByRole("switch", { name: /People with the link can add and change things/ });
+  await expect(toggle).toHaveAttribute("aria-checked", "true");
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-checked", "false");
+  await shot(page, "basket-share");
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "Order Family monthly" }).click();
+  await expect(page).toHaveURL(/\/checkout$/);
 });

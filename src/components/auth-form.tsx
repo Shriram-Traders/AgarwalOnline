@@ -1,6 +1,7 @@
 "use client";
 import { useActionState, useEffect, useRef, useState } from "react";
 import { PasswordInput } from "@/components/password-input";
+import { keepTyped } from "@/components/action-form";
 import {
   customerEmailLoginAction,
   customerPasswordLoginAction,
@@ -11,10 +12,13 @@ export function AuthForm({
   mock = false,
   locale = "en",
   initialMode = "password",
+  then,
 }: {
   mock?: boolean;
   locale?: "en" | "mr";
-  initialMode?: "password" | "signup";
+  initialMode?: "password" | "signup" | "otp";
+  /** "connect-google": land on the account page ready to connect Google; a `/lists/…` path: go back to that shared list. */
+  then?: string;
 }) {
   const mr = locale === "mr";
   const [sent, send, sending] = useActionState(sendOTPAction, {});
@@ -53,11 +57,13 @@ export function AuthForm({
   }, [sending, sent.challengeId]);
   return (
     <>
-      {!sent.challengeId && (
-        <div className="auth-mode-tabs" aria-label={mr ? "खाते पर्याय" : "Account options"}>
+      {/* two ways to sign in; creating an account is a separate journey, linked below the form */}
+      {!sent.challengeId && mode !== "signup" && (
+        <div className="auth-mode-tabs" role="group" aria-label={mr ? "साइन इन पद्धत" : "Sign in with"}>
           <button
             type="button"
             className={mode === "password" || mode === "otp" ? "active" : ""}
+            aria-pressed={mode === "password" || mode === "otp"}
             onClick={() => setMode("password")}
           >
             {mr ? "मोबाईल" : "Mobile"}
@@ -65,16 +71,10 @@ export function AuthForm({
           <button
             type="button"
             className={mode === "email" ? "active" : ""}
+            aria-pressed={mode === "email"}
             onClick={() => setMode("email")}
           >
             {mr ? "ईमेल" : "Email"}
-          </button>
-          <button
-            type="button"
-            className={mode === "signup" ? "active" : ""}
-            onClick={() => setMode("signup")}
-          >
-            {mr ? "खाते तयार करा" : "Create account"}
           </button>
         </div>
       )}
@@ -84,7 +84,8 @@ export function AuthForm({
         </p>
       )}
       {!sent.challengeId && mode === "password" ? (
-        <form action={customerSign} className="form-stack">
+        <form action={customerSign} onReset={keepTyped} className="form-stack">
+          {then && <input type="hidden" name="then" value={then} />}
           <label>
             {mr ? "मोबाईल क्रमांक" : "Mobile number"}
             <div className="phone-input">
@@ -120,7 +121,8 @@ export function AuthForm({
           </button>
         </form>
       ) : !sent.challengeId && mode === "email" ? (
-        <form action={emailSign} className="form-stack">
+        <form action={emailSign} onReset={keepTyped} className="form-stack">
+          {then && <input type="hidden" name="then" value={then} />}
           <label>
             {mr ? "ईमेल पत्ता" : "Email address"}
             <input
@@ -150,7 +152,7 @@ export function AuthForm({
           </button>
         </form>
       ) : !sent.challengeId ? (
-        <form action={send} className="form-stack">
+        <form action={send} onReset={keepTyped} className="form-stack">
           <input type="hidden" name="intent" value={mode === "signup" ? "signup" : "signin"} />
           {mode === "signup" && (
             <label>
@@ -193,7 +195,8 @@ export function AuthForm({
           </p>
         </form>
       ) : (
-        <form action={verify} className="form-stack">
+        <form action={verify} onReset={keepTyped} className="form-stack">
+          {then && <input type="hidden" name="then" value={then} />}
           <div className="auth-step-heading">
             <span className="status-pill">{sent.newAccount ? (mr ? "नवीन खाते" : "NEW ACCOUNT") : (mr ? "पुन्हा स्वागत" : "WELCOME BACK")}</span>
             <p>{mr ? "+91 ••••••" : "Enter the code sent to +91 ••••••"}{sent.phone?.slice(-4)}{mr ? " वर पाठवलेला कोड टाका." : "."}</p>

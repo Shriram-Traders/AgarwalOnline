@@ -9,9 +9,11 @@ import { rulesSchema } from "../commerce/delivery";
 import { normalizeSearch } from "../catalog/search";
 import type { MutationState } from "../commerce/actions";
 import mongoose from "mongoose";
+import { formWithPaise, paiseFromRupees } from "../display";
+import { plainMessage } from "../form-errors";
 function safe(e: unknown) {
   return e instanceof z.ZodError
-    ? e.issues[0].message
+    ? plainMessage(e)
     : "Unable to save. Check the values and try again.";
 }
 export async function serviceAreaAction(
@@ -34,7 +36,7 @@ export async function serviceAreaAction(
         enabled: z.enum(["on"]).optional(),
         codEnabled: z.enum(["on"]).optional(),
       })
-      .parse(Object.fromEntries(form));
+      .parse(formWithPaise(form));
     await mongoose.connection.transaction(async (session) => {
       const before = await ServiceArea.findById(data.areaId).session(session);
       if (!before) throw Error("Not found");
@@ -121,16 +123,12 @@ export async function rulesAction(
     const user = await requirePermission("settings:write");
     const value = rulesSchema.parse({
       cutoffHour: Number(form.get("cutoffHour")),
-      freeThresholdPaise: Number(form.get("freeThresholdPaise")),
+      freeThresholdPaise: paiseFromRupees(form.get("freeThresholdRupees")),
       blackoutDates: String(form.get("blackoutDates") ?? "")
         .split(",")
         .map((s) => s.trim())
         .filter(Boolean),
-      holidays: String(form.get("holidays") ?? "")
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean)
-        .map(Number),
+      holidays: form.getAll("holidays").map(Number),
     });
     await mongoose.connection.transaction(async (session) => {
       const before = await SystemSetting.findOne({ key: "delivery" }).session(

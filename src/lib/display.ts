@@ -10,6 +10,33 @@ export function formatPrice(paise: number) {
   return inr.format(paise / 100);
 }
 
+/** A rupee amount typed into a staff form ("499" or "499.50") as whole paise; undefined when left blank. */
+export function paiseFromRupees(value: FormDataEntryValue | null | undefined) {
+  const text = String(value ?? "").trim();
+  if (!text) return undefined;
+  const rupees = Number(text);
+  return Number.isFinite(rupees) ? Math.round(rupees * 100) : Number.NaN;
+}
+/** Form fields for staff, with every `somethingRupees` input handed on as `somethingPaise`. */
+export function formWithPaise(form: FormData) {
+  const fields: Record<string, FormDataEntryValue | number | undefined> = {};
+  for (const [key, value] of form)
+    if (key.endsWith("Rupees")) fields[key.replace(/Rupees$/, "Paise")] = paiseFromRupees(value);
+    else fields[key] = value;
+  return fields;
+}
+
+/** "just now", "12 min ago", "3 h ago", "2 days ago", then the date; pair it with `formatIst` in a title. */
+export function timeAgo(date: Date | string, now: Date = new Date()) {
+  const then = new Date(date);
+  const minutes = Math.round((now.getTime() - then.getTime()) / 60000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes} min ago`;
+  if (minutes < 60 * 24) return `${Math.round(minutes / 60)} h ago`;
+  if (minutes < 60 * 24 * 7) return `${Math.round(minutes / 1440)} days ago`;
+  return then.toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium" });
+}
+
 /** Whole-number discount percentage, 0 when there is no saving. */
 export function discountPercent(pricePaise: number, mrpPaise: number) {
   return mrpPaise > pricePaise

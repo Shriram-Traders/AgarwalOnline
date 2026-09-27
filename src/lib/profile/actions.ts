@@ -5,6 +5,7 @@ import { z } from "zod";
 import { requirePermission } from "../auth/session";
 import { AuditLog, User } from "../db/models";
 import type { MutationState } from "../commerce/actions";
+import { plainMessage } from "../form-errors";
 
 export async function profileAction(
   _state: MutationState,
@@ -39,7 +40,7 @@ export async function profileAction(
     return {
       error:
         error instanceof z.ZodError
-          ? error.issues[0].message
+          ? plainMessage(error)
           : "Unable to update your profile.",
     };
   }

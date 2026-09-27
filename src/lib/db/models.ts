@@ -9,7 +9,8 @@ const ref = (name: string) => ({
 const userSchema = new Schema(
   {
     name: { type: String, required: true },
-    phone: { type: String, required: true, unique: true },
+    // optional: people who join with Google have no number until they add one
+    phone: String,
     email: String,
     emailVerified: { type: Boolean, default: false },
     phoneVerified: { type: Boolean, default: false },
@@ -33,6 +34,10 @@ const userSchema = new Schema(
     defaultAddressId: { type: Schema.Types.ObjectId, ref: "Address" },
   },
   opts,
+);
+userSchema.index(
+  { phone: 1 },
+  { unique: true, partialFilterExpression: { phone: { $type: "string" } } },
 );
 userSchema.index(
   { email: 1 },

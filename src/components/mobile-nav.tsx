@@ -3,13 +3,9 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { House, Grid2X2, ShoppingBag, UserRound } from "lucide-react";
 import { copy, type Locale } from "@/lib/locale-types";
-export function MobileNav({
-  count,
-  locale,
-}: {
-  count: number;
-  locale: Locale;
-}) {
+import { useBasket } from "./basket";
+export function MobileNav({ locale }: { locale: Locale }) {
+  const { count } = useBasket();
   const pathname = usePathname();
   const text = copy[locale];
   return (
@@ -24,7 +20,9 @@ export function MobileNav({
           href === "/"
             ? pathname === "/"
             : pathname.startsWith(href) ||
-              (href === "/catalog" && pathname.startsWith("/products"));
+              (href === "/catalog" && pathname.startsWith("/products")) ||
+              // the staff workspace is reached from the account tab
+              (href === "/account" && /^\/(admin|super-admin|delivery)(\/|$)/.test(pathname));
         return (
           <Link
             key={href}

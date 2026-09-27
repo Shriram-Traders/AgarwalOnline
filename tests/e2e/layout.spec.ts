@@ -9,7 +9,8 @@ import { execFileSync } from "node:child_process";
 import { readdirSync } from "node:fs";
 import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
-import { User, Product } from "../../src/lib/db/models";
+import { User, Product, ProductVariant } from "../../src/lib/db/models";
+import { ShoppingList } from "../../src/lib/lists/models";
 import { Address, Order } from "../../src/lib/commerce/models";
 import { ChatConversation } from "../../src/lib/chat/models";
 
@@ -64,11 +65,34 @@ test.beforeAll(async () => {
   await Address.updateMany({}, { customerId: customer!._id });
   const order = await Order.findOne({ assignedTo: { $exists: true } });
   const chat = await ChatConversation.create({ customerId: customer!._id, title: "Where is my order?" });
-  samples["/products/[slug]"] = `/products/${(await Product.findOne({ status: "published" }))!.slug}`;
+  const product = (await Product.findOne({ status: "published" }))!;
+  samples["/products/[slug]"] = `/products/${product.slug}`;
+  samples["/admin/products/[id]"] = `/admin/products/${product._id}`;
   samples["/account/orders/[id]"] = `/account/orders/${order!._id}`;
   samples["/admin/orders/[id]"] = `/admin/orders/${order!._id}`;
   samples["/delivery/orders/[id]"] = `/delivery/orders/${order!._id}`;
   samples["/account/support/[id]"] = `/account/support/${chat._id}`;
+  const firstPack = (await ProductVariant.findOne())!._id;
+  const board = await ShoppingList.create({
+    ownerId: customer!._id,
+    kind: "board",
+    name: "Diwali gifts",
+    shareToken: "layout-share-token-00000",
+    inviteToken: "layout-invite-token-0000",
+    items: [{ variantId: firstPack, quantity: 2, addedBy: customer!._id }],
+  });
+  // a shared basket, so /cart shows its pills
+  await ShoppingList.create({
+    ownerId: customer!._id,
+    kind: "basket",
+    name: "School list",
+    shareToken: "layout-basket-share-0000",
+    inviteToken: "layout-basket-invite-000",
+    items: [{ variantId: firstPack, quantity: 1, addedBy: customer!._id }],
+  });
+  samples["/account/lists/[id]"] = `/account/lists/${board._id}`;
+  // a signed-out visitor on the invite link: the page with the most on it
+  samples["/lists/[token]"] = `/lists/${board.inviteToken}`;
   samples["/admin/support/[id]"] = `/admin/support/${chat._id}`;
 });
 test.afterAll(async () => {
