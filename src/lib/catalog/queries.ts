@@ -7,9 +7,18 @@ import {
   SearchSynonym,
   Category,
 } from "../db/models";
-import { normalizeSearch, expandSearch, defaultSynonyms } from "./search";
+import {
+  normalizeSearch,
+  defaultSynonyms,
+  fuzzyPattern,
+  patternRelevance,
+  relevance,
+  searchWords,
+  wordPattern,
+} from "./search";
+import { log } from "../logger";
 import { z } from "zod";
-import type { PipelineStage } from "mongoose";
+import type { PipelineStage, SortOrder } from "mongoose";
 import { ProductReview } from "../reviews/models";
 export type CatalogItem = {
   id: string;
@@ -60,7 +69,7 @@ export async function catalog(
     ...(filters.category ? { categorySlug: filters.category } : {}),
   };
   const query = normalizeSearch(filters.q);
-  let products;
+  let products = null;
   if (query && process.env.ATLAS_SEARCH_ENABLED === "true") {
     const pipeline: PipelineStage[] = [
       {
@@ -77,37 +86,67 @@ export async function catalog(
       { $match: match },
       { $limit: 100 },
     ];
-    products = await Product.aggregate(pipeline);
-  } else {
-    if (process.env.NODE_ENV === "production" && query)
-      throw new Error("Atlas Search must be enabled in production");
+    // a missing or broken index must not take search down: fall through to the built-in search
+    products = await Product.aggregate(pipeline).catch((error: unknown) => {
+      log("warn", "catalog.atlas_search_failed", {
+        message: error instanceof Error ? error.message : String(error),
+      });
+      return null;
+    });
+  }
+  const order: Record<string, SortOrder> =
+    filters.sort === "new" ? { createdAt: -1 } : { bestseller: -1, createdAt: 1 };
+  if (!products?.length) {
     if (query) {
-      const groups = await SearchSynonym.find({})
-        .select("synonyms")
-        .limit(1000);
-      const terms = expandSearch(query, [
+      // built-in search (also the fallback when Atlas finds nothing): every word must match
+      const groups = await SearchSynonym.find({}).select("synonyms").limit(1000);
+      const words = searchWords(query, [
         ...defaultSynonyms,
         ...groups.map((g) => g.synonyms as string[]),
       ]);
-      match.$or = ["name.en", "name.mr", "brand", "aliases"].map((path) => ({
-        [path]: {
-          $regex: terms
-            .map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
-            .join("|"),
-          $options: "i",
-        },
-      }));
-    }
-    products = await Product.find(match)
-      .sort(
-        filters.sort === "new"
-          ? { createdAt: -1 }
-          : { bestseller: -1, createdAt: 1 },
-      )
-      .limit(100);
+      const aisles = await Category.find({}).select("slug name").limit(200);
+      const clause = (pattern: string) => {
+        const regex = new RegExp(pattern, "i");
+        const slugs = aisles
+          .filter((aisle) => regex.test(aisle.name.en) || regex.test(aisle.name.mr))
+          .map((aisle) => aisle.slug);
+        return {
+          $or: [
+            ...["name.en", "name.mr", "brand", "aliases"].map((path) => ({
+              [path]: { $regex: pattern, $options: "i" },
+            })),
+            ...(slugs.length ? [{ categorySlug: { $in: slugs } }] : []),
+          ],
+        };
+      };
+      products = await Product.find({
+        ...match,
+        $and: words.map((alternatives) => clause(wordPattern(alternatives))),
+      })
+        .sort(order)
+        .limit(100);
+      // nothing at all: allow one wrong, missing or extra letter per word ("notbook", "pencel")
+      const fuzzy = products.length
+        ? null
+        : words.map((alternatives) =>
+            [...new Set(alternatives.slice(0, 2))].map(fuzzyPattern).join("|"),
+          );
+      if (fuzzy)
+        products = await Product.find({ ...match, $and: fuzzy.map(clause) })
+          .sort(order)
+          .limit(100);
+      const scored = new Map(
+        products.map((product) => [
+          String(product._id),
+          fuzzy ? patternRelevance(product, fuzzy) : relevance(product, query, words),
+        ]),
+      );
+      products.sort((a, b) => scored.get(String(b._id))! - scored.get(String(a._id))!);
+    } else products = await Product.find(match).sort(order).limit(100);
   }
   const variants = await ProductVariant.find({
     productId: { $in: products.map((p) => p._id) },
+    active: { $ne: false }, // a hidden pack isn't offered; older packs have no flag and stay on
   });
   const inventory = await InventoryItem.find({
     variantId: { $in: variants.map((v) => v._id) },
@@ -171,7 +210,8 @@ export async function catalog(
         b.variants[0].pricePaise / b.variants[0].mrpPaise -
         (1 - a.variants[0].pricePaise / a.variants[0].mrpPaise),
     );
-  if (filters.sort === "featured") {
+  // a search keeps its best-match order; browsing leads with the stationery aisles
+  if (filters.sort === "featured" && !query) {
     const preferred = ["stationery", "paper", "office", "art-craft"];
     result.sort((a, b) => {
       const aRank = preferred.indexOf(a.categorySlug);

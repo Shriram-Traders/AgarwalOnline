@@ -11,13 +11,16 @@ import {
 } from "../db/models";
 import { InventoryMovement, SystemSetting } from "../commerce/models";
 import { objectId } from "../commerce/service";
-import { assertPermission, type Permission, type Role } from "../auth/permissions";
+import { assertPermission, hasPermission, type Permission, type Role } from "../auth/permissions";
+import { notify } from "../engagement/service";
+import { log } from "../logger";
 import { ApprovalRequest, ApprovalHistory } from "./models";
 async function authorize(id: string, permission: Permission) {
   await connectDB();
   const user = await User.findOne({ _id: objectId.parse(id), active: true });
   if (!user) throw Error("UNAUTHENTICATED");
   assertPermission(user.roles as Role[], permission);
+  return user;
 }
 export const productInput = z
   .object({
@@ -46,28 +49,124 @@ export const productInput = z
   .refine((d) => d.pricePaise <= d.mrpPaise, {
     message: "Price must not exceed MRP",
   });
+export const variantInput = z
+  .object({
+    productId: objectId,
+    sku: z
+      .string()
+      .trim()
+      .regex(/^[A-Za-z\d-]+$/)
+      .max(60),
+    label: z.string().trim().min(1).max(40),
+    unit: z.enum(["piece", "kg", "g", "l", "ml"]),
+    packQuantity: z.coerce.number().positive().max(100000),
+    pricePaise: z.coerce.number().int().positive().max(10000000),
+    mrpPaise: z.coerce.number().int().positive().max(10000000),
+    maxQuantity: z.coerce.number().int().min(1).max(100),
+    stock: z.coerce.number().int().min(0).max(100000),
+  })
+  .refine((value) => value.pricePaise <= value.mrpPaise, {
+    message: "Price must not exceed MRP.",
+  });
+
+/**
+ * A shop run by one owner has nobody else to approve that owner's changes, so they apply at
+ * once (still recorded as a request the owner approved). With two or more owners, a second
+ * owner looks first, as before.
+ */
+async function soleOwner(actorId: string, session?: mongoose.ClientSession) {
+  const actor = await User.findById(actorId).select("roles").session(session ?? null);
+  if (!actor?.roles.includes("super-admin")) return false;
+  const owners = await User.countDocuments({ roles: "super-admin", active: true }).session(session ?? null);
+  return owners === 1;
+}
+const SOLE_OWNER_NOTE = "Applied at once: you are the only owner.";
+
+/** Records a new request. For a lone owner it is approved and published in the same step; returns whether it is live. */
+async function openRequest(
+  fields: { kind: string; targetId: unknown; before?: unknown; after: unknown; reason?: string },
+  actorId: string,
+  session: mongoose.ClientSession,
+) {
+  const [request] = await ApprovalRequest.create([{ ...fields, requesterId: actorId }], { session });
+  await ApprovalHistory.create(
+    [{ requestId: request._id, actorId, previous: "draft", next: "pending", comment: fields.reason }],
+    { session },
+  );
+  if (!(await soleOwner(actorId, session))) return false;
+  request.state = "approved";
+  request.reviewerId = actorId;
+  request.reviewedAt = new Date();
+  request.reason = SOLE_OWNER_NOTE;
+  await request.save({ session });
+  await ApprovalHistory.create(
+    [{ requestId: request._id, actorId, previous: "pending", next: "approved", comment: SOLE_OWNER_NOTE }],
+    { session },
+  );
+  await publish(request, actorId, session);
+  return true;
+}
+
+/** One pending change per pack at a time; say so instead of failing on the database's duplicate check. */
+async function assertNothingPending(kind: string, targetId: unknown, session: mongoose.ClientSession) {
+  if (await ApprovalRequest.exists({ kind, targetId, state: "pending" }).session(session))
+    throw Error(
+      `A ${kind === "price" ? "price" : "stock"} change for this pack is already waiting for approval. Withdraw it or wait for the decision.`,
+    );
+}
+
+/** Taken web addresses and SKUs are caught when the request is made, not later at approval. */
+async function assertFree(fields: { slug?: string; sku?: string }, session: mongoose.ClientSession) {
+  if (fields.slug) {
+    const taken =
+      (await Product.exists({ slug: fields.slug }).session(session)) ||
+      (await ApprovalRequest.exists({ kind: "product", state: "pending", "after.slug": fields.slug }).session(session));
+    if (taken) throw Error(`That web address (${fields.slug}) is already used. Pick another one.`);
+  }
+  if (fields.sku) {
+    const taken =
+      (await ProductVariant.exists({ sku: fields.sku }).session(session)) ||
+      (await ApprovalRequest.exists({
+        kind: { $in: ["product", "variant"] },
+        state: "pending",
+        "after.sku": fields.sku,
+      }).session(session));
+    if (taken) throw Error(`That SKU (${fields.sku}) is already used. Pick another one.`);
+  }
+}
+
 export async function submitProduct(actorId: string, input: unknown) {
   await authorize(actorId, "approval:request");
   const data = productInput.parse(input);
   if (!(await Category.exists({ _id: data.categoryId })))
     throw Error("Select a category.");
+  let live = false;
   await mongoose.connection.transaction(async (session) => {
-    const [request] = await ApprovalRequest.create(
-      [
-        {
-          kind: "product",
-          targetId: new mongoose.Types.ObjectId(),
-          requesterId: actorId,
-          after: data,
-        },
-      ],
-      { session },
-    );
-    await ApprovalHistory.create(
-      [{ requestId: request._id, actorId, previous: "draft", next: "pending" }],
-      { session },
+    await assertFree({ slug: data.slug, sku: data.sku }, session);
+    live = await openRequest(
+      { kind: "product", targetId: new mongoose.Types.ObjectId(), after: data },
+      actorId,
+      session,
     );
   });
+  return { live };
+}
+/** A new pack size follows the same approval as a price change: it puts a price in the shop. */
+export async function submitVariant(actorId: string, input: unknown) {
+  await authorize(actorId, "approval:request");
+  const data = variantInput.parse(input);
+  let live = false;
+  await mongoose.connection.transaction(async (session) => {
+    if (!(await Product.exists({ _id: data.productId }).session(session)))
+      throw Error("Product not found.");
+    await assertFree({ sku: data.sku }, session);
+    live = await openRequest(
+      { kind: "variant", targetId: new mongoose.Types.ObjectId(), after: data },
+      actorId,
+      session,
+    );
+  });
+  return { live };
 }
 export async function requestPrice(actorId: string, input: unknown) {
   await authorize(actorId, "approval:request");
@@ -77,33 +176,30 @@ export async function requestPrice(actorId: string, input: unknown) {
       pricePaise: z.coerce.number().int().positive(),
       mrpPaise: z.coerce.number().int().positive(),
     })
-    .refine((d) => d.pricePaise <= d.mrpPaise)
+    .refine((d) => d.pricePaise <= d.mrpPaise, {
+      message: "Price must not exceed MRP.",
+      path: ["pricePaise"],
+    })
     .parse(input);
+  let live = false;
   await mongoose.connection.transaction(async (session) => {
     const variant = await ProductVariant.findById(data.variantId).session(
       session,
     );
     if (!variant) throw Error("This variant is unavailable.");
-    const [request] = await ApprovalRequest.create(
-      [
-        {
-          kind: "price",
-          targetId: variant._id,
-          requesterId: actorId,
-          before: {
-            pricePaise: variant.pricePaise,
-            mrpPaise: variant.mrpPaise,
-          },
-          after: { pricePaise: data.pricePaise, mrpPaise: data.mrpPaise },
-        },
-      ],
-      { session },
-    );
-    await ApprovalHistory.create(
-      [{ requestId: request._id, actorId, previous: "draft", next: "pending" }],
-      { session },
+    await assertNothingPending("price", variant._id, session);
+    live = await openRequest(
+      {
+        kind: "price",
+        targetId: variant._id,
+        before: { pricePaise: variant.pricePaise, mrpPaise: variant.mrpPaise },
+        after: { pricePaise: data.pricePaise, mrpPaise: data.mrpPaise },
+      },
+      actorId,
+      session,
     );
   });
+  return { live };
 }
 async function applyStock(
   actorId: string,
@@ -123,6 +219,7 @@ async function applyStock(
     { session },
   );
 }
+/** Small changes apply at once; large ones wait for an owner (or apply at once for a lone owner). */
 export async function adjustStock(actorId: string, input: unknown) {
   await authorize(actorId, "inventory:adjust");
   const data = z
@@ -137,6 +234,7 @@ export async function adjustStock(actorId: string, input: unknown) {
       reason: z.string().trim().min(5).max(500),
     })
     .parse(input);
+  let outcome: "applied" | "pending" = "applied";
   await mongoose.connection.transaction(async (session) => {
     const setting = await SystemSetting.findOne({
       key: "large-stock-threshold",
@@ -151,31 +249,19 @@ export async function adjustStock(actorId: string, input: unknown) {
     }).session(session);
     if (!stock) throw Error("This stock record is unavailable.");
     if (Math.abs(data.delta) >= threshold) {
-      const [request] = await ApprovalRequest.create(
-        [
-          {
-            kind: "stock",
-            targetId: data.variantId,
-            requesterId: actorId,
-            before: { onHand: stock.onHand },
-            after: { delta: data.delta },
-            reason: data.reason,
-          },
-        ],
-        { session },
+      await assertNothingPending("stock", data.variantId, session);
+      const live = await openRequest(
+        {
+          kind: "stock",
+          targetId: data.variantId,
+          before: { onHand: stock.onHand },
+          after: { delta: data.delta },
+          reason: data.reason,
+        },
+        actorId,
+        session,
       );
-      await ApprovalHistory.create(
-        [
-          {
-            requestId: request._id,
-            actorId,
-            previous: "draft",
-            next: "pending",
-            comment: data.reason,
-          },
-        ],
-        { session },
-      );
+      outcome = live ? "applied" : "pending";
     } else {
       await applyStock(actorId, data.variantId, data.delta, session);
       await AuditLog.create(
@@ -191,6 +277,37 @@ export async function adjustStock(actorId: string, input: unknown) {
       );
     }
   });
+  return { outcome };
+}
+async function createPack(
+  data: z.infer<typeof variantInput> | z.infer<typeof productInput>,
+  productId: unknown,
+  variantId: unknown,
+  actorId: string,
+  session: mongoose.ClientSession,
+) {
+  const [v] = await ProductVariant.create(
+    [
+      {
+        _id: variantId,
+        productId,
+        sku: data.sku,
+        label: data.label,
+        unit: data.unit,
+        packQuantity: data.packQuantity,
+        pricePaise: data.pricePaise,
+        mrpPaise: data.mrpPaise,
+        ...("maxQuantity" in data ? { maxQuantity: data.maxQuantity } : {}),
+      },
+    ],
+    { session },
+  );
+  await InventoryItem.create([{ variantId: v._id, onHand: data.stock, reserved: 0 }], { session });
+  await InventoryMovement.create(
+    [{ variantId: v._id, actorId, quantity: data.stock, kind: "adjust" }],
+    { session },
+  );
+  return v;
 }
 async function publish(
   request: mongoose.Document & Record<string, unknown>,
@@ -223,28 +340,12 @@ async function publish(
       ],
       { session },
     );
-    const [v] = await ProductVariant.create(
-      [
-        {
-          productId: p._id,
-          sku: data.sku,
-          label: data.label,
-          unit: data.unit,
-          packQuantity: data.packQuantity,
-          pricePaise: data.pricePaise,
-          mrpPaise: data.mrpPaise,
-        },
-      ],
-      { session },
-    );
-    await InventoryItem.create(
-      [{ variantId: v._id, onHand: data.stock, reserved: 0 }],
-      { session },
-    );
-    await InventoryMovement.create(
-      [{ variantId: v._id, actorId, quantity: data.stock, kind: "adjust" }],
-      { session },
-    );
+    await createPack(data, p._id, new mongoose.Types.ObjectId(), actorId, session);
+  } else if (kind === "variant") {
+    const data = variantInput.parse(after);
+    if (!(await Product.exists({ _id: data.productId }).session(session)))
+      throw Error("Product not found.");
+    await createPack(data, data.productId, request.targetId, actorId, session);
   } else if (kind === "price") {
     const result = await ProductVariant.updateOne(
       {
@@ -258,12 +359,8 @@ async function publish(
     if (result.modifiedCount !== 1)
       throw Error("Prices changed since this request. Submit a fresh request.");
   } else {
-    const stock = await InventoryItem.findOne({
-      variantId: request.targetId,
-      onHand: before?.onHand,
-    }).session(session);
-    if (!stock)
-      throw Error("Stock changed since this request. Submit a fresh request.");
+    // the change is relative ("+100 delivered"), so sales in between don't make it wrong;
+    // applyStock still refuses to take stock below what open orders hold
     await applyStock(actorId, request.targetId, Number(after.delta), session);
   }
   request.state = "published";
@@ -292,6 +389,18 @@ async function publish(
     { session },
   );
 }
+const KIND_NAMES: Record<string, string> = {
+  product: "new product",
+  variant: "new pack size",
+  price: "price change",
+  stock: "stock change",
+};
+function describe(request: { kind: string; after: Record<string, unknown> }) {
+  const what = KIND_NAMES[request.kind] ?? "change";
+  return request.kind === "product" && request.after.nameEn
+    ? `${what} “${String(request.after.nameEn)}”`
+    : what;
+}
 export async function reviewApproval(actorId: string, input: unknown) {
   await authorize(actorId, "approval:review");
   const data = z
@@ -307,13 +416,14 @@ export async function reviewApproval(actorId: string, input: unknown) {
   const scheduledAt = data.scheduledAt
     ? z.coerce.date().parse(data.scheduledAt)
     : undefined;
+  let decided: { requesterId: unknown; kind: string; after: Record<string, unknown> } | null = null;
   await mongoose.connection.transaction(async (session) => {
     const request = await ApprovalRequest.findOne({
       _id: data.requestId,
       state: "pending",
     }).session(session);
     if (!request) throw Error("This request has already been reviewed.");
-    if (String(request.requesterId) === actorId)
+    if (String(request.requesterId) === actorId && !(await soleOwner(actorId, session)))
       throw Error("You cannot approve or reject your own request.");
     request.state = data.decision;
     request.reviewerId = actorId;
@@ -338,24 +448,99 @@ export async function reviewApproval(actorId: string, input: unknown) {
       (!scheduledAt || scheduledAt.getTime() <= Date.now())
     )
       await publish(request, actorId, session);
+    decided = { requesterId: request.requesterId, kind: request.kind, after: request.after };
+  });
+  // the person who asked finds out, instead of checking back
+  const result = decided as { requesterId: unknown; kind: string; after: Record<string, unknown> } | null;
+  if (result && String(result.requesterId) !== actorId) {
+    const what = describe(result);
+    await notify({
+      userId: result.requesterId,
+      type: "system",
+      title:
+        data.decision === "rejected"
+          ? `Your ${what} was not approved`
+          : scheduledAt && scheduledAt.getTime() > Date.now()
+            ? `Your ${what} was approved for later`
+            : `Your ${what} is live`,
+      body:
+        data.decision === "rejected"
+          ? `Reason: ${data.comment}`
+          : data.comment || "An owner approved it.",
+      href: result.kind === "stock" ? "/admin/inventory" : "/admin/products",
+    }).catch((error) => log("warn", "approval.notify-failed", { error }));
+  }
+}
+/** The person who asked (or an owner) takes back a change that is still waiting. */
+export async function withdrawRequest(actorId: string, input: unknown) {
+  const actor = await authorize(actorId, "profile:own");
+  const requestId = objectId.parse(input);
+  await mongoose.connection.transaction(async (session) => {
+    const request = await ApprovalRequest.findOne({ _id: requestId, state: "pending" }).session(session);
+    if (!request) throw Error("This request has already been reviewed.");
+    const mayReview = hasPermission(actor.roles as Role[], "approval:review");
+    if (String(request.requesterId) !== actorId && !mayReview)
+      throw Error("Only the person who asked, or an owner, can withdraw this request.");
+    request.state = "withdrawn";
+    await request.save({ session });
+    await ApprovalHistory.create(
+      [{ requestId: request._id, actorId, previous: "pending", next: "withdrawn" }],
+      { session },
+    );
   });
 }
+/**
+ * Publishes approved changes whose time has come. Each one is handled on its own: one that can't
+ * be applied any more (a price changed meanwhile, the approver left) is marked failed with the
+ * reason and the people involved are told, instead of stopping every later change.
+ */
 export async function publishScheduled() {
   await connectDB();
   const requests = await ApprovalRequest.find({
     state: "approved",
     scheduledAt: { $lte: new Date() },
   }).limit(100);
+  let published = 0;
   for (const r of requests) {
-    await authorize(String(r.reviewerId), "approval:review");
-    await mongoose.connection.transaction(async (session) => {
-      const current = await ApprovalRequest.findOne({
-        _id: r._id,
-        state: "approved",
-        scheduledAt: { $lte: new Date() },
-      }).session(session);
-      if (current) await publish(current, String(current.reviewerId), session);
-    });
+    try {
+      await authorize(String(r.reviewerId), "approval:review");
+      await mongoose.connection.transaction(async (session) => {
+        const current = await ApprovalRequest.findOne({
+          _id: r._id,
+          state: "approved",
+          scheduledAt: { $lte: new Date() },
+        }).session(session);
+        if (current) await publish(current, String(current.reviewerId), session);
+      });
+      published++;
+    } catch (error) {
+      const reason =
+        error instanceof Error && /^(UNAUTHENTICATED|FORBIDDEN)$/.test(error.message)
+          ? "The owner who approved it can no longer approve changes."
+          : error instanceof Error
+            ? error.message
+            : "It could not be applied.";
+      await ApprovalRequest.updateOne(
+        { _id: r._id, state: "approved" },
+        { $set: { state: "failed", failureReason: reason } },
+      );
+      await ApprovalHistory.create({
+        requestId: r._id,
+        actorId: r.reviewerId,
+        previous: "approved",
+        next: "failed",
+        comment: reason,
+      });
+      log("warn", "approval.scheduled-failed", { requestId: String(r._id), reason });
+      for (const userId of new Set([String(r.requesterId), String(r.reviewerId)]))
+        await notify({
+          userId,
+          type: "system",
+          title: `A scheduled ${describe(r)} could not be applied`,
+          body: `${reason} Send a fresh request if it is still needed.`,
+          href: "/super-admin/approvals",
+        }).catch(() => undefined);
+    }
   }
-  return requests.length;
+  return published;
 }

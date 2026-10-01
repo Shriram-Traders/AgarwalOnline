@@ -81,7 +81,11 @@ export async function saveListItem(
   }
   if (!add && !line) throw Error("This item is no longer on the list.");
   const variant = await ProductVariant.findById(variantId);
-  if (!variant || !(await Product.exists({ _id: variant.productId, status: "published" })))
+  if (
+    !variant ||
+    variant.active === false ||
+    !(await Product.exists({ _id: variant.productId, status: "published" }))
+  )
     throw Error("This product is unavailable.");
   const next = Math.min(variant.maxQuantity, 100, add ? (line?.quantity ?? 0) + wanted : wanted);
   if (line) {
@@ -164,7 +168,7 @@ export async function listToBasket(userId: string, input: { listId?: unknown; to
 export async function describeItems(items: { variantId: unknown; quantity: number; addedBy: unknown }[]) {
   const variantIds = items.map((item) => item.variantId);
   const [variants, stock, people] = await Promise.all([
-    ProductVariant.find({ _id: { $in: variantIds } }),
+    ProductVariant.find({ _id: { $in: variantIds }, active: { $ne: false } }),
     InventoryItem.find({ variantId: { $in: variantIds } }),
     User.find({ _id: { $in: items.map((item) => item.addedBy) } }).select("name"),
   ]);

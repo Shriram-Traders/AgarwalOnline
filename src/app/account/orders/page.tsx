@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Receipt } from "lucide-react";
 import { requirePage } from "@/lib/auth/session";
 import { Order } from "@/lib/commerce/models";
-import { displayStatus, formatPrice} from "@/lib/display";
+import { OrderHistory } from "@/components/order-history";
 export const metadata = { title: "Your orders", robots: { index: false } };
 export default async function Orders() {
   const user = await requirePage("order:own");
@@ -16,20 +16,7 @@ export default async function Orders() {
         <Link className="secondary-button" href="/account">Back to account</Link>
       </div>
       {orders.length ? (
-        orders.map((o) => (
-          <Link
-            className="panel order-row"
-            key={String(o._id)}
-            href={`/account/orders/${o._id}`}
-          >
-            <strong>{o.number}</strong>
-            <span>
-              {displayStatus(o.orderStatus)} · {displayStatus(o.deliveryStatus)}
-            </span>
-            <span>{o.deliveryDate}</span>
-            <strong>{formatPrice(o.totalPaise)} →</strong>
-          </Link>
-        ))
+        <OrderHistory orders={orders} />
       ) : (
         <div className="panel empty-state">
           <Receipt size={40} strokeWidth={1.5} className="empty-icon" aria-hidden="true" />

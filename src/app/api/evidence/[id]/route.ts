@@ -9,20 +9,25 @@ export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const user = await currentUser();
   const { id } = await params;
-  if (!user || !objectId.safeParse(id).success)
+  if (!objectId.safeParse(id).success)
     return new Response("Not found", { status: 404 });
   const evidence = await UploadedEvidence.findById(id);
   if (!evidence) return new Response("Not found", { status: 404 });
-  let allowed =
-    user.roles.some((role) => role === "admin" || role === "super-admin") ||
-    String(evidence.ownerId) === user.id;
-  if (!allowed && user.roles.includes("delivery") && evidence.orderId)
-    allowed = Boolean(
-      await Order.exists({ _id: evidence.orderId, assignedTo: user.id }),
-    );
-  if (!allowed) return new Response("Not found", { status: 404 });
+  // product photos are shown to every shopper, signed in or not; the rest stay private
+  const isProductPhoto = evidence.purpose === "product";
+  if (!isProductPhoto) {
+    const user = await currentUser();
+    if (!user) return new Response("Not found", { status: 404 });
+    let allowed =
+      user.roles.some((role) => role === "admin" || role === "super-admin") ||
+      String(evidence.ownerId) === user.id;
+    if (!allowed && user.roles.includes("delivery") && evidence.orderId)
+      allowed = Boolean(
+        await Order.exists({ _id: evidence.orderId, assignedTo: user.id }),
+      );
+    if (!allowed) return new Response("Not found", { status: 404 });
+  }
   if (evidence.provider === "cloudinary")
     return Response.redirect(evidence.url, 302);
   try {
@@ -38,7 +43,9 @@ export async function GET(
       headers: {
         "Content-Type": evidence.mime,
         "Content-Length": String(evidence.size),
-        "Cache-Control": "private, max-age=300",
+        "Cache-Control": isProductPhoto
+          ? "public, max-age=86400"
+          : "private, max-age=300",
         "X-Content-Type-Options": "nosniff",
       },
     });

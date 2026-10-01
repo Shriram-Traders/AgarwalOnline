@@ -5,12 +5,10 @@ import { connectDB } from "../db/connect";
 import {
   AuditLog,
   Category,
-  InventoryItem,
   Product,
   ProductVariant,
   User,
 } from "../db/models";
-import { InventoryMovement } from "../commerce/models";
 import { objectId } from "../commerce/service";
 
 async function authorize(actorId: string) {
@@ -103,15 +101,12 @@ export async function updateProductMetadata(actorId: string, input: unknown) {
       specifications: z.string().max(5000).default(""),
       featured: z.boolean(),
       bestseller: z.boolean(),
-      published: z.boolean(),
     })
     .parse(input);
   await mongoose.connection.transaction(async (session) => {
     const product = await Product.findById(data.productId).session(session);
     const category = await Category.findById(data.categoryId).session(session);
     if (!product || !category) throw Error("Product or category not found.");
-    if (product.status !== "published" && data.published)
-      throw Error("A draft product must use the approval workflow.");
     const before = product.toObject();
     const enHighlights = data.highlightsEn.split("\n").map((item) => item.trim()).filter(Boolean);
     const mrHighlights = data.highlightsMr.split("\n").map((item) => item.trim()).filter(Boolean);
@@ -146,7 +141,6 @@ export async function updateProductMetadata(actorId: string, input: unknown) {
       specifications,
       featured: data.featured,
       bestseller: data.bestseller,
-      status: data.published ? "published" : "draft",
     };
     product.set(after);
     await product.save({ session });
@@ -164,73 +158,69 @@ export async function updateProductMetadata(actorId: string, input: unknown) {
   });
 }
 
-export async function createVariant(actorId: string, input: unknown) {
+/**
+ * Take a product out of the shop, or put it back. Hiding used to be a checkbox in the details form
+ * that could never be undone; now both ways work, and showing needs at least one pack to sell.
+ */
+export async function setProductVisibility(actorId: string, input: unknown) {
   await authorize(actorId);
   const data = z
-    .object({
-      productId: objectId,
-      sku: z
-        .string()
-        .trim()
-        .regex(/^[A-Za-z\d-]+$/)
-        .max(60),
-      label: z.string().trim().min(1).max(40),
-      unit: z.enum(["piece", "kg", "g", "l", "ml"]),
-      packQuantity: z.coerce.number().positive().max(100000),
-      pricePaise: z.coerce.number().int().positive().max(10000000),
-      mrpPaise: z.coerce.number().int().positive().max(10000000),
-      maxQuantity: z.coerce.number().int().min(1).max(100),
-      stock: z.coerce.number().int().min(0).max(100000),
-    })
-    .refine((value) => value.pricePaise <= value.mrpPaise, {
-      message: "Price must not exceed MRP.",
-    })
+    .object({ productId: objectId, visible: z.enum(["show", "hide"]) })
     .parse(input);
   await mongoose.connection.transaction(async (session) => {
+    const product = await Product.findById(data.productId).session(session);
+    if (!product) throw Error("Product not found.");
+    const status = data.visible === "show" ? "published" : "draft";
+    if (product.status === status) return;
     if (
-      !(await Product.exists({
-        _id: data.productId,
-        status: "published",
-      }).session(session))
+      status === "published" &&
+      !(await ProductVariant.exists({ productId: product._id, active: { $ne: false } }).session(session))
     )
-      throw Error("Add variants only to approved products.");
-    const [variant] = await ProductVariant.create(
-      [
-        {
-          productId: data.productId,
-          sku: data.sku,
-          label: data.label,
-          unit: data.unit,
-          packQuantity: data.packQuantity,
-          pricePaise: data.pricePaise,
-          mrpPaise: data.mrpPaise,
-          maxQuantity: data.maxQuantity,
-        },
-      ],
-      { session },
-    );
-    await InventoryItem.create(
-      [{ variantId: variant._id, onHand: data.stock }],
-      { session },
-    );
-    await InventoryMovement.create(
-      [
-        {
-          variantId: variant._id,
-          actorId,
-          quantity: data.stock,
-          kind: "adjust",
-        },
-      ],
-      { session },
-    );
+      throw Error("Product has no pack to sell yet. Add or show a pack first.");
+    const before = product.status;
+    product.status = status;
+    await product.save({ session });
     await AuditLog.create(
       [
         {
           actorId,
-          action: "variant.create",
-          target: String(variant._id),
-          details: data,
+          action: status === "published" ? "product.show" : "product.hide",
+          target: data.productId,
+          details: { before, after: status },
+        },
+      ],
+      { session },
+    );
+  });
+}
+
+/**
+ * Change a pack's name or per-order limit, or hide it (past orders keep it; nobody can buy it).
+ * Price and stock still go through their own approval rules.
+ */
+export async function updateVariant(actorId: string, input: unknown) {
+  await authorize(actorId);
+  const data = z
+    .object({
+      variantId: objectId,
+      label: z.string().trim().min(1).max(40),
+      maxQuantity: z.coerce.number().int().min(1).max(100),
+      active: z.boolean(),
+    })
+    .parse(input);
+  await mongoose.connection.transaction(async (session) => {
+    const variant = await ProductVariant.findById(data.variantId).session(session);
+    if (!variant) throw Error("Pack not found.");
+    const before = { label: variant.label, maxQuantity: variant.maxQuantity, active: variant.active !== false };
+    variant.set({ label: data.label, maxQuantity: data.maxQuantity, active: data.active });
+    await variant.save({ session });
+    await AuditLog.create(
+      [
+        {
+          actorId,
+          action: "variant.update",
+          target: data.variantId,
+          details: { before, after: { label: data.label, maxQuantity: data.maxQuantity, active: data.active } },
         },
       ],
       { session },

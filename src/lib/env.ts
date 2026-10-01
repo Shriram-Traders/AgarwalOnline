@@ -94,7 +94,12 @@ const schema = z
       });
   });
 export function parseEnv(source: Record<string, string | undefined>) {
-  return schema.parse(source);
+  // `KEY=` (as .env.example ships its optional values) means "not set", not "an empty value":
+  // blank CRON_SECRET, BETTER_AUTH_SECRET or retention days used to stop the app from starting
+  const set = Object.fromEntries(
+    Object.entries(source).filter(([, value]) => value?.trim()),
+  );
+  return schema.parse(set);
 }
 export function getEnv() {
   return parseEnv(process.env);

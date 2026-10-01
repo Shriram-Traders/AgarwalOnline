@@ -1,5 +1,5 @@
 import { AuthForm } from "@/components/auth-form";
-import { listPath } from "@/lib/lists/links";
+import { returnPath } from "@/lib/return-path";
 import Link from "next/link";
 import { currentLocale } from "@/lib/i18n";
 import { GoogleButton, googleErrorMessage } from "@/components/google-button";
@@ -15,7 +15,7 @@ export default async function Signup({
   const mr = locale === "mr";
   const query = await searchParams;
   const googleError = googleErrorMessage(query.error, mr);
-  const back = listPath(query.then);
+  const back = returnPath(query.then);
   return (
     <section className="auth-card">
       <span className="eyebrow">{mr ? "नवीन अग्रवाल खाते" : "NEW AGARWAL ACCOUNT"}</span>

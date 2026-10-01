@@ -2,6 +2,7 @@ import bcrypt from "bcryptjs";
 import mongoose from "mongoose";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { AuditLog, User } from "../src/lib/db/models";
+import { Order, OrderTimelineEvent } from "../src/lib/commerce/models";
 import { connectDB } from "../src/lib/db/connect";
 import { createStaff, updateStaff } from "../src/lib/staff/service";
 import { getAuth } from "../src/lib/auth/better-auth";
@@ -19,7 +20,7 @@ describe.skipIf(!uri)("Staff access management", () => {
       AUTH_SECRET: "test-secret-".repeat(4),
     });
     await connectDB();
-    await Promise.all([User.init(), AuditLog.init()]);
+    await Promise.all([User.init(), AuditLog.init(), Order.init(), OrderTimelineEvent.init()]);
   });
 
   beforeEach(async () => {
@@ -182,5 +183,78 @@ describe.skipIf(!uri)("Staff access management", () => {
     await expect(updateStaff(superAdminId, input)).rejects.toThrow(
       "own account",
     );
+  });
+
+  it("won't change the owner's own role through 'Create a new account'", async () => {
+    await expect(
+      createStaff(superAdminId, { phone: "9000000071", role: "delivery", name: "", email: "", password: "" }),
+    ).rejects.toThrow("This number is yours");
+    expect((await User.findById(superAdminId))?.roles).toEqual(["customer", "super-admin"]);
+  });
+
+  it("can pause a staff member who joined with Google and has no phone number", async () => {
+    const googleStaff = await User.create({
+      name: "Gmail Admin",
+      email: "gmail-admin@example.test",
+      roles: ["customer", "admin"],
+    });
+    await updateStaff(superAdminId, {
+      staffId: String(googleStaff._id),
+      name: "Gmail Admin",
+      email: "",
+      phone: "",
+      role: "admin",
+      active: false,
+      password: "",
+    });
+    const paused = await User.findById(googleStaff._id);
+    expect(paused?.active).toBe(false);
+    expect(paused?.phone).toBeUndefined();
+    expect(paused?.email).toBe("gmail-admin@example.test");
+  });
+
+  it("hands a paused rider's waiting deliveries back, and holds off while one is on the road", async () => {
+    const rider = await User.create({
+      name: "Rider",
+      email: "rider@example.test",
+      phone: "9000000077",
+      roles: ["customer", "delivery"],
+    });
+    const order = (deliveryStatus: string, n: number) =>
+      Order.create({
+        customerId: superAdminId,
+        number: `RIDER-${n}`,
+        idempotencyKey: `rider-${n}`,
+        items: [],
+        address: {},
+        slotId: new mongoose.Types.ObjectId(),
+        paymentMethod: "cod",
+        subtotalPaise: 100,
+        deliveryPaise: 0,
+        totalPaise: 100,
+        orderStatus: "confirmed",
+        fulfilmentStatus: "ready",
+        deliveryStatus,
+        assignedTo: rider._id,
+      });
+    const waiting = await order("assigned", 1);
+    const onTheRoad = await order("out-for-delivery", 2);
+    const pause = () =>
+      updateStaff(superAdminId, {
+        staffId: String(rider._id),
+        name: "Rider",
+        email: "rider@example.test",
+        phone: "9000000077",
+        role: "delivery",
+        active: false,
+        password: "",
+      });
+    await expect(pause()).rejects.toThrow("out for delivery right now");
+    expect((await User.findById(rider._id))?.active).toBe(true);
+    await Order.updateOne({ _id: onTheRoad._id }, { deliveryStatus: "delivered" });
+    expect((await pause()).released).toBe(1);
+    const back = await Order.findById(waiting._id);
+    expect(back?.deliveryStatus).toBe("unassigned");
+    expect(back?.assignedTo).toBeUndefined();
   });
 });

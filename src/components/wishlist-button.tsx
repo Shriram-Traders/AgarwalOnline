@@ -3,6 +3,9 @@
 import { useActionState } from "react";
 import { Heart } from "lucide-react";
 import { wishlistAction } from "@/lib/engagement/actions";
+import { safeAction } from "./safe-action";
+
+const toggleSaved = safeAction(wishlistAction);
 
 export function WishlistButton({
   productId,
@@ -14,7 +17,7 @@ export function WishlistButton({
   name: string;
   saved?: boolean;
 }) {
-  const [state, action, pending] = useActionState(wishlistAction, { saved });
+  const [state, action, pending] = useActionState(toggleSaved, { saved });
   return (
     <form action={action} className="wishlist-control">
       <input type="hidden" name="productId" value={productId} />

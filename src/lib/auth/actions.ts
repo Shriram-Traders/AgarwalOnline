@@ -17,7 +17,7 @@ import { digest } from "./crypto";
 import { log } from "../logger";
 import { isAllowedOrigin } from "./origin";
 import { staffHome, type Role } from "./permissions";
-import { listPath } from "../lists/links";
+import { returnPath } from "../return-path";
 import { currentUser } from "./session";
 import { absorbBlocker, absorbGoogleAccount } from "./merge";
 import { sendClaimCode } from "./claim";
@@ -48,8 +48,9 @@ function safeError(error: unknown) {
   return "Unable to sign in. Please try again later.";
 }
 /** Staff go straight to their workspace; everyone else to the account, or the basket when a guest basket was merged. */
+/** Customers land in the shop (not their profile) after signing in; staff land in their workspace. */
 function landing(roles: readonly Role[], mergedBasket: boolean) {
-  return mergedBasket ? "/cart" : (staffHome(roles) ?? "/account");
+  return mergedBasket ? "/cart" : (staffHome(roles) ?? "/");
 }
 /**
  * Sign-in that started from "Continue with Google" on an existing email finishes by connecting Google;
@@ -57,13 +58,14 @@ function landing(roles: readonly Role[], mergedBasket: boolean) {
  */
 function afterSignIn(form: FormData, target: string) {
   if (form.get("then") === "connect-google") return "/account?connect=google";
-  return listPath(form.get("then")) ?? target;
+  // back to where they started: checkout, a product, a shared list…
+  return returnPath(form.get("then")) ?? target;
 }
 export async function customerPasswordLoginAction(
   _previous: AuthState,
   form: FormData,
 ): Promise<AuthState> {
-  let target = "/account";
+  let target = "/";
   try {
     await checkOrigin();
     await connectDB();
@@ -98,7 +100,7 @@ export async function customerEmailLoginAction(
   _previous: AuthState,
   form: FormData,
 ): Promise<AuthState> {
-  let target = "/account";
+  let target = "/";
   try {
     await checkOrigin();
     await connectDB();
@@ -175,7 +177,7 @@ export async function verifyOTPAction(
   _previous: AuthState,
   form: FormData,
 ): Promise<AuthState> {
-  let target = "/account";
+  let target = "/";
   try {
     await checkOrigin();
     await connectDB();

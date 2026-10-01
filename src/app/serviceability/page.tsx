@@ -2,7 +2,8 @@ import { deliveryRules } from "@/lib/commerce/service";
 import { connectDB } from "@/lib/db/connect";
 import { ServiceArea } from "@/lib/db/models";
 import { currentLocale } from "@/lib/i18n";
-export const metadata = { title: "Check your delivery area", description: "Enter your PIN code to see whether Agarwal General Stores delivers to you: Nagothane, Roha, Pali, RIL Township and NMD." };
+import { liveAreaNames } from "@/lib/commerce/areas";
+export const metadata = { title: "Check your delivery area", description: "Enter your PIN code to see whether Agarwal General Stores delivers to you in and around Nagothane." };
 export const dynamic = "force-dynamic";
 export default async function Serviceability({
   searchParams,
@@ -15,9 +16,10 @@ export default async function Serviceability({
   const rules = await deliveryRules();
   await connectDB();
   const valid = !!pin && /^\d{6}$/.test(pin);
-  const area = valid
-    ? await ServiceArea.findOne({ enabled: true, pincodes: pin })
-    : null;
+  const [area, areas] = await Promise.all([
+    valid ? ServiceArea.findOne({ enabled: true, pincodes: pin }) : null,
+    liveAreaNames(),
+  ]);
   return (
     <section className="auth-card utility-card serviceability-card">
       <span className="eyebrow">{mr ? "वितरण तपासणी" : "DELIVERY CHECK"}</span>
@@ -52,7 +54,11 @@ export default async function Serviceability({
         </div>
       )}
       <p className="muted service-area-list">
-        Nagothane · Roha · Pali · RIL Township · NMD
+        {areas.length
+          ? `${mr ? "सध्या वितरण: " : "Delivering now to "}${areas.join(" · ")}`
+          : mr
+            ? "वितरण क्षेत्रे लवकरच सुरू होतील."
+            : "Delivery areas are being set up."}
       </p>
     </section>
   );

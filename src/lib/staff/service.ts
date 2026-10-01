@@ -15,6 +15,7 @@ import {
   revokeStaffSessions,
   setStaffCredential,
 } from "../auth/staff-credentials";
+import { releaseRiderOrders } from "../operations/service";
 
 async function authorize(actorId: string) {
   await connectDB();
@@ -97,6 +98,19 @@ export async function createStaff(actorId: string, input: unknown) {
   await mongoose.connection.transaction(async (session) => {
     const existing = await User.findOne({ phone: data.phone }).session(session);
     if (existing) {
+      // typing your own number here used to change your own role, and could lock the shop out of the owner tools
+      if (String(existing._id) === actorId)
+        throw Error("Manage your own account from your account page. This number is yours.");
+      if (
+        staffRoleOf(existing.roles as Role[]) === "super-admin" &&
+        data.role !== "super-admin" &&
+        !(await User.countDocuments({
+          roles: "super-admin",
+          active: true,
+          _id: { $ne: existing._id },
+        }).session(session))
+      )
+        throw Error("Keep at least one active Super Admin.");
       if (data.name) existing.name = data.name;
       if (data.email) {
         existing.email = data.email;
@@ -153,8 +167,10 @@ export async function updateStaff(actorId: string, input: unknown) {
     .object({
       staffId: objectId,
       name,
-      email,
-      phone,
+      // blank keeps what is there: staff who joined by phone have only a stand-in address,
+      // and staff who joined with Google may have no number
+      email: blank(email),
+      phone: blank(phone),
       role: z.enum([...staffRoles, "customer"]),
       active: z.boolean(),
       password: z.union([password, z.literal("")]),
@@ -165,7 +181,9 @@ export async function updateStaff(actorId: string, input: unknown) {
   const passwordHash = data.password
     ? await hashStaffPassword(data.password)
     : undefined;
+  let released = 0;
   await mongoose.connection.transaction(async (session) => {
+    released = 0;
     const staff = await User.findOne({
       _id: data.staffId,
       roles: { $in: staffRoles },
@@ -192,9 +210,17 @@ export async function updateStaff(actorId: string, input: unknown) {
       role: currentRole,
       active: staff.active,
     };
+    // a rider who is paused or no longer delivers hands back deliveries not yet started
+    if (currentRole === "delivery" && staff.active && (!data.active || nextRole !== "delivery"))
+      released = await releaseRiderOrders(
+        String(staff._id),
+        actorId,
+        session,
+        `${staff.name} no longer delivers; ready for another rider`,
+      );
     staff.name = data.name;
-    staff.email = data.email;
-    staff.phone = data.phone;
+    if (data.email) staff.email = data.email;
+    if (data.phone) staff.phone = data.phone;
     staff.roles = rolesFor(nextRole);
     staff.active = data.active;
     await staff.save({ session });
@@ -213,17 +239,19 @@ export async function updateStaff(actorId: string, input: unknown) {
             before,
             after: {
               name: data.name,
-              email: data.email,
-              phone: data.phone,
+              email: data.email ?? before.email,
+              phone: data.phone ?? before.phone,
               role: nextRole,
               active: data.active,
             },
             passwordReset: Boolean(passwordHash),
             sessionsRevoked: !data.active || Boolean(passwordHash) || roleChanged,
+            deliveriesReleased: released,
           },
         },
       ],
       { session },
     );
   });
+  return { released };
 }

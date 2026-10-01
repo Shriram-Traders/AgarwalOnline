@@ -15,6 +15,7 @@ import {
 } from "./service";
 import { plainMessage } from "../form-errors";
 import { sendClaimCode } from "../auth/claim";
+import { log } from "../logger";
 export type MutationState = {
   error?: string;
   success?: string;
@@ -23,11 +24,14 @@ export type MutationState = {
 function errorMessage(e: unknown) {
   if (e instanceof z.ZodError) return plainMessage(e);
   const message = e instanceof Error ? e.message : "";
-  return /^(Select|Cash|This|Your|Too many basket|A basket|Insufficient|Order exceeds|UNAUTHENTICATED|FORBIDDEN)/.test(
-    message,
-  )
-    ? message
-    : "Unable to save. Please try again.";
+  // the codes the permission checks throw, said the way a customer would understand them
+  if (message === "UNAUTHENTICATED") return "Please sign in again to continue.";
+  if (message === "FORBIDDEN") return "Your account can’t do this. Please sign in with the right account.";
+  if (/^(Select|Cash|This|Your|Too many basket|A basket|Insufficient|Order exceeds)/.test(message))
+    return message;
+  // the customer sees a plain sentence; the real cause goes to the server log
+  log("error", "commerce.unexpected-error", { error: e });
+  return "Unable to save. Please try again.";
 }
 export async function cartAction(
   state: MutationState,
@@ -41,7 +45,7 @@ export async function addressAction(
   _state: MutationState,
   form: FormData,
 ): Promise<MutationState> {
-  let verifySignInNumber = false;
+  let next = "";
   try {
     const user = await requirePermission("order:own");
     const operation = z
@@ -106,16 +110,20 @@ export async function addressAction(
       const sent = await sendClaimCode(user.id, data.phone);
       if ("error" in sent)
         return { success: "Address saved.", error: `We couldn’t use this number to sign in: ${sent.error}` };
-      verifySignInNumber = true;
+      next = "/account/addresses?verify=1";
+    } else if (operation === "create" && form.get("then") === "/checkout") {
+      // added from the checkout popup: straight back to choosing a delivery time
+      revalidatePath("/checkout");
+      next = "/checkout";
     }
-    if (!verifySignInNumber)
+    if (!next)
       return {
         success: operation === "update" ? "Address updated." : "Address saved.",
       };
   } catch (e) {
     return { error: errorMessage(e) };
   }
-  redirect("/account/addresses?verify=1");
+  redirect(next);
 }
 
 export async function reorderAction(

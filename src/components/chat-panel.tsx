@@ -38,6 +38,18 @@ const mergeMessages = (current: MessageDTO[], incoming: MessageDTO[]) => {
   for (const m of incoming) map.set(m.id, m);
   return [...map.values()].sort((a, b) => a.sequence - b.sequence);
 };
+/**
+ * A UUID for a message being sent. crypto.randomUUID only exists on https and localhost pages,
+ * so a phone opening the dev server by the PC's Wi-Fi address (plain http) builds one itself.
+ */
+function messageId() {
+  if (typeof crypto.randomUUID === "function") return crypto.randomUUID();
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  bytes[6] = (bytes[6] & 0x0f) | 0x40; // version 4
+  bytes[8] = (bytes[8] & 0x3f) | 0x80; // RFC 9562 variant
+  const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
 export function ChatPanel({
   conversationId,
   userId,
@@ -151,7 +163,7 @@ export function ChatPanel({
       pending.current.body !== body ||
       pending.current.internal !== internal
     ) {
-      pending.current = { id: crypto.randomUUID(), body, internal };
+      pending.current = { id: messageId(), body, internal };
     }
     const sent = pending.current;
     try {

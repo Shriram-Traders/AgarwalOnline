@@ -7,9 +7,12 @@ import type { Locale } from "@/lib/locale-types";
 export function SiteFooter({
   locale,
   categories,
+  areas,
 }: {
   locale: Locale;
   categories: CategoryLink[];
+  /** The areas switched on in Store settings. */
+  areas: string[];
 }) {
   const mr = locale === "mr";
   return (
@@ -24,10 +27,13 @@ export function SiteFooter({
               ? "नागोठण्यातील तुमच्या ओळखीच्या दुकानातून लेखन साहित्य, शालेय वस्तू, भेटवस्तू आणि पार्टी साहित्य."
               : "Stationery, school supplies, gifts and party essentials from your neighbourhood store in Nagothane."}
           </p>
-          <p className="footer-areas">
-            <MapPin size={14} aria-hidden="true" />
-            Nagothane · Roha · Pali · RIL Township · NMD
-          </p>
+          {areas.length > 0 && (
+            <p className="footer-areas">
+              <MapPin size={14} aria-hidden="true" />
+              {mr ? "वितरण: " : "Delivering to "}
+              {areas.join(" · ")}
+            </p>
+          )}
         </div>
         <nav className="footer-shop" aria-label={mr ? "खरेदी" : "Shop"}>
           <h2>{mr ? "खरेदी" : "Shop"}</h2>

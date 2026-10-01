@@ -16,6 +16,8 @@ import { PageHeading } from "@/components/page-heading";
 import { RecordHistory } from "@/components/record-history";
 import { StatusPill } from "@/components/status-pill";
 import { AisleIcon } from "@/components/aisle-icon";
+import { PhotoInput } from "@/components/photo-input";
+import { ApprovalRequest } from "@/lib/governance/models";
 export const metadata = { title: "Edit product", robots: { index: false } };
 
 const STATUS_NAMES: Record<string, string> = {
@@ -36,7 +38,23 @@ export default async function EditProduct({ params }: { params: Promise<{ id: st
     Category.find({}).sort({ "name.en": 1 }),
     ProductVariant.find({ productId: product._id }).sort({ sku: 1 }),
   ]);
-  const stock = await InventoryItem.find({ variantId: { $in: packs.map((pack) => pack._id) } });
+  const [stock, waiting] = await Promise.all([
+    InventoryItem.find({ variantId: { $in: packs.map((pack) => pack._id) } }),
+    // price and stock changes for its packs, and new pack sizes for it, that an owner hasn't decided yet
+    ApprovalRequest.find({
+      state: "pending",
+      $or: [
+        { kind: { $in: ["price", "stock"] }, targetId: { $in: packs.map((pack) => pack._id) } },
+        { kind: "variant", "after.productId": id },
+      ],
+    }).sort({ createdAt: 1 }),
+  ]);
+  const describeRequest = (request: { kind: string; targetId: unknown; after: Record<string, unknown> }) => {
+    const pack = packs.find((item) => String(item._id) === String(request.targetId));
+    if (request.kind === "variant") return `New pack: ${String(request.after.label)} at ${formatPrice(Number(request.after.pricePaise))}`;
+    if (request.kind === "price") return `${pack?.label ?? "Pack"}: price to ${formatPrice(Number(request.after.pricePaise))}`;
+    return `${pack?.label ?? "Pack"}: stock ${Number(request.after.delta) > 0 ? "+" : ""}${Number(request.after.delta)}`;
+  };
   const image = product.image ?? productImages[product.slug];
   const category = categories.find((item) => String(item._id) === String(product.categoryId));
   const live = product.status === "published";
@@ -157,13 +175,33 @@ export default async function EditProduct({ params }: { params: Promise<{ id: st
             <label className="checkbox-label">
               <input type="checkbox" name="bestseller" defaultChecked={product.bestseller} /> Mark as popular
             </label>
-            <label className="checkbox-label">
-              <input type="checkbox" name="published" defaultChecked={live} disabled={!live} /> Live in the shop
-              {!live && <small>New products go live once an owner approves them.</small>}
-            </label>
           </fieldset>
         </ActionForm>
         <aside className="editor-side">
+          <div className="panel visibility-panel">
+            <h2>In the shop</h2>
+            <p>
+              {live ? (
+                <StatusPill tone="ok">Shoppers can see and buy it</StatusPill>
+              ) : (
+                <StatusPill tone="bad">Hidden from shoppers</StatusPill>
+              )}
+            </p>
+            <ActionForm
+              action={catalogManagementAction}
+              submit={live ? "Hide from the shop" : "Show in the shop"}
+              buttonClassName={live ? "secondary-button" : "primary-button"}
+              confirmMessage={
+                live
+                  ? "Shoppers won’t see or buy it until you show it again. Baskets holding it will ask to remove it."
+                  : undefined
+              }
+            >
+              <input type="hidden" name="operation" value="visibility" />
+              <input type="hidden" name="productId" value={id} />
+              <input type="hidden" name="visible" value={live ? "hide" : "show"} />
+            </ActionForm>
+          </div>
           <div className="panel">
             <h2>Photo</h2>
             <span className={`product-art editor-photo${image ? "" : " quiet"}`}>
@@ -177,8 +215,8 @@ export default async function EditProduct({ params }: { params: Promise<{ id: st
               <input type="hidden" name="purpose" value="product" />
               <input type="hidden" name="productId" value={id} />
               <label>
-                Photo <small>JPG, PNG or WebP, up to 5 MB</small>
-                <input type="file" name="file" accept="image/jpeg,image/png,image/webp" required />
+                Photo <small>JPG, PNG or WebP · big phone photos are made smaller automatically</small>
+                <PhotoInput />
               </label>
             </ActionForm>
           </div>
@@ -189,12 +227,16 @@ export default async function EditProduct({ params }: { params: Promise<{ id: st
                 {packs.map((pack) => {
                   const item = stock.find((row) => String(row.variantId) === String(pack._id));
                   const left = Math.max(0, (item?.onHand ?? 0) - (item?.reserved ?? 0));
+                  const hidden = pack.active === false;
                   return (
                     <li key={String(pack._id)}>
                       <div className="pack-row">
                         <span>
                           <strong>{pack.label}</strong>
-                          <small>SKU {pack.sku}</small>
+                          <small>
+                            SKU {pack.sku} · up to {pack.maxQuantity} per order
+                            {hidden ? " · hidden" : ""}
+                          </small>
                         </span>
                         <span className="pack-price">
                           {formatPrice(pack.pricePaise)}
@@ -213,7 +255,7 @@ export default async function EditProduct({ params }: { params: Promise<{ id: st
                       </p>
                       <details>
                         <summary>Change the price</summary>
-                        <ActionForm action={governanceAction} submit="Send for approval">
+                        <ActionForm action={governanceAction} submit="Change price">
                           <input type="hidden" name="operation" value="price" />
                           <input type="hidden" name="variantId" value={String(pack._id)} />
                           <label>
@@ -224,7 +266,34 @@ export default async function EditProduct({ params }: { params: Promise<{ id: st
                             MRP (₹)
                             <MoneyInput name="mrpRupees" defaultValue={pack.mrpPaise / 100} />
                           </label>
-                          <p className="muted">A second owner approves price changes before shoppers see them.</p>
+                          <p className="muted">
+                            An owner approves price changes before shoppers see them. If you are the only owner,
+                            yours apply at once.
+                          </p>
+                        </ActionForm>
+                      </details>
+                      <details>
+                        <summary>Name, order limit or hide this pack</summary>
+                        <ActionForm action={catalogManagementAction} submit="Save pack">
+                          <input type="hidden" name="operation" value="pack" />
+                          <input type="hidden" name="variantId" value={String(pack._id)} />
+                          <label>
+                            Pack label <small>What shoppers see, like “Pack of 10”</small>
+                            <input name="label" defaultValue={pack.label} maxLength={40} required />
+                          </label>
+                          <label>
+                            Most one shopper can buy
+                            <input
+                              name="maxQuantity"
+                              inputMode="numeric"
+                              pattern="[0-9]{1,3}"
+                              defaultValue={pack.maxQuantity}
+                              required
+                            />
+                          </label>
+                          <label className="checkbox-label">
+                            <input type="checkbox" name="active" defaultChecked={!hidden} /> Shoppers can buy this pack
+                          </label>
                         </ActionForm>
                       </details>
                     </li>
@@ -233,6 +302,27 @@ export default async function EditProduct({ params }: { params: Promise<{ id: st
               </ul>
             ) : (
               <p className="muted">No pack yet, so shoppers cannot buy this product.</p>
+            )}
+            {waiting.length > 0 && (
+              <div className="waiting-requests">
+                <h3>Waiting for an owner</h3>
+                <ul>
+                  {waiting.map((request) => (
+                    <li key={String(request._id)}>
+                      <span>{describeRequest(request)}</span>
+                      <ActionForm
+                        action={governanceAction}
+                        submit="Withdraw"
+                        className="form-stack inline-grant"
+                        buttonClassName="secondary-button compact-button"
+                      >
+                        <input type="hidden" name="operation" value="withdraw" />
+                        <input type="hidden" name="requestId" value={String(request._id)} />
+                      </ActionForm>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             )}
             <Link href={`/admin/inventory?new=pack&product=${id}#new-pack`} className="text-button">
               Add another pack size

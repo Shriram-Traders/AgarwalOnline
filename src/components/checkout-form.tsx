@@ -49,6 +49,10 @@ export function CheckoutForm({
     <ActionForm
       action={checkoutAction}
       className="form-stack checkout-form"
+      // the same order key goes with every retry, so a second tap finds the first order instead of placing another
+      offlineMessage="We couldn’t hear back from the store, so your order may or may not have gone through. Tap the button again: the same order is never placed twice."
+      // no delivery time to pick: the button could only fail, and the page says why
+      disabled={!available.length}
       submit={
         method === "cod"
           ? "Confirm Cash on Delivery order"
@@ -90,7 +94,11 @@ export function CheckoutForm({
             </select>
           </label>
           {!available.length && (
-            <p className="error-message">No available slots for this address.</p>
+            <p className="error-message" role="status">
+              No delivery times are open for this address right now, so the order can’t be placed yet.
+              Please try again later, choose another address, or{" "}
+              <Link href="/account/support">ask the store</Link>.
+            </p>
           )}
         </div>
         <div className="panel">
@@ -122,6 +130,9 @@ export function CheckoutForm({
             {promotionName ?? "Offer"} <strong>−{formatPrice(promotionDiscount)}</strong>
           </p>
         )}
+        <p className="checkout-offer-link">
+          <Link href="/cart#offers">{promotionDiscount > 0 ? "Change offer" : "Have an offer code?"}</Link>
+        </p>
         <p>
           Delivery <strong>{fee ? formatPrice(fee) : "FREE"}</strong>
         </p>

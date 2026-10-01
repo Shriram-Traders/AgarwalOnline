@@ -1,6 +1,7 @@
 "use client";
-import { useActionState, useCallback, useEffect, useId, useRef, useState } from "react";
+import { useActionState, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import type { MutationState } from "@/lib/commerce/actions";
+import { safeAction } from "./safe-action";
 
 const FOCUSABLE =
   'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
@@ -20,6 +21,8 @@ export function ActionForm({
   className = "form-stack",
   buttonClassName = "primary-button",
   confirmMessage,
+  offlineMessage,
+  disabled = false,
 }: {
   action: (state: MutationState, form: FormData) => Promise<MutationState>;
   children: React.ReactNode;
@@ -27,8 +30,13 @@ export function ActionForm({
   className?: string;
   buttonClassName?: string;
   confirmMessage?: string;
+  /** What to say when the store can't be reached; defaults to "nothing was lost, tap again". */
+  offlineMessage?: string;
+  /** Turn the button off when the form can't succeed yet (the page says why). */
+  disabled?: boolean;
 }) {
-  const [state, dispatch, pending] = useActionState(action, {});
+  const safe = useMemo(() => safeAction(action, offlineMessage), [action, offlineMessage]);
+  const [state, dispatch, pending] = useActionState(safe, {});
   const [confirming, setConfirming] = useState(false);
   const approved = useRef(false);
   const formRef = useRef<HTMLFormElement>(null);
@@ -96,7 +104,7 @@ export function ActionForm({
         {children}
         {state.error && <p role="alert" className="error-message">{state.error}</p>}
         {state.success && <p role="status" className="success-message">{state.success}</p>}
-        <button className={buttonClassName} disabled={pending} aria-busy={pending}>
+        <button className={buttonClassName} disabled={pending || disabled} aria-busy={pending}>
           {pending ? "Please wait…" : submit}
         </button>
       </form>

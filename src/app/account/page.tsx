@@ -24,6 +24,9 @@ import { Order } from "@/lib/commerce/models";
 import { WishlistItem, Notification } from "@/lib/engagement/models";
 import { User } from "@/lib/db/models";
 import { currentLocale } from "@/lib/i18n";
+import { customerStage } from "@/lib/display";
+import { dayLabel } from "@/lib/commerce/slots";
+import { OrderHistory } from "@/components/order-history";
 export const metadata = { title: "Your account", robots: { index: false } };
 export default async function Account({
   searchParams,
@@ -42,10 +45,15 @@ export default async function Account({
             orderStatus: { $in: ["placed", "confirmed"] },
           })
             .sort({ createdAt: -1 })
-            .select("number deliveryStatus deliveryDate"),
+            .select("number orderStatus fulfilmentStatus deliveryStatus paymentMethod paymentStatus deliveryDate"),
           Order.countDocuments({ customerId: user.id }),
           WishlistItem.countDocuments({ customerId: user.id }),
           Notification.countDocuments({ userId: user.id, readAt: null }),
+          // the latest few, so past orders are one tap away from the account page
+          Order.find({ customerId: user.id })
+            .sort({ createdAt: -1 })
+            .limit(5)
+            .select("number createdAt totalPaise items.quantity orderStatus fulfilmentStatus deliveryStatus paymentMethod paymentStatus codStatus"),
         ]);
   return (
     <section className="page-container">
@@ -81,7 +89,7 @@ export default async function Account({
             </Link>
             <Link href="/account/wishlist">
               <span>{customerOverview[2]}</span>
-              <small>{mr ? "जतन केलेल्या वस्तू" : "Saved items"}</small>
+              <small>{mr ? "आवडत्या वस्तू" : "Wishlist"}</small>
             </Link>
             <Link href="/account/notifications">
               <span>{customerOverview[3]}</span>
@@ -98,12 +106,32 @@ export default async function Account({
                 <strong>{customerOverview[0].number}</strong>
               </span>
               <span>
-                {customerOverview[0].deliveryStatus.replaceAll("-", " ")} ·{" "}
-                {customerOverview[0].deliveryDate}
+                {customerStage(customerOverview[0], locale).label} ·{" "}
+                {customerOverview[0].deliveryDate ? dayLabel(customerOverview[0].deliveryDate) : ""}
               </span>
               <ArrowUpRight size={20} />
             </Link>
           )}
+          <section className="account-history" aria-labelledby="history-title">
+            <div className="section-heading">
+              <div>
+                <h2 id="history-title">{mr ? "तुमच्या ऑर्डर" : "Your orders"}</h2>
+              </div>
+              {customerOverview[1] > 0 && (
+                <Link href="/account/orders" className="text-button">
+                  {mr ? `सर्व ${customerOverview[1]} ऑर्डर पाहा` : `See all ${customerOverview[1]} orders`}
+                </Link>
+              )}
+            </div>
+            {customerOverview[4].length ? (
+              <OrderHistory orders={customerOverview[4]} mr={mr} />
+            ) : (
+              <p className="muted">
+                {mr ? "अजून ऑर्डर नाही. " : "No orders yet. "}
+                <Link href="/catalog">{mr ? "खरेदी सुरू करा" : "Start shopping"}</Link>
+              </p>
+            )}
+          </section>
         </>
       )}
       <div className="dashboard-links">
@@ -121,8 +149,8 @@ export default async function Account({
                 MapPinned,
               ],
               [
-                mr ? "जतन केलेले" : "Saved",
-                mr ? "आवडलेल्या वस्तूंचे बोर्ड" : "Boards of things you like",
+                mr ? "आवडत्या वस्तू" : "Wishlist",
+                mr ? "नंतर घ्यायच्या वस्तू आणि बोर्ड" : "Things to buy later, and your boards",
                 "/account/wishlist",
                 Heart,
               ],

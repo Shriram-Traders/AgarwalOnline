@@ -29,8 +29,11 @@ export async function staffAction(
       await grantStaffRole(actor.id, input);
       granted = String(form.get("userId"));
     }
-    else if (operation === "update") await updateStaff(actor.id, input);
-    else throw Error("Invalid operation.");
+    else if (operation === "update") {
+      const { released } = await updateStaff(actor.id, input);
+      if (released)
+        success = `Staff account updated. ${released} delivery${released === 1 ? " is" : " orders are"} back in “Packed, no rider” for someone else to take.`;
+    } else throw Error("Invalid operation.");
     revalidatePath("/super-admin/staff");
     revalidatePath("/super-admin/audit");
     revalidatePath("/super-admin");
@@ -38,7 +41,7 @@ export async function staffAction(
   } catch (error) {
     if (error instanceof z.ZodError) return { error: plainMessage(error) };
     const message = error instanceof Error ? error.message : "";
-    if (/^(Manage your|Keep at least|Staff account|Name, work)/.test(message))
+    if (/^(Manage your|Keep at least|Staff account|Name, work|This rider has|Enter a 10-digit)/.test(message))
       return { error: message };
     if (/duplicate key/i.test(message))
       return { error: "That email or phone number is already in use." };

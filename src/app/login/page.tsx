@@ -3,7 +3,7 @@ import Link from "next/link";
 import { currentLocale } from "@/lib/i18n";
 import { GoogleButton, googleErrorMessage } from "@/components/google-button";
 import { googleEnabled } from "@/lib/auth/better-auth";
-import { listPath } from "@/lib/lists/links";
+import { returnPath } from "@/lib/return-path";
 export const metadata = { title: "Sign in", description: "Sign in with your mobile number or email to order from Agarwal General Stores." };
 
 export default async function Login({
@@ -15,7 +15,7 @@ export default async function Login({
   const mr = locale === "mr";
   const { error, then } = await searchParams;
   // arrived from a shared-list link while signed out
-  const back = listPath(then);
+  const back = returnPath(then);
   const googleError = googleErrorMessage(error, mr);
   const { email: emailResult } = await searchParams;
   // the email is already registered: sign in to that account once, then Google gets connected to it

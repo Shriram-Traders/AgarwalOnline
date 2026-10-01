@@ -116,6 +116,9 @@ async function login(page: import("@playwright/test").Page) {
   }
   await page.getByLabel("Verification code").fill("246810");
   await page.getByRole("button", { name: "Verify & continue" }).click();
+  // customers land in the shop after signing in; the account is one tap away
+  await expect(page).toHaveURL("/");
+  await page.goto("/account");
   await expect(
     page.getByRole("heading", { name: "Hello, Neighbour" }),
   ).toBeVisible();
@@ -161,7 +164,7 @@ test("customer OTP, basket, address, COD, tracking and cancellation", async ({
   await page.goto("/checkout");
   await page
     .getByLabel("Delivery slot")
-    .selectOption({ label: "2099-01-01 · 4:00 PM – 7:00 PM" });
+    .selectOption({ label: "Thu, 1 Jan · 4:00 PM – 7:00 PM" });
   await expect(
     page.getByRole("heading", { name: "Total to collect: ₹139" }),
   ).toBeVisible();
@@ -170,7 +173,7 @@ test("customer OTP, basket, address, COD, tracking and cancellation", async ({
     .getByRole("button", { name: "Confirm Cash on Delivery order" })
     .click();
   await expect(page).toHaveURL(/\/account\/orders\/[a-f0-9]+/);
-  await expect(page.getByText(/^Order: placed$/i)).toBeVisible();
+  await expect(page.getByText(/^Status: Order placed$/i)).toBeVisible();
   await page.getByRole("checkbox").check();
   await page.getByRole("button", { name: "Cancel this order" }).click();
   // the confirm dialog is aria-modal, so it must take focus and close on Escape
@@ -185,7 +188,7 @@ test("customer OTP, basket, address, COD, tracking and cancellation", async ({
   await page.getByRole("button", { name: "Cancel this order" }).click();
   await page.getByRole("button", { name: /^Yes, / }).click();
   await expect(
-    page.getByText(/^Order: cancelled$/i),
+    page.getByText(/^Status: Cancelled$/i),
   ).toBeVisible();
   await page.goto("/admin");
   await expect(
@@ -286,6 +289,8 @@ test("Super Admin manages staff and reviews the audit trail", async ({
   await form.getByLabel("Role").selectOption("delivery");
   await form.getByLabel("Temporary password").fill("Temporary-password-123");
   await form.getByRole("button", { name: "Create staff account" }).click();
+  // giving someone workspace access asks first
+  await page.getByRole("button", { name: /^Yes, / }).click();
   await expect(page.getByRole("status")).toContainText("Staff account created");
   await expect(page.getByText("New Delivery Partner")).toBeVisible();
 
@@ -558,7 +563,8 @@ test("a board saves things and friends join it", async ({ page, browser }) => {
   await expect(page.getByText("Saved to the board.")).toBeVisible();
   await shot(page, "save-to-board");
   await page.goto("/account/wishlist");
-  await expect(page.getByRole("link", { name: /All saved/ })).toContainText("1 item");
+  // "Saved" is called the Wishlist everywhere now
+  await expect(page.getByRole("link", { name: /All wishlist items/ })).toContainText("1 item");
   await page.getByRole("link", { name: /Diwali gifts/ }).click();
   await expect(page.getByRole("heading", { name: "Diwali gifts", level: 1 })).toBeVisible();
   await page.getByRole("button", { name: "Invite", exact: true }).click();

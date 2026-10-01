@@ -14,9 +14,11 @@ export async function runRetention() {
   const env = getEnv();
   await connectDB();
   const now = new Date();
-  const expired = await UploadedEvidence.find({
-    expiresAt: { $lte: now },
-  }).select("provider storageKey");
+  // product photos never expire, even if an older upload still carries a date
+  const expiredEvidence = { expiresAt: { $lte: now }, purpose: { $ne: "product" } };
+  const expired = await UploadedEvidence.find(expiredEvidence).select(
+    "provider storageKey",
+  );
   for (const file of expired) {
     if (file.provider === "local")
       await unlink(
@@ -56,7 +58,7 @@ export async function runRetention() {
     authVerifications,
     authRateLimits,
   ] = await Promise.all([
-    UploadedEvidence.deleteMany({ expiresAt: { $lte: now } }),
+    UploadedEvidence.deleteMany(expiredEvidence),
     Notification.deleteMany({ expiresAt: { $lte: now } }),
     AuditLog.deleteMany({
       at: {

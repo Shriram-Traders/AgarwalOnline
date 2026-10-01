@@ -25,5 +25,5 @@ export async function GET(request: Request) {
   // a first Google sign-in with an email we didn't know: ask whether they ordered before with a mobile number
   if (new URL(request.url).searchParams.get("new") === "1" && !user.phone)
     return to("/account?welcome=google");
-  return to(mergedBasket ? "/cart" : (staffHome(user.roles) ?? "/account"));
+  return to(mergedBasket ? "/cart" : (staffHome(user.roles) ?? "/"));
 }

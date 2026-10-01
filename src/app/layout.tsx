@@ -3,6 +3,7 @@ import localFont from "next/font/local";
 import "./globals.css";
 import { Header } from "@/components/header";
 import { SiteFooter } from "@/components/site-footer";
+import { liveAreaNames } from "@/lib/commerce/areas";
 import { AdaptiveShell } from "@/components/adaptive-shell";
 import { currentLocale } from "@/lib/i18n";
 import { catalogCategories } from "@/lib/catalog/queries";
@@ -52,7 +53,7 @@ export const metadata: Metadata = {
     template: "%s | Agarwal General Stores",
   },
   description:
-    "Stationery, school supplies, gifts and party essentials from Agarwal General Stores, delivered across Nagothane, Roha, Pali, RIL Township and NMD.",
+    "Stationery, school supplies, gifts and party essentials from Agarwal General Stores, delivered same day in and around Nagothane.",
 };
 export const viewport: Viewport = {
   themeColor: "#0f172a",
@@ -62,10 +63,11 @@ export const viewport: Viewport = {
 export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
-  const [locale, categories, user] = await Promise.all([
+  const [locale, categories, user, areas] = await Promise.all([
     currentLocale(),
     catalogCategories(),
     currentUser(),
+    liveAreaNames(),
   ]);
   const basket = user
     ? await cartFor(user.id)
@@ -91,7 +93,7 @@ export default async function RootLayout({
           <AdaptiveShell
             staffRole={staffRoleOf(user?.roles ?? [])}
             header={<Header locale={locale} categories={categories} />}
-            footer={<SiteFooter locale={locale} categories={categories} />}
+            footer={<SiteFooter locale={locale} categories={categories} areas={areas} />}
           >
             {children}
           </AdaptiveShell>
