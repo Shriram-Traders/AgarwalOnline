@@ -20,6 +20,30 @@ export function istDate(now: Date) {
     day: "2-digit",
   }).format(now);
 }
+/** Minutes after midnight, India time. */
+export function minutesNow(now = new Date()) {
+  const [hour, minute] = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Kolkata",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  })
+    .format(now)
+    .split(":")
+    .map(Number);
+  return hour * 60 + minute;
+}
+/**
+ * A same-day window that ends within the hour can't be delivered in time any more, so it is
+ * no longer offered. Slots without structured times (typed before these existed) stay bookable.
+ */
+export function stillBookable(
+  slot: { date: string; endMinutes?: number | null },
+  now = new Date(),
+) {
+  if (slot.date !== istDate(now) || slot.endMinutes == null) return true;
+  return slot.endMinutes - minutesNow(now) >= 60;
+}
 export function earliestDelivery(now: Date, rules: DeliveryRules) {
   const parts = new Intl.DateTimeFormat("en-GB", {
     timeZone: "Asia/Kolkata",

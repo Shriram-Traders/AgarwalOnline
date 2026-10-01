@@ -2,7 +2,16 @@ import type { NextConfig } from "next";
 const config: NextConfig = {
   poweredByHeader: false,
   devIndicators: false,
+  // `npm run dev:lan` (scripts/dev-lan.mjs) serves phones on the same Wi-Fi; Next blocks its dev
+  // files for any address it wasn't started on unless it is listed here
+  allowedDevOrigins: process.env.DEV_LAN === "true" ? ["192.168.*.*", "10.*.*.*", "172.*.*.*"] : undefined,
   distDir: process.env.NEXT_TEST_BUILD === "true" ? ".next-e2e" : ".next",
+  experimental: {
+    // photo uploads go through server actions, which refuse bodies over 1 MB by default;
+    // photos are shrunk in the browser first (components/photo-input.tsx), this is the safety net.
+    // Vercel rejects request bodies over 4.5 MB, so stay under that.
+    serverActions: { bodySizeLimit: "4mb" },
+  },
   async headers() {
     return [
       {

@@ -5,6 +5,9 @@ import { useActionState, useState } from "react";
 import { ListPlus } from "lucide-react";
 import { listAction } from "@/lib/lists/actions";
 import { Popover } from "./popover";
+import { safeAction } from "./safe-action";
+
+const saveToList = safeAction(listAction);
 
 /** "Add to a different basket": one tap puts one of the chosen pack in a shared basket, or a new one. */
 export function AddToList({
@@ -16,7 +19,7 @@ export function AddToList({
   lists: { id: string; name: string }[];
   mr: boolean;
 }) {
-  const [state, action, pending] = useActionState(listAction, {});
+  const [state, action, pending] = useActionState(saveToList, {});
   const [variantId, setVariantId] = useState(variants[0].id);
   const [picked, setPicked] = useState<{ id?: string; name: string } | null>(null);
   const common = (

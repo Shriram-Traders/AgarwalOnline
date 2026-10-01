@@ -24,8 +24,7 @@ import { DeliveryPromise } from "@/components/delivery-promise";
 import { currentUser } from "@/lib/auth/session";
 import { currentLocale } from "@/lib/i18n";
 import { Order } from "@/lib/commerce/models";
-import { connectDB } from "@/lib/db/connect";
-import { ServiceArea } from "@/lib/db/models";
+import { liveAreaNames } from "@/lib/commerce/areas";
 import { recommendationsFor } from "@/lib/catalog/recommendations";
 import { Promotion } from "@/lib/promotions/models";
 import { discountPercent, formatPrice, minutesUntilCutoff } from "@/lib/display";
@@ -243,7 +242,7 @@ export default async function Home() {
       .sort({ minimumSubtotalPaise: 1 })
       .limit(2)
       .select("name code kind discountType discountValue minimumSubtotalPaise"),
-    connectDB().then(() => ServiceArea.find({}).select("name")),
+    liveAreaNames(),
   ]);
   const previousOrder =
     user
@@ -262,7 +261,7 @@ export default async function Home() {
   const t = copy[locale];
   const cutoff = `${rules.cutoffHour % 12 || 12} ${rules.cutoffHour >= 12 ? "PM" : "AM"}`;
   const freeFrom = formatPrice(rules.freeThresholdPaise);
-  const areas = areaDocs.map((area: { name: string }) => area.name).join(" · ");
+  const areas = areaDocs.join(" · ");
   const bestsellers = products.filter((product) => product.bestseller);
   const savings = products
     .map((product) => ({

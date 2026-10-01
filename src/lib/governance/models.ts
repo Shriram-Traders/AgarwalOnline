@@ -1,18 +1,21 @@
 import mongoose, { Schema } from "mongoose";
 const approval = new Schema(
   {
-    kind: { type: String, enum: ["product", "price", "stock"], required: true },
+    // variant: a new pack size for a product that is already in the shop
+    kind: { type: String, enum: ["product", "price", "stock", "variant"], required: true },
     targetId: { type: Schema.Types.ObjectId, required: true },
     requesterId: { type: Schema.Types.ObjectId, ref: "User", required: true },
     reviewerId: { type: Schema.Types.ObjectId, ref: "User" },
     state: {
       type: String,
-      enum: ["pending", "approved", "rejected", "published"],
+      // withdrawn: taken back by the person who asked; failed: approved for later but could not be applied then
+      enum: ["pending", "approved", "rejected", "published", "withdrawn", "failed"],
       default: "pending",
     },
     before: Schema.Types.Mixed,
     after: { type: Schema.Types.Mixed, required: true },
     reason: String,
+    failureReason: String,
     scheduledAt: Date,
     reviewedAt: Date,
     publishedAt: Date,

@@ -228,7 +228,7 @@ The app validates these on startup and refuses to run with an invalid combinatio
 | `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` | Production | Set all three or none. Without them, photos are saved to `.local/uploads` on the server's disk. |
 | `ATLAS_SEARCH_ENABLED` | No | `true` switches product search to Atlas Search. Enable it only after creating the index. |
 | `CRON_SECRET` | On Vercel | 16 or more characters. Vercel Cron sends it to the job routes, which refuse every call without it. |
-| `EVIDENCE_RETENTION_DAYS` | No | Days to keep evidence photos. Defaults to 90. |
+| `EVIDENCE_RETENTION_DAYS` | No | Days to keep complaint, packing and delivery photos. Defaults to 90. Product photos are never deleted. |
 | `AUDIT_RETENTION_DAYS` | No | Days to keep audit entries. Defaults to 730. |
 | `SEED_DEMO` | Seeding only | Needed by `npm run seed`. The seed refuses to run in production. |
 
@@ -248,6 +248,7 @@ Tests use `TEST_MONGODB_URI`, passed on the command line. Vitest does not read `
 | `npm run owner:create` | Creates or resets the owner account, prompting for the password. |
 | `npm run seed` | Loads fictional demo data. |
 | `npm run migrate:phone-index` | One-time upgrade for databases created before 27 September 2026, so accounts made with Google can exist without a phone number. |
+| `npm run migrate:product-photos` | One-time upgrade for databases with product photos uploaded before 29 September 2026, which were wrongly given an expiry date and would have been deleted by the retention job. |
 | `npm run migrate:roles` | One-time upgrade for databases created before 24 September 2026, which stored a single `role` per user. |
 | `npm run reservations:expire` | Releases stock held by abandoned checkouts. |
 | `npm run approvals:publish` | Publishes approved changes whose scheduled time has passed. |

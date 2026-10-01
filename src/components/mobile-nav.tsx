@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { House, Grid2X2, ShoppingBag, UserRound } from "lucide-react";
+import { House, Grid2X2, Heart, ShoppingBag, UserRound } from "lucide-react";
 import { copy, type Locale } from "@/lib/locale-types";
 import { useBasket } from "./basket";
 export function MobileNav({ locale }: { locale: Locale }) {
@@ -13,16 +13,18 @@ export function MobileNav({ locale }: { locale: Locale }) {
       {[
         { href: "/", label: text.home, Icon: House },
         { href: "/catalog", label: text.explore, Icon: Grid2X2 },
+        { href: "/account/wishlist", label: text.saved, Icon: Heart },
         { href: "/cart", label: text.basket, Icon: ShoppingBag },
         { href: "/account", label: text.you, Icon: UserRound },
       ].map(({ href, label, Icon }) => {
         const active =
           href === "/"
             ? pathname === "/"
-            : pathname.startsWith(href) ||
-              (href === "/catalog" && pathname.startsWith("/products")) ||
-              // the staff workspace is reached from the account tab
-              (href === "/account" && /^\/(admin|super-admin|delivery)(\/|$)/.test(pathname));
+            : href === "/account"
+              ? // the wishlist has its own tab; the staff workspace is reached from the account tab
+                (pathname.startsWith("/account") && !pathname.startsWith("/account/wishlist")) ||
+                /^\/(admin|super-admin|delivery)(\/|$)/.test(pathname)
+              : pathname.startsWith(href) || (href === "/catalog" && pathname.startsWith("/products"));
         return (
           <Link
             key={href}

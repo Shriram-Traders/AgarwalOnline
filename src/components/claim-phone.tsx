@@ -2,6 +2,10 @@
 import { useActionState, useState } from "react";
 import { claimPhoneSendAction, claimPhoneVerifyAction } from "@/lib/auth/actions";
 import { keepTyped } from "@/components/action-form";
+import { safeAction } from "@/components/safe-action";
+
+const sendClaimCode = safeAction(claimPhoneSendAction);
+const verifyClaimCode = safeAction(claimPhoneVerifyAction);
 
 /**
  * For people who joined with Google: add a mobile number, or, if that number already has an
@@ -35,10 +39,10 @@ function ClaimPhoneSteps({
   onRestart,
 }: Props & { onRestart: () => void }) {
   const [sent, send, sending] = useActionState(
-    claimPhoneSendAction,
+    sendClaimCode,
     initial ? { ...initial, challengeId: "better-auth" } : {},
   );
-  const [verified, verify, verifying] = useActionState(claimPhoneVerifyAction, {});
+  const [verified, verify, verifying] = useActionState(verifyClaimCode, {});
   const fromAddress = context === "address";
   return (
     <section

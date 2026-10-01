@@ -33,6 +33,7 @@ const LABELS: Record<string, string> = {
   stock: "Opening stock",
   delta: "Quantity change",
   packedQuantity: "Packed quantity",
+  substituteQuantity: "How many went in instead",
   capacity: "Orders it can take",
   threshold: "Units",
   startsAt: "Start",

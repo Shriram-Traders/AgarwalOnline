@@ -8,6 +8,7 @@
   },
   "scripts": {
     "dev": "next dev --hostname 127.0.0.1",
+    "dev:lan": "node scripts/dev-lan.mjs",
     "prebuild": "tsx scripts/check-env.ts",
     "build": "next build",
     "start": "next start",
@@ -18,6 +19,7 @@
     "owner:create": "tsx --env-file=.env scripts/create-owner.ts",
     "migrate:roles": "tsx --env-file=.env scripts/migrate-roles.ts",
     "migrate:phone-index": "tsx --env-file=.env scripts/migrate-phone-index.ts",
+    "migrate:product-photos": "tsx --env-file=.env scripts/migrate-product-photos.ts",
     "test:e2e": "playwright test",
     "reservations:expire": "tsx --env-file=.env scripts/expire-reservations.ts",
     "approvals:publish": "tsx --env-file=.env scripts/publish-scheduled.ts",

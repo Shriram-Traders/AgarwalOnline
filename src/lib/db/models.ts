@@ -139,6 +139,8 @@ const variantSchema = new Schema(
       default: 10,
       validate: Number.isSafeInteger,
     },
+    /** A hidden pack stays on past orders but can't be bought. Missing means active (older packs). */
+    active: { type: Boolean, default: true },
   },
   opts,
 );

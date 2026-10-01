@@ -1,14 +1,36 @@
+import Link from "next/link";
+import mongoose from "mongoose";
+import { CalendarClock, MapPin, Plus } from "lucide-react";
 import { requirePage } from "@/lib/auth/session";
 import { ServiceArea, SearchSynonym } from "@/lib/db/models";
-import { DeliverySlot, SystemSetting } from "@/lib/commerce/models";
+import { DeliverySlot, SlotPattern, SystemSetting } from "@/lib/commerce/models";
 import { deliveryRules } from "@/lib/commerce/service";
+import { istDate } from "@/lib/commerce/delivery";
+import {
+  DAYS_AHEAD,
+  TIME_CHOICES,
+  WEEKDAYS,
+  clock,
+  dayLabel,
+  daysLabel,
+  ensureSlots,
+  slotGaps,
+  stillBookable,
+  windowLabel,
+} from "@/lib/commerce/slots";
 import { paymentsEnabled } from "@/lib/payments/provider";
 import { formatPrice } from "@/lib/display";
 import { ActionForm } from "@/components/action-form";
 import { PageHeading } from "@/components/page-heading";
+import { DataTable } from "@/components/data-table";
+import { EmptyState } from "@/components/empty-state";
+import { StatusPill } from "@/components/status-pill";
+import { RecordHistory } from "@/components/record-history";
 import {
   serviceAreaAction,
   slotAction,
+  slotAdjustAction,
+  slotPatternAction,
   rulesAction,
   synonymAction,
   stockThresholdAction,
@@ -16,16 +38,96 @@ import {
 import { MoneyInput } from "@/components/money-input";
 export const metadata = { title: "Store settings", robots: { index: false } };
 
-export default async function StoreSettings() {
+function TimeSelect({ name, label, defaultValue }: { name: string; label: string; defaultValue: number }) {
+  return (
+    <label>
+      {label}
+      <select name={name} defaultValue={defaultValue}>
+        {TIME_CHOICES.map((minutes) => (
+          <option key={minutes} value={minutes}>
+            {clock(minutes)}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function DayPicker({ checked }: { checked: number[] }) {
+  return (
+    <fieldset className="day-picker">
+      <legend>Days</legend>
+      {WEEKDAYS.map((day, index) => (
+        <label key={day} className="checkbox-label">
+          <input type="checkbox" name="days" value={index} defaultChecked={checked.includes(index)} />
+          {day}
+        </label>
+      ))}
+    </fieldset>
+  );
+}
+
+function CapacityInput({ defaultValue = 20 }: { defaultValue?: number }) {
+  return (
+    <label>
+      Orders it can take
+      <input name="capacity" inputMode="numeric" pattern="[0-9]{1,5}" defaultValue={defaultValue} required />
+    </label>
+  );
+}
+
+export default async function StoreSettings({
+  searchParams,
+}: {
+  searchParams: Promise<{ area?: string; pattern?: string; slot?: string; slots?: string }>;
+}) {
   await requirePage("settings:write");
-  const [areas, rules, slots, synonyms, stockThreshold] = await Promise.all([
+  const params = await searchParams;
+  // weekly delivery times become bookable slots two weeks ahead
+  await ensureSlots();
+  const now = new Date();
+  const today = istDate(now);
+  const until = new Date(`${today}T00:00:00Z`);
+  until.setUTCDate(until.getUTCDate() + DAYS_AHEAD);
+  const slotArea = params.slots && mongoose.isValidObjectId(params.slots) ? params.slots : undefined;
+  const [areas, rules, patterns, upcoming, synonyms, stockThreshold, gaps] = await Promise.all([
     ServiceArea.find({}).sort({ name: 1 }),
     deliveryRules(),
-    DeliverySlot.find({}).sort({ date: 1 }).limit(50),
+    SlotPattern.find({}).sort({ startMinutes: 1 }),
+    DeliverySlot.find({
+      date: { $gte: today, $lte: until.toISOString().slice(0, 10) },
+      ...(slotArea ? { areaId: slotArea } : {}),
+    })
+      .sort({ date: 1, startMinutes: 1, label: 1 })
+      .limit(300),
     SearchSynonym.find({}).limit(100),
     SystemSetting.findOne({ key: "large-stock-threshold" }).select("value"),
+    slotGaps(now),
   ]);
   const live = areas.filter((area) => area.enabled);
+  const areaName = new Map(areas.map((area) => [String(area._id), area.name as string]));
+  const editingArea =
+    params.area === "new"
+      ? "new"
+      : params.area && mongoose.isValidObjectId(params.area)
+        ? areas.find((area) => String(area._id) === params.area)
+        : undefined;
+  const editingPattern =
+    params.pattern && mongoose.isValidObjectId(params.pattern)
+      ? patterns.find((pattern) => String(pattern._id) === params.pattern)
+      : undefined;
+  const editingSlot =
+    params.slot && mongoose.isValidObjectId(params.slot)
+      ? (upcoming.find((slot) => String(slot._id) === params.slot) ?? (await DeliverySlot.findById(params.slot)))
+      : undefined;
+  const slotState = (slot: (typeof upcoming)[number]) =>
+    !slot.enabled
+      ? { tone: "bad" as const, label: "Closed" }
+      : !stillBookable(slot, now)
+        ? { tone: "neutral" as const, label: "Time passed" }
+        : slot.reserved >= slot.capacity
+          ? { tone: "warn" as const, label: "Full" }
+          : { tone: "ok" as const, label: "Open" };
   return (
     <section className="page-container">
       <PageHeading
@@ -33,13 +135,20 @@ export default async function StoreSettings() {
         title="Store settings"
         lead="How delivery works, where you deliver and which changes need a second look. Changes apply at checkout straight away."
       />
+      {gaps.areas.length > 0 && gaps.date && (
+        <p className="notice slot-gap" role="status">
+          <CalendarClock size={16} aria-hidden="true" /> No delivery times to book in{" "}
+          <strong>{gaps.areas.join(", ")}</strong> from {dayLabel(gaps.date, now).toLowerCase()} over the next
+          two open days, so shoppers there can’t check out. Add a weekly delivery time below.
+        </p>
+      )}
 
       <section className="settings-section" aria-labelledby="delivery-heading">
         <div className="settings-intro">
           <h2 id="delivery-heading">Delivery</h2>
           <p>
-            When orders still go out the same day, when delivery is free, and
-            the days the store is closed.
+            When orders still go out the same day, when delivery is free, the days the store is closed and
+            the delivery times shoppers can pick.
           </p>
           <p className={live.length ? "muted" : "notice"}>
             {live.length
@@ -63,135 +172,314 @@ export default async function StoreSettings() {
               </label>
               <label>
                 Free delivery from (₹)
-                <MoneyInput
-                  name="freeThresholdRupees"
-                  defaultValue={rules.freeThresholdPaise / 100}
-                />
+                <MoneyInput name="freeThresholdRupees" defaultValue={rules.freeThresholdPaise / 100} />
               </label>
               <label>
                 Closed dates <small>YYYY-MM-DD, separated by commas</small>
-                <input
-                  name="blackoutDates"
-                  defaultValue={rules.blackoutDates.join(",")}
-                />
+                <input name="blackoutDates" defaultValue={rules.blackoutDates.join(",")} />
               </label>
               <fieldset className="day-picker">
                 <legend>Closed every week on</legend>
-                {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(
-                  (day, index) => (
-                    <label key={day} className="checkbox-label">
-                      <input
-                        type="checkbox"
-                        name="holidays"
-                        value={index}
-                        defaultChecked={rules.holidays.includes(index)}
-                      />
-                      {day}
-                    </label>
-                  ),
-                )}
+                {WEEKDAYS.map((day, index) => (
+                  <label key={day} className="checkbox-label">
+                    <input
+                      type="checkbox"
+                      name="holidays"
+                      value={index}
+                      defaultChecked={rules.holidays.includes(index)}
+                    />
+                    {day}
+                  </label>
+                ))}
               </fieldset>
             </ActionForm>
           </div>
-          <div className="panel">
-            <h2>Delivery slots</h2>
-            {live.length ? (
-              <ActionForm action={slotAction} submit="Add slot">
+
+          <div className="panel" id="weekly">
+            <div className="panel-heading">
+              <div>
+                <span className="eyebrow">Repeats every week</span>
+                <h2>Delivery times</h2>
+              </div>
+            </div>
+            <p className="muted">
+              Set a time once, like Mon–Sat 4–7 PM, and slots for the next {DAYS_AHEAD} days are made
+              automatically. Closed days are skipped.
+            </p>
+            {editingPattern && (
+              <div className="panel adjust-panel" id="pattern">
+                <div className="panel-heading">
+                  <div>
+                    <span className="eyebrow">{areaName.get(String(editingPattern.areaId)) ?? "Area"}</span>
+                    <h3>{windowLabel(editingPattern.startMinutes, editingPattern.endMinutes)}</h3>
+                  </div>
+                  <Link href="/super-admin#weekly" className="text-button">
+                    Close
+                  </Link>
+                </div>
+                <ActionForm action={slotPatternAction} submit="Save delivery time">
+                  <input type="hidden" name="operation" value="update" />
+                  <input type="hidden" name="patternId" value={String(editingPattern._id)} />
+                  <DayPicker checked={editingPattern.days} />
+                  <CapacityInput defaultValue={editingPattern.capacity} />
+                  <small className="muted">
+                    To change the time itself, add the new time and remove this one.
+                  </small>
+                </ActionForm>
+                <div className="split-actions">
+                  <ActionForm
+                    action={slotPatternAction}
+                    submit={editingPattern.enabled ? "Pause delivery time" : "Resume delivery time"}
+                    buttonClassName="secondary-button"
+                    className="form-stack inline-grant"
+                  >
+                    <input type="hidden" name="operation" value={editingPattern.enabled ? "pause" : "resume"} />
+                    <input type="hidden" name="patternId" value={String(editingPattern._id)} />
+                  </ActionForm>
+                  <ActionForm
+                    action={slotPatternAction}
+                    submit="Remove delivery time"
+                    buttonClassName="secondary-button"
+                    className="form-stack inline-grant"
+                    confirmMessage="Its unbooked slots are taken away. Slots people already booked stay."
+                  >
+                    <input type="hidden" name="operation" value="remove" />
+                    <input type="hidden" name="patternId" value={String(editingPattern._id)} />
+                  </ActionForm>
+                </div>
+              </div>
+            )}
+            <DataTable
+              bare
+              caption="Weekly delivery times by area"
+              rows={patterns}
+              rowKey={(pattern) => String(pattern._id)}
+              columns={[
+                {
+                  header: "Time",
+                  cell: (pattern) => (
+                    <Link href={`/super-admin?pattern=${pattern._id}#pattern`} className="nowrap">
+                      {windowLabel(pattern.startMinutes, pattern.endMinutes)}
+                    </Link>
+                  ),
+                },
+                { header: "Area", cell: (pattern) => areaName.get(String(pattern.areaId)) ?? "—" },
+                { header: "Days", cell: (pattern) => daysLabel(pattern.days) },
+                { header: "Orders per slot", numeric: true, cell: (pattern) => pattern.capacity },
+                {
+                  header: "Status",
+                  cell: (pattern) =>
+                    pattern.enabled ? <StatusPill tone="ok">On</StatusPill> : <StatusPill>Paused</StatusPill>,
+                },
+              ]}
+              empty={
+                <p className="muted">No weekly delivery times yet. Add the first one below.</p>
+              }
+            />
+            <h3 className="subheading">Add a weekly delivery time</h3>
+            {areas.length ? (
+              <ActionForm action={slotPatternAction} submit="Add delivery time">
+                <input type="hidden" name="operation" value="create" />
                 <label>
                   Area
-                  <select name="areaId">
-                    {live.map((area) => (
+                  <select name="areaId" defaultValue={String((live[0] ?? areas[0])._id)}>
+                    {areas.map((area) => (
                       <option key={String(area._id)} value={String(area._id)}>
                         {area.name}
+                        {area.enabled ? "" : " (switched off)"}
                       </option>
                     ))}
                   </select>
                 </label>
-                <label>
-                  Date
-                  <input name="date" type="date" required />
-                </label>
-                <label>
-                  Delivery window
-                  <input
-                    name="label"
-                    placeholder="4:00 PM – 7:00 PM"
-                    minLength={5}
-                    required
-                  />
-                </label>
-                <label>
-                  Orders it can take
-                  <input
-                    name="capacity"
-                    type="number"
-                    min={1}
-                    max={10000}
-                    defaultValue={20}
-                  />
-                </label>
+                <DayPicker checked={[1, 2, 3, 4, 5, 6]} />
+                <div className="time-pair">
+                  <TimeSelect name="startMinutes" label="From" defaultValue={16 * 60} />
+                  <TimeSelect name="endMinutes" label="To" defaultValue={19 * 60} />
+                </div>
+                <CapacityInput />
               </ActionForm>
             ) : (
-              <p className="muted">
-                Switch on a delivery area below before adding slots.
-              </p>
+              <p className="muted">Add a delivery area below first.</p>
             )}
-            {slots.length > 0 && (
-              <ul className="settings-list">
-                {slots.map((slot) => (
-                  <li key={String(slot._id)}>
-                    <span>
-                      {slot.date} · {slot.label}
-                    </span>
-                    <small>
-                      {slot.reserved}/{slot.capacity} booked
-                    </small>
-                  </li>
-                ))}
-              </ul>
+            {live.length > 0 && (
+              <details className="one-off">
+                <summary>Add a one-off delivery time on a single date</summary>
+                <ActionForm action={slotAction} submit="Add one-off time">
+                  <label>
+                    Area
+                    <select name="areaId">
+                      {live.map((area) => (
+                        <option key={String(area._id)} value={String(area._id)}>
+                          {area.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    Date
+                    <input name="date" type="date" min={today} required />
+                  </label>
+                  <div className="time-pair">
+                    <TimeSelect name="startMinutes" label="From" defaultValue={16 * 60} />
+                    <TimeSelect name="endMinutes" label="To" defaultValue={19 * 60} />
+                  </div>
+                  <CapacityInput />
+                </ActionForm>
+              </details>
             )}
           </div>
         </div>
       </section>
 
-      <section className="settings-section" aria-labelledby="areas-heading">
+      <section className="settings-section" aria-labelledby="slots-heading" id="slots">
+        <div className="settings-intro">
+          <h2 id="slots-heading">Upcoming delivery slots</h2>
+          <p>
+            Every slot shoppers can pick over the next {DAYS_AHEAD} days. Close one to stop new
+            orders in it; orders already booked stay.
+          </p>
+        </div>
+        <div className="settings-cards">
+          {editingSlot && (
+            <div className="panel adjust-panel" id="slot">
+              <div className="panel-heading">
+                <div>
+                  <span className="eyebrow">
+                    {areaName.get(String(editingSlot.areaId)) ?? "Area"} · {dayLabel(editingSlot.date, now)}
+                  </span>
+                  <h3>{editingSlot.label}</h3>
+                </div>
+                <Link href="/super-admin#slots" className="text-button">
+                  Close
+                </Link>
+              </div>
+              <p className="muted">{editingSlot.reserved} booked so far.</p>
+              <ActionForm action={slotAdjustAction} submit="Save size">
+                <input type="hidden" name="operation" value="capacity" />
+                <input type="hidden" name="slotId" value={String(editingSlot._id)} />
+                <CapacityInput defaultValue={editingSlot.capacity} />
+              </ActionForm>
+            </div>
+          )}
+          <form className="audit-filters" role="search" aria-label="Filter slots by area" action="/super-admin#slots">
+            <label>
+              Area
+              <select name="slots" defaultValue={slotArea ?? ""}>
+                <option value="">All areas</option>
+                {areas.map((area) => (
+                  <option key={String(area._id)} value={String(area._id)}>
+                    {area.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button className="primary-button">Show slots</button>
+          </form>
+          <DataTable
+            caption="Delivery slots over the next two weeks, with bookings"
+            rows={upcoming}
+            rowKey={(slot) => String(slot._id)}
+            columns={[
+              { header: "Day", cell: (slot) => <strong>{dayLabel(slot.date, now)}</strong> },
+              { header: "Time", cell: (slot) => <span className="nowrap">{slot.label}</span> },
+              { header: "Area", cell: (slot) => areaName.get(String(slot.areaId)) ?? "—" },
+              {
+                header: "Booked",
+                numeric: true,
+                cell: (slot) => `${slot.reserved} of ${slot.capacity}`,
+              },
+              {
+                header: "Status",
+                cell: (slot) => {
+                  const state = slotState(slot);
+                  return <StatusPill tone={state.tone}>{state.label}</StatusPill>;
+                },
+              },
+              {
+                header: "Change",
+                cell: (slot) => (
+                  <span className="row-actions">
+                    <ActionForm
+                      action={slotAdjustAction}
+                      submit={slot.enabled ? "Close" : "Reopen"}
+                      className="form-stack inline-grant"
+                      buttonClassName="secondary-button compact-button"
+                    >
+                      <input type="hidden" name="operation" value={slot.enabled ? "close" : "open"} />
+                      <input type="hidden" name="slotId" value={String(slot._id)} />
+                    </ActionForm>
+                    <Link
+                      href={`/super-admin?slot=${slot._id}${slotArea ? `&slots=${slotArea}` : ""}#slot`}
+                      aria-label={`Change the size of ${dayLabel(slot.date, now)} ${slot.label}`}
+                    >
+                      Size
+                    </Link>
+                  </span>
+                ),
+              },
+            ]}
+            empty={
+              <EmptyState
+                icon={CalendarClock}
+                title="No slots coming up"
+                body="Add a weekly delivery time above and the slots appear here."
+                heading="h3"
+              />
+            }
+          />
+        </div>
+      </section>
+
+      <section className="settings-section" aria-labelledby="areas-heading" id="areas">
         <div className="settings-intro">
           <h2 id="areas-heading">Service areas</h2>
           <p>
-            The PIN codes you deliver to, what delivery costs there, and whether
-            cash on delivery is allowed.
+            The PIN codes you deliver to, what delivery costs there, and whether cash on delivery is
+            allowed.
           </p>
-          <p className="muted">
-            Only switch on PIN codes the store has confirmed it can serve.
-          </p>
+          <p className="muted">Only switch on PIN codes the store has confirmed it can serve.</p>
+          <Link href="/super-admin?area=new#area" className="primary-button">
+            <Plus size={16} aria-hidden="true" /> Add delivery area
+          </Link>
         </div>
-        <div className="settings-cards settings-cards-grid">
-          {areas.map((area) => (
-            <details
-              className="panel"
-              key={String(area._id)}
-              open={area.enabled}
-            >
-              <summary>
-                <span>
-                  {area.name}
-                  <small
-                    className={`staff-state ${area.enabled ? "active" : "inactive"}`}
-                  >
-                    {area.enabled
-                      ? `On · ${formatPrice(area.feePaise)} delivery${area.codEnabled ? " · COD" : ""}`
-                      : "Off"}
-                  </small>
-                </span>
-              </summary>
-              <ActionForm action={serviceAreaAction} submit="Save area">
-                <input name="areaId" type="hidden" value={String(area._id)} />
+        <div className="settings-cards">
+          {editingArea && (
+            <div className="panel adjust-panel" id="area">
+              <div className="panel-heading">
+                <div>
+                  <span className="eyebrow">{editingArea === "new" ? "New area" : "Edit area"}</span>
+                  <h3>{editingArea === "new" ? "Add a delivery area" : editingArea.name}</h3>
+                </div>
+                <Link href="/super-admin#areas" className="text-button">
+                  Close
+                </Link>
+              </div>
+              <ActionForm
+                action={serviceAreaAction}
+                submit={editingArea === "new" ? "Add area" : "Save area"}
+              >
+                <input type="hidden" name="operation" value={editingArea === "new" ? "create" : "update"} />
+                {editingArea !== "new" && (
+                  <input name="areaId" type="hidden" value={String(editingArea._id)} />
+                )}
+                <label>
+                  Area name
+                  <input
+                    name="name"
+                    defaultValue={editingArea === "new" ? "" : editingArea.name}
+                    placeholder="e.g. Nagothane"
+                    minLength={2}
+                    maxLength={60}
+                    required
+                  />
+                </label>
                 <label>
                   PIN codes, separated by commas
                   <input
                     name="pincodes"
-                    defaultValue={area.pincodes.join(", ")}
-                    placeholder="Confirmed service PIN codes"
+                    defaultValue={editingArea === "new" ? "" : editingArea.pincodes.join(", ")}
+                    placeholder="402106"
+                    inputMode="numeric"
                     required
                   />
                 </label>
@@ -199,35 +487,80 @@ export default async function StoreSettings() {
                   Delivery fee (₹)
                   <MoneyInput
                     name="feeRupees"
-                    defaultValue={area.feePaise / 100}
+                    defaultValue={editingArea === "new" ? 30 : editingArea.feePaise / 100}
                   />
                 </label>
                 <label>
                   Largest cash-on-delivery order (₹)
                   <MoneyInput
                     name="codLimitRupees"
-                    defaultValue={area.codLimitPaise / 100}
+                    defaultValue={editingArea === "new" ? 5000 : editingArea.codLimitPaise / 100}
                   />
                 </label>
-                <label>
+                <label className="checkbox-label">
                   <input
                     type="checkbox"
                     name="enabled"
-                    defaultChecked={area.enabled}
-                  />{" "}
+                    defaultChecked={editingArea === "new" ? false : editingArea.enabled}
+                  />
                   Deliver to this area
                 </label>
-                <label>
+                <label className="checkbox-label">
                   <input
                     type="checkbox"
                     name="codEnabled"
-                    defaultChecked={area.codEnabled}
-                  />{" "}
+                    defaultChecked={editingArea === "new" ? true : editingArea.codEnabled}
+                  />
                   Accept cash on delivery
                 </label>
               </ActionForm>
-            </details>
-          ))}
+              {editingArea !== "new" && (
+                <RecordHistory target={String(editingArea._id)} title="Changes to this area" />
+              )}
+            </div>
+          )}
+          <DataTable
+            caption="Delivery areas with their PIN codes, fee and cash on delivery"
+            rows={areas}
+            rowKey={(area) => String(area._id)}
+            columns={[
+              {
+                header: "Area",
+                cell: (area) => (
+                  <Link href={`/super-admin?area=${area._id}#area`}>
+                    <strong>{area.name}</strong>
+                  </Link>
+                ),
+              },
+              {
+                header: "Delivering",
+                cell: (area) =>
+                  area.enabled ? <StatusPill tone="ok">On</StatusPill> : <StatusPill tone="bad">Off</StatusPill>,
+              },
+              {
+                header: "PIN codes",
+                cell: (area) => (area.pincodes.length ? area.pincodes.join(", ") : "None yet"),
+              },
+              { header: "Delivery fee", numeric: true, cell: (area) => formatPrice(area.feePaise) },
+              {
+                header: "Cash on delivery",
+                cell: (area) => (area.codEnabled ? `Up to ${formatPrice(area.codLimitPaise)}` : "Off"),
+              },
+            ]}
+            empty={
+              <EmptyState
+                icon={MapPin}
+                title="No delivery areas yet"
+                body="Add the first area you deliver to, with its PIN codes."
+                heading="h3"
+                action={
+                  <Link href="/super-admin?area=new#area" className="primary-button">
+                    Add delivery area
+                  </Link>
+                }
+              />
+            }
+          />
         </div>
       </section>
 
@@ -235,25 +568,23 @@ export default async function StoreSettings() {
         <div className="settings-intro">
           <h2 id="checks-heading">Checks and search</h2>
           <p>
-            Which stock changes wait for a second owner, which words shoppers
-            can search with, and which outside services are connected.
+            Which stock changes wait for a second owner, which words shoppers can search with, and
+            which outside services are connected.
           </p>
         </div>
         <div className="settings-cards">
           <div className="panel">
             <h2>Stock changes that need approval</h2>
             <p className="muted">
-              A stock adjustment of this many units or more waits for a second
-              owner to approve it.
+              A stock adjustment of this many units or more waits for a second owner to approve it.
             </p>
             <ActionForm action={stockThresholdAction} submit="Save limit">
               <label>
                 Units
                 <input
                   name="threshold"
-                  type="number"
-                  min={1}
-                  max={100000}
+                  inputMode="numeric"
+                  pattern="[0-9]{1,6}"
                   defaultValue={Number(stockThreshold?.value ?? 100)}
                   required
                 />
@@ -262,27 +593,15 @@ export default async function StoreSettings() {
           </div>
           <div className="panel">
             <h2>Search words that mean the same</h2>
-            <p className="muted">
-              Shoppers who type any of these words see the same products.
-            </p>
+            <p className="muted">Shoppers who type any of these words see the same products.</p>
             <ActionForm action={synonymAction} submit="Save words">
               <label>
                 Name for this group
-                <input
-                  name="key"
-                  placeholder="notebook"
-                  pattern="[a-z0-9-]+"
-                  required
-                />
+                <input name="key" placeholder="notebook" pattern="[a-z0-9-]+" required />
               </label>
               <label>
                 Words, separated by commas
-                <textarea
-                  name="terms"
-                  placeholder="notebook, vahi, वही, copy"
-                  required
-                  maxLength={1000}
-                />
+                <textarea name="terms" placeholder="notebook, vahi, वही, copy" required maxLength={1000} />
               </label>
             </ActionForm>
             {synonyms.length > 0 && (
@@ -299,32 +618,21 @@ export default async function StoreSettings() {
           <div className="panel integration-status">
             <h2>Connected services</h2>
             <p>
-              <span
-                className={`staff-state ${paymentsEnabled() ? "active" : "inactive"}`}
-              >
-                Razorpay {paymentsEnabled() ? "connected" : "test mode only"}
+              <span className={`staff-state ${paymentsEnabled() ? "active" : "inactive"}`}>
+                Razorpay {paymentsEnabled() ? "connected" : "not set up: cash on delivery only"}
               </span>
             </p>
             <p>
-              <span
-                className={`staff-state ${process.env.CLOUDINARY_CLOUD_NAME ? "active" : "inactive"}`}
-              >
-                Cloudinary{" "}
-                {process.env.CLOUDINARY_CLOUD_NAME
-                  ? "connected"
-                  : "local storage only"}
+              <span className={`staff-state ${process.env.CLOUDINARY_CLOUD_NAME ? "active" : "inactive"}`}>
+                Cloudinary {process.env.CLOUDINARY_CLOUD_NAME ? "connected" : "local storage only"}
               </span>
             </p>
             <p>
-              <span
-                className={`staff-state ${process.env.SMS_API_URL ? "active" : "inactive"}`}
-              >
+              <span className={`staff-state ${process.env.SMS_API_URL ? "active" : "inactive"}`}>
                 SMS {process.env.SMS_API_URL ? "connected" : "test codes only"}
               </span>
             </p>
-            <p className="muted">
-              Keys live in the deployment settings and are never shown here.
-            </p>
+            <p className="muted">Keys live in the deployment settings and are never shown here.</p>
           </div>
         </div>
       </section>

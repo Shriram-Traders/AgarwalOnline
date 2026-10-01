@@ -7,7 +7,10 @@ import { z } from "zod";
 export async function GET(request: NextRequest) {
   try {
     const query = z.string().trim().min(2).max(60).parse(request.nextUrl.searchParams.get("q"));
-    await rateLimit(`suggest:${digest(request.headers.get("x-forwarded-for") ?? "local")}`, 30);
+    // per network, per minute: a family (or a whole mobile carrier's shared IP) typing normally
+    // used to hit a 30-per-15-minutes cap within a few searches
+    const network = (request.headers.get("x-forwarded-for") ?? "local").split(",")[0].trim();
+    await rateLimit(`suggest:${digest(network)}`, 60, 60_000);
     const products = await catalog({ q: query });
     return Response.json(
       products.slice(0, 8).map((product) => ({

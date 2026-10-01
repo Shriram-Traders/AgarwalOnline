@@ -46,6 +46,59 @@ describe.skipIf(!uri)("MongoDB catalog", () => {
       });
       await InventoryItem.create({ variantId: v._id, onHand: 10, reserved: 3 });
     }
+    const paper = await Category.create({
+      slug: "paper",
+      name: { en: "Notebooks & Paper", mr: "वह्या व कागद" },
+    });
+    for (const [slug, en, categorySlug, categoryId] of [
+      ["gel-pen-set", "Gel Pen Set", "staples", c._id],
+      ["hb-pencil", "HB Pencil", "staples", c._id],
+      ["a5-notebook", "A5 Notebook", "paper", paper._id],
+    ] as const) {
+      const p = await Product.create({
+        slug,
+        name: { en, mr: en },
+        description: { en, mr: en },
+        categoryId,
+        categorySlug,
+        status: "published",
+      });
+      const v = await ProductVariant.create({
+        productId: p._id,
+        sku: slug,
+        label: "1 piece",
+        unit: "piece",
+        packQuantity: 1,
+        pricePaise: 5000,
+        mrpPaise: 6000,
+      });
+      await InventoryItem.create({ variantId: v._id, onHand: 5, reserved: 0 });
+    }
+  });
+  const slugs = async (q: string) => (await catalog({ q })).map((item) => item.slug);
+  it("matches every word, plurals and partial words", async () => {
+    expect(await slugs("gel pens")).toEqual(["gel-pen-set"]);
+    expect(await slugs("pens")).toContain("gel-pen-set");
+    expect(await slugs("note")).toEqual(["a5-notebook"]);
+  });
+  it("ranks the closest match first", async () => {
+    expect((await slugs("pen"))[0]).toBe("gel-pen-set");
+  });
+  it("forgives a typo when nothing matches exactly", async () => {
+    expect(await slugs("notbook")).toEqual(["a5-notebook"]);
+    expect(await slugs("pencel")).toEqual(["hb-pencil"]);
+  });
+  it("finds products by their aisle's name, in English or Marathi", async () => {
+    expect(await slugs("notebooks paper")).toEqual(["a5-notebook"]);
+    expect(await slugs("वह्या")).toEqual(["a5-notebook"]);
+  });
+  it("keeps working when Atlas Search is switched on but unavailable", async () => {
+    process.env.ATLAS_SEARCH_ENABLED = "true";
+    try {
+      expect(await slugs("gel pens")).toEqual(["gel-pen-set"]);
+    } finally {
+      delete process.env.ATLAS_SEARCH_ENABLED;
+    }
   });
   afterAll(async () => {
     await mongoose.connection.dropDatabase();

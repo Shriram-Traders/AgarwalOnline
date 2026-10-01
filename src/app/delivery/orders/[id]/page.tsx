@@ -8,6 +8,9 @@ import { operationAction } from "@/lib/operations/actions";
 import { evidenceAction } from "@/lib/evidence/actions";
 import { UploadedEvidence } from "@/lib/evidence/models";
 import { MoneyInput } from "@/components/money-input";
+import { PhotoInput } from "@/components/photo-input";
+import { formatPrice } from "@/lib/display";
+import { inBagOf, lineNotes, type PackedLine } from "@/lib/operations/packing";
 export const metadata = { title: "Delivery", robots: { index: false } };
 export default async function DeliveryOrder({
   params,
@@ -55,22 +58,39 @@ export default async function DeliveryOrder({
           <p style={{ marginTop: 20 }}>
             {o.deliveryDate} · {o.deliveryWindow}
           </p>
+          {/* so the rider can answer "is everything there?" before asking for the code */}
+          <h3>In the parcel</h3>
+          <ul className="parcel-list">
+            {o.items.map((i: PackedLine & { variantId: string }) => (
+              <li key={String(i.variantId)}>
+                {inBagOf(i) ? `${inBagOf(i)} × ` : ""}
+                {i.name} · {i.label}
+                {lineNotes(i, o.paymentMethod === "cod").map((note) => (
+                  <small className="line-note" key={note}>
+                    {note}
+                  </small>
+                ))}
+              </li>
+            ))}
+          </ul>
           <h2>
             {o.paymentMethod === "cod"
               ? `Collect ₹${o.totalPaise / 100}`
               : "Prepaid order"}
           </h2>
+          {o.paymentMethod === "cod" && o.originalTotalPaise != null && (
+            <p className="muted">
+              The bill changed after packing (it was{" "}
+              {formatPrice(o.originalTotalPaise)}): items that weren’t available
+              aren’t charged.
+            </p>
+          )}
           <ActionForm action={evidenceAction} submit="Upload delivery photo">
             <input type="hidden" name="purpose" value="delivery" />
             <input type="hidden" name="orderId" value={id} />
             <label>
               Proof photograph
-              <input
-                type="file"
-                name="file"
-                accept="image/jpeg,image/png,image/webp"
-                required
-              />
+              <PhotoInput />
             </label>
           </ActionForm>
           <div className="evidence-strip">
@@ -173,12 +193,7 @@ export default async function DeliveryOrder({
               <input type="hidden" name="orderId" value={id} />
               <label>
                 Evidence photograph
-                <input
-                  type="file"
-                  name="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  required
-                />
+                <PhotoInput />
               </label>
             </ActionForm>
           </div>

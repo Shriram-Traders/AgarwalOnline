@@ -3,7 +3,8 @@ export type Locale = "en" | "mr";
 export const copy = {
   en: {
     freeFrom: (amount: string) => `Free delivery from ${amount}`,
-    welcomeCode: (minimum: string) => `New here? Use code on a first basket of ${minimum}+`,
+    welcomeCode: (minimum: string) =>
+      minimum ? `New here? Use code on a first basket of ${minimum}+` : "New here? Save on your first order with code",
     sameDay: (cutoff: string) => `Same-day before ${cutoff} · check your area`,
     search: "Search products",
     searchPlaceholder: "Search products",
@@ -25,7 +26,7 @@ export const copy = {
     explore: "Aisles",
     you: "You",
     orders: "Orders",
-    saved: "Saved",
+    saved: "Wishlist",
     notifications: "Notifications",
     support: "Talk to the store",
     workspace: "Store workspace",
@@ -33,10 +34,12 @@ export const copy = {
     governance: "Store settings",
     deliveries: "My deliveries",
     signOut: "Sign out",
+    back: "Back",
   },
   mr: {
     freeFrom: (amount: string) => `${amount} पासून मोफत वितरण`,
-    welcomeCode: (minimum: string) => `नवीन आहात? ${minimum}+ च्या पहिल्या बास्केटवर कोड वापरा`,
+    welcomeCode: (minimum: string) =>
+      minimum ? `नवीन आहात? ${minimum}+ च्या पहिल्या बास्केटवर कोड वापरा` : "नवीन आहात? पहिल्या ऑर्डरवर हा कोड वापरून बचत करा",
     sameDay: (cutoff: string) => `${cutoff} पूर्वी त्याच दिवशी · तुमचे क्षेत्र तपासा`,
     search: "उत्पादने शोधा",
     searchPlaceholder: "उत्पादने शोधा",
@@ -58,7 +61,7 @@ export const copy = {
     explore: "विभाग",
     you: "तुम्ही",
     orders: "ऑर्डर",
-    saved: "जतन केलेले",
+    saved: "आवडत्या वस्तू",
     notifications: "सूचना",
     support: "दुकानाशी बोला",
     workspace: "दुकानाचे काम",
@@ -66,5 +69,6 @@ export const copy = {
     governance: "दुकानाची सेटिंग्ज",
     deliveries: "माझ्या डिलिव्हरी",
     signOut: "साइन आउट",
+    back: "मागे",
   },
 } as const;

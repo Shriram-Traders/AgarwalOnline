@@ -61,6 +61,11 @@ const slotSchema = new Schema(
     areaId: ref("ServiceArea"),
     date: { type: String, required: true },
     label: { type: String, required: true },
+    // minutes after midnight, India time; older slots only have the typed label
+    startMinutes: { type: Number, min: 0, max: 1440 },
+    endMinutes: { type: Number, min: 0, max: 1440 },
+    /** Set when the slot was made from a weekly delivery time. */
+    patternId: { type: Schema.Types.ObjectId, ref: "SlotPattern" },
     capacity: { type: Number, min: 1, required: true },
     reserved: { type: Number, min: 0, default: 0 },
     enabled: { type: Boolean, default: true },
@@ -68,6 +73,20 @@ const slotSchema = new Schema(
   opts,
 );
 slotSchema.index({ areaId: 1, date: 1, label: 1 }, { unique: true });
+slotSchema.index({ date: 1, areaId: 1 });
+/** A delivery time that repeats every week, e.g. Mon–Sat 4–7 PM in Nagothane; slots are made from it ahead of time. */
+const slotPatternSchema = new Schema(
+  {
+    areaId: ref("ServiceArea"),
+    days: [{ type: Number, min: 0, max: 6 }],
+    startMinutes: { type: Number, min: 0, max: 1440, required: true },
+    endMinutes: { type: Number, min: 0, max: 1440, required: true },
+    capacity: { type: Number, min: 1, required: true },
+    enabled: { type: Boolean, default: true },
+  },
+  opts,
+);
+slotPatternSchema.index({ areaId: 1, startMinutes: 1, endMinutes: 1 }, { unique: true });
 const settingSchema = new Schema(
   {
     key: { type: String, unique: true, required: true },
@@ -84,6 +103,11 @@ const itemSchema = new Schema(
     quantity: { type: Number, required: true },
     pricePaise: { type: Number, required: true },
     linePaise: { type: Number, required: true },
+    // set by packing (operations/packing.ts): what was ordered, and what didn't go in as ordered
+    orderedQuantity: Number,
+    unavailableQuantity: Number,
+    substituteName: String,
+    substituteQuantity: Number,
   },
   { _id: false },
 );
@@ -112,9 +136,21 @@ const orderSchema = new Schema(
       code: String,
       name: String,
       discountPaise: Number,
+      // the offer's terms at checkout, so packing works it out again the same way even if the
+      // owner edits the running offer later (older orders fall back to the offer as it is now)
+      discountType: { type: String, enum: ["fixed", "percentage"] },
+      discountValue: Number,
+      maximumDiscountPaise: Number,
     },
     deliveryPaise: Number,
     totalPaise: Number,
+    /** The total as placed, kept once packing takes items that weren't there off a cash bill. */
+    originalTotalPaise: Number,
+    /**
+     * Paid online: what the items that weren't packed came to. The payment is left as it is; any
+     * refund is made from the owner's Refunds page.
+     */
+    shortfallPaise: Number,
     orderStatus: {
       type: String,
       enum: ["placed", "confirmed", "cancelled", "completed"],
@@ -213,6 +249,8 @@ export const GuestCart =
   mongoose.models.GuestCart || mongoose.model("GuestCart", guestCartSchema);
 export const DeliverySlot =
   mongoose.models.DeliverySlot || mongoose.model("DeliverySlot", slotSchema);
+export const SlotPattern =
+  mongoose.models.SlotPattern || mongoose.model("SlotPattern", slotPatternSchema);
 export const SystemSetting =
   mongoose.models.SystemSetting ||
   mongoose.model("SystemSetting", settingSchema);

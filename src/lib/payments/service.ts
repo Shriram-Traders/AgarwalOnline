@@ -23,6 +23,7 @@ import {
 import { digest } from "../auth/crypto";
 import { assertPermission, type Role } from "../auth/permissions";
 import { notify } from "../engagement/service";
+import { returnOffer } from "../promotions/service";
 async function releaseOrder(
   order: mongoose.Document & {
     _id: unknown;
@@ -67,6 +68,8 @@ async function releaseOrder(
     { session },
   );
   if (capacity.modifiedCount !== 1) throw Error("Slot invariant violation");
+  // the offer on an order that is called off goes back to the customer
+  await returnOffer(order._id, session);
   const previous = order.orderStatus;
   order.orderStatus = "cancelled";
   await OrderTimelineEvent.create(

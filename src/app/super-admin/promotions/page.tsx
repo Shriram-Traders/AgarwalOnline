@@ -1,13 +1,17 @@
+import Link from "next/link";
+import mongoose from "mongoose";
+import { Plus, TicketPercent } from "lucide-react";
 import { requirePage } from "@/lib/auth/session";
-import { TicketPercent } from "lucide-react";
 import { formatPrice } from "@/lib/display";
 import { Promotion } from "@/lib/promotions/models";
 import { promotionAdminAction } from "@/lib/promotions/actions";
+import { offerSaving } from "@/lib/promotions/service";
 import { ActionForm } from "@/components/action-form";
 import { MoneyInput } from "@/components/money-input";
 import { PageHeading } from "@/components/page-heading";
 import { DataTable } from "@/components/data-table";
 import { EmptyState } from "@/components/empty-state";
+import { RecordHistory } from "@/components/record-history";
 import { StatusPill, type Tone } from "@/components/status-pill";
 export const metadata = { title: "Offers", robots: { index: false } };
 
@@ -27,11 +31,134 @@ function istInput(date: Date) {
 }
 const day = (date: Date) => date.toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium" });
 
-export default async function PromotionsPage() {
+type Offer = {
+  _id: unknown;
+  name: string;
+  code?: string;
+  kind: "code" | "automatic";
+  discountType: "fixed" | "percentage";
+  discountValue: number;
+  minimumSubtotalPaise: number;
+  maximumDiscountPaise?: number;
+  perCustomerLimit: number;
+  globalLimit?: number;
+  startsAt: Date;
+  endsAt: Date;
+  active: boolean;
+  welcome?: boolean;
+  listed?: boolean;
+};
+
+function OfferFields({ offer, now }: { offer?: Offer; now: Date }) {
+  return (
+    <div className="staff-form-grid">
+      <label>
+        Name <small>For your team; shoppers see the saving</small>
+        <input name="name" defaultValue={offer?.name} minLength={3} maxLength={80} required />
+      </label>
+      <label>
+        How shoppers get it
+        <select name="kind" defaultValue={offer?.kind ?? "code"}>
+          <option value="code">They type a coupon code</option>
+          <option value="automatic">Applied automatically</option>
+        </select>
+      </label>
+      <label>
+        Coupon code <small>Only for coupon offers: 3–24 letters, numbers or dashes</small>
+        <input
+          name="code"
+          defaultValue={offer?.code}
+          maxLength={24}
+          pattern="[A-Za-z0-9-]{3,24}"
+          spellCheck={false}
+          autoComplete="off"
+        />
+      </label>
+      <label>
+        Saving
+        <select name="discountType" defaultValue={offer?.discountType ?? "percentage"}>
+          <option value="percentage">A percentage off</option>
+          <option value="fixed">A fixed amount off</option>
+        </select>
+      </label>
+      <label>
+        How much <small>A percentage from 1 to 90, or rupees like 25</small>
+        <input
+          name="discountValue"
+          defaultValue={
+            offer ? (offer.discountType === "fixed" ? offer.discountValue / 100 : offer.discountValue) : undefined
+          }
+          inputMode="numeric"
+          pattern="[0-9]{1,5}"
+          required
+          autoComplete="off"
+        />
+      </label>
+      <label>
+        Smallest basket (₹) <small>0 for any basket</small>
+        <MoneyInput name="minimumSubtotalRupees" defaultValue={(offer?.minimumSubtotalPaise ?? 0) / 100} />
+      </label>
+      <label>
+        Largest saving (₹) <small>Optional cap for percentage offers</small>
+        <MoneyInput
+          name="maximumDiscountRupees"
+          defaultValue={offer?.maximumDiscountPaise ? offer.maximumDiscountPaise / 100 : undefined}
+          required={false}
+        />
+      </label>
+      <label>
+        Uses per customer
+        <input
+          name="perCustomerLimit"
+          defaultValue={offer?.perCustomerLimit ?? 1}
+          inputMode="numeric"
+          pattern="[0-9]{1,3}"
+          required
+        />
+      </label>
+      <label>
+        Total uses <small>Optional: stop after this many orders</small>
+        <input name="globalLimit" defaultValue={offer?.globalLimit} inputMode="numeric" pattern="[0-9]{1,7}" />
+      </label>
+      <label>
+        Starts
+        <input name="startsAt" type="datetime-local" defaultValue={istInput(offer?.startsAt ?? now)} required />
+      </label>
+      <label>
+        Ends
+        <input
+          name="endsAt"
+          type="datetime-local"
+          defaultValue={istInput(offer?.endsAt ?? new Date(now.getTime() + 30 * 86400000))}
+          required
+        />
+      </label>
+      <label className="checkbox-label field-wide">
+        <input name="active" type="checkbox" defaultChecked={offer?.active ?? false} /> Switched on
+      </label>
+      <label className="checkbox-label field-wide">
+        <input name="welcome" type="checkbox" defaultChecked={offer?.welcome ?? false} /> Show this code in the
+        top bar as the welcome offer <small>Coupon offers only; replaces any other welcome offer</small>
+      </label>
+      <label className="checkbox-label field-wide">
+        <input name="listed" type="checkbox" defaultChecked={offer?.listed ?? true} /> List this code in the
+        basket under “Offers from the shop”{" "}
+        <small>Untick for a private code you hand out yourself; it still works when typed</small>
+      </label>
+    </div>
+  );
+}
+
+export default async function PromotionsPage({ searchParams }: { searchParams: Promise<{ edit?: string }> }) {
   await requirePage("promotion:write");
-  const promotions = await Promotion.find({}).sort({ createdAt: -1 }).limit(100);
+  const { edit } = await searchParams;
+  const promotions = (await Promotion.find({}).sort({ createdAt: -1 }).limit(200)) as unknown as (Offer & {
+    redemptionCount: number;
+  })[];
   const now = new Date();
-  const state = (promotion: { active: boolean; startsAt: Date; endsAt: Date }): [string, Tone] =>
+  const editing =
+    edit === "new" ? "new" : edit && mongoose.isValidObjectId(edit) ? promotions.find((item) => String(item._id) === edit) : undefined;
+  const state = (promotion: Offer): [string, Tone] =>
     !promotion.active
       ? ["Paused", "neutral"]
       : promotion.endsAt < now
@@ -46,11 +173,54 @@ export default async function PromotionsPage() {
         title="Offers"
         lead="Coupon codes and automatic savings. At checkout a basket gets the one best offer it qualifies for."
         aside={
-          <span className="live-chip">
-            <i /> {promotions.filter((item) => state(item)[0] === "Live").length} live
-          </span>
+          <Link href="/super-admin/promotions?edit=new#offer" className="primary-button">
+            <Plus size={16} aria-hidden="true" /> Create an offer
+          </Link>
         }
       />
+      {editing && (
+        <div className="panel adjust-panel" id="offer">
+          <div className="panel-heading">
+            <div>
+              <span className="eyebrow">{editing === "new" ? "New offer" : "Edit offer"}</span>
+              <h2>{editing === "new" ? "Create an offer" : editing.name}</h2>
+            </div>
+            <Link href="/super-admin/promotions" className="text-button">
+              Close
+            </Link>
+          </div>
+          <ActionForm
+            action={promotionAdminAction}
+            submit={editing === "new" ? "Create offer" : "Save offer"}
+            confirmMessage="If the offer is switched on, shoppers who qualify get it at checkout straight away."
+          >
+            <input type="hidden" name="operation" value={editing === "new" ? "create" : "update"} />
+            {editing !== "new" && <input type="hidden" name="promotionId" value={String(editing._id)} />}
+            <OfferFields offer={editing === "new" ? undefined : editing} now={now} />
+          </ActionForm>
+          {editing !== "new" && (
+            <>
+              <ActionForm
+                action={promotionAdminAction}
+                submit="Delete offer"
+                className="form-stack inline-grant"
+                buttonClassName="secondary-button"
+                confirmMessage="Offers people have used can’t be deleted; pause them instead."
+              >
+                <input type="hidden" name="operation" value="delete" />
+                <input type="hidden" name="promotionId" value={String(editing._id)} />
+              </ActionForm>
+              <RecordHistory target={String(editing._id)} title="Changes to this offer" />
+            </>
+          )}
+        </div>
+      )}
+      <p className="results-line">
+        <span>
+          <strong>{promotions.filter((item) => state(item)[0] === "Live").length}</strong> live of {promotions.length}{" "}
+          offers
+        </span>
+      </p>
       <DataTable
         caption="Offers with their saving, minimum basket, dates, use and status"
         rows={promotions}
@@ -61,11 +231,15 @@ export default async function PromotionsPage() {
             cell: (promotion) => (
               <span className="product-cell">
                 <span>
-                  <strong>{promotion.name}</strong>
+                  <Link href={`/super-admin/promotions?edit=${promotion._id}#offer`}>
+                    <strong>{promotion.name}</strong>
+                  </Link>
                   <small>
                     {promotion.code ? (
                       <>
                         Code <span className="offer-code">{promotion.code}</span>
+                        {promotion.welcome ? " · welcome offer" : ""}
+                        {promotion.listed === false ? " · private, not listed" : ""}
                       </>
                     ) : (
                       "Applied automatically"
@@ -75,18 +249,19 @@ export default async function PromotionsPage() {
               </span>
             ),
           },
-          {
-            header: "Saving",
-            cell: (promotion) =>
-              `${promotion.discountType === "percentage" ? `${promotion.discountValue}% off` : `${formatPrice(promotion.discountValue)} off`}${promotion.maximumDiscountPaise ? `, up to ${formatPrice(promotion.maximumDiscountPaise)}` : ""}`,
-          },
+          { header: "Saving", cell: (promotion) => offerSaving(promotion) },
           {
             header: "Basket from",
             numeric: true,
             cell: (promotion) => (promotion.minimumSubtotalPaise ? formatPrice(promotion.minimumSubtotalPaise) : "Any"),
           },
           { header: "Runs", cell: (promotion) => `${day(promotion.startsAt)} – ${day(promotion.endsAt)}` },
-          { header: "Used", numeric: true, cell: (promotion) => promotion.redemptionCount },
+          {
+            header: "Used",
+            numeric: true,
+            cell: (promotion) =>
+              `${promotion.redemptionCount}${promotion.globalLimit ? ` of ${promotion.globalLimit}` : ""} · ${promotion.perCustomerLimit}× each`,
+          },
           {
             header: "Status",
             cell: (promotion) => {
@@ -100,12 +275,11 @@ export default async function PromotionsPage() {
               <ActionForm
                 action={promotionAdminAction}
                 submit={promotion.active ? "Pause offer" : "Switch offer on"}
+                className="form-stack inline-grant"
                 buttonClassName="secondary-button compact-button"
                 // pausing is undone with one click; switching on hands out discounts, so it asks first
                 confirmMessage={
-                  promotion.active
-                    ? undefined
-                    : `Shoppers who qualify will get ${promotion.name} at checkout straight away.`
+                  promotion.active ? undefined : `Shoppers who qualify will get ${promotion.name} at checkout straight away.`
                 }
               >
                 <input type="hidden" name="operation" value="toggle" />
@@ -118,69 +292,16 @@ export default async function PromotionsPage() {
           <EmptyState
             icon={TicketPercent}
             title="No offers yet"
-            body="Create a coupon code or an automatic saving below."
+            body="Create a coupon code or an automatic saving."
             heading="h3"
+            action={
+              <Link href="/super-admin/promotions?edit=new#offer" className="primary-button">
+                Create an offer
+              </Link>
+            }
           />
         }
       />
-      <details className="panel create-staff" open={!promotions.length}>
-        <summary>Create an offer</summary>
-        <ActionForm action={promotionAdminAction} submit="Create offer">
-          <input type="hidden" name="operation" value="create" />
-          <div className="staff-form-grid">
-            <label>
-              Name <small>For your team; shoppers see the saving</small>
-              <input name="name" minLength={3} maxLength={80} required />
-            </label>
-            <label>
-              How shoppers get it
-              <select name="kind" defaultValue="code">
-                <option value="code">They type a coupon code</option>
-                <option value="automatic">Applied automatically</option>
-              </select>
-            </label>
-            <label>
-              Coupon code <small>Only for coupon offers; letters and numbers</small>
-              <input name="code" maxLength={24} spellCheck={false} autoComplete="off" />
-            </label>
-            <label>
-              Saving
-              <select name="discountType" defaultValue="percentage">
-                <option value="percentage">A percentage off</option>
-                <option value="fixed">A fixed amount off</option>
-              </select>
-            </label>
-            <label>
-              How much <small>A percentage like 10, or rupees like 25</small>
-              <input name="discountValue" inputMode="decimal" pattern="[0-9]+(\.[0-9]{1,2})?" required autoComplete="off" />
-            </label>
-            <label>
-              Smallest basket (₹) <small>0 for any basket</small>
-              <MoneyInput name="minimumSubtotalRupees" defaultValue={0} />
-            </label>
-            <label>
-              Largest saving (₹) <small>Optional cap for percentage offers</small>
-              <MoneyInput name="maximumDiscountRupees" required={false} />
-            </label>
-            <label>
-              Starts
-              <input name="startsAt" type="datetime-local" defaultValue={istInput(now)} required />
-            </label>
-            <label>
-              Ends
-              <input
-                name="endsAt"
-                type="datetime-local"
-                defaultValue={istInput(new Date(now.getTime() + 30 * 86400000))}
-                required
-              />
-            </label>
-            <label className="checkbox-label field-wide">
-              <input name="active" type="checkbox" /> Switch it on straight away
-            </label>
-          </div>
-        </ActionForm>
-      </details>
     </section>
   );
 }

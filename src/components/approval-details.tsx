@@ -16,7 +16,10 @@ const labels: Record<string, string> = {
   stock: "Opening stock",
   onHand: "Stock on hand",
   delta: "Stock adjustment",
+  maxQuantity: "Most one shopper can buy",
 };
+/** Keys the reviewer doesn't need to read (the product is already named in the title). */
+const HIDDEN = new Set(["productId"]);
 export function ApprovalDetails({
   values,
   categoryName,
@@ -25,10 +28,12 @@ export function ApprovalDetails({
   categoryName?: string;
 }) {
   if (!values)
-    return <p className="muted">New product — nothing is live yet.</p>;
+    return <p className="muted">New — nothing is live yet.</p>;
   return (
     <dl className="approval-details">
-      {Object.entries(values).map(([key, value]) => (
+      {Object.entries(values)
+        .filter(([key]) => !HIDDEN.has(key))
+        .map(([key, value]) => (
         <div key={key}>
           <dt>{labels[key] ?? key}</dt>
           <dd>
@@ -39,7 +44,10 @@ export function ApprovalDetails({
                     style: "currency",
                     currency: "INR",
                   }).format(value / 100)
-                : String(value || "—")}
+                : // 0 is a real value (no stock); only a missing one is a dash
+                  value === undefined || value === null || value === ""
+                  ? "—"
+                  : String(value)}
           </dd>
         </div>
       ))}

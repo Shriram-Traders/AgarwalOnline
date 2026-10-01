@@ -5,6 +5,9 @@ import { useActionState } from "react";
 import { Check, Heart } from "lucide-react";
 import { listAction } from "@/lib/lists/actions";
 import { Popover } from "./popover";
+import { safeAction } from "./safe-action";
+
+const saveToBoard = safeAction(listAction);
 
 /** A product page's Save: the heart plus "Save to…" a board, or a new one. */
 export function SaveToBoard({
@@ -20,7 +23,7 @@ export function SaveToBoard({
   boards: { id: string; name: string; has: boolean }[];
   mr: boolean;
 }) {
-  const [state, action, pending] = useActionState(listAction, {});
+  const [state, action, pending] = useActionState(saveToBoard, {});
   const common = (
     <>
       <input type="hidden" name="intent" value="save" />

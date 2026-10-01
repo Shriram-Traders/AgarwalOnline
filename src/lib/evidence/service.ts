@@ -54,8 +54,9 @@ export async function storeEvidence(
   if (!actor) throw Error("UNAUTHENTICATED");
   if (!(input.file instanceof File) || input.file.size < 1)
     throw Error("Choose a photograph.");
-  if (input.file.size > 5 * 1024 * 1024)
-    throw Error("Photographs must be 5 MB or smaller.");
+  // matches the 4 MB server-action body limit in next.config.ts, less room for the other form fields
+  if (input.file.size > 3.5 * 1024 * 1024)
+    throw Error("Photographs must be smaller than 3.5 MB. Please choose a smaller photo.");
   const extension = allowed.get(input.file.type);
   if (!extension) throw Error("Use a JPG, PNG or WebP photograph.");
 
@@ -136,9 +137,14 @@ export async function storeEvidence(
     mime: input.file.type,
     size: input.file.size,
     sha256,
-    expiresAt: new Date(
-      Date.now() + getEnv().EVIDENCE_RETENTION_DAYS * 86400 * 1000,
-    ),
+    // product photos are catalogue content, not evidence: they must never expire
+    ...(data.purpose === "product"
+      ? {}
+      : {
+          expiresAt: new Date(
+            Date.now() + getEnv().EVIDENCE_RETENTION_DAYS * 86400 * 1000,
+          ),
+        }),
   });
   if (provider === "local") {
     evidence.url = `/api/evidence/${evidence._id}`;

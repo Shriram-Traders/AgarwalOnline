@@ -140,6 +140,7 @@ if (superAdmin) {
         discountValue: 10,
         minimumSubtotalPaise: 49900,
         maximumDiscountPaise: 10000,
+        welcome: true,
         startsAt: new Date("2025-01-01T00:00:00.000Z"),
         endsAt: new Date("2035-12-31T23:59:59.999Z"),
         perCustomerLimit: 1,

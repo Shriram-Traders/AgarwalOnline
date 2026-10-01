@@ -20,7 +20,13 @@ import {
   InventoryMovement,
   OrderTimelineEvent,
 } from "../src/lib/commerce/models";
-import { checkout, cancelOrder } from "../src/lib/commerce/service";
+import {
+  checkout,
+  cancelOrder,
+  basketFor,
+  setCartLine,
+} from "../src/lib/commerce/service";
+import { Promotion, PromotionRedemption } from "../src/lib/promotions/models";
 const uri = process.env.TEST_MONGODB_URI;
 describe.skipIf(!uri)("Transactional COD checkout", () => {
   let customer: string,
@@ -180,6 +186,60 @@ describe.skipIf(!uri)("Transactional COD checkout", () => {
       0,
     );
     expect(await Order.countDocuments()).toBe(0);
+  });
+  it("shows a product taken off the shop in the basket, names it at checkout and lets it be removed", async () => {
+    await Product.updateOne({ slug: "rice" }, { $set: { status: "draft" } });
+    const basket = await basketFor(customer);
+    expect(basket.lines).toHaveLength(0);
+    expect(basket.unavailable).toEqual([
+      expect.objectContaining({ variantId: variant, name: "Rice", label: "1kg" }),
+    ]);
+    await expect(checkout(customer, input())).rejects.toThrow(
+      "Your basket has Rice, which is no longer sold",
+    );
+    await setCartLine(customer, variant, 0);
+    expect((await basketFor(customer)).unavailable).toHaveLength(0);
+    expect(await Order.countDocuments()).toBe(0);
+  });
+  it("says how many are left when the basket holds more than the stock", async () => {
+    await CartLine.updateOne({ customerId: customer }, { $set: { quantity: 3 } });
+    await expect(checkout(customer, input())).rejects.toThrow(
+      "Your basket has 3 of Rice, but only 1 is left",
+    );
+    await InventoryItem.updateOne({ variantId: variant }, { $set: { onHand: 0 } });
+    await expect(checkout(customer, input())).rejects.toThrow(
+      "Your basket has Rice, which is sold out",
+    );
+    expect((await InventoryItem.findOne({ variantId: variant })).reserved).toBe(0);
+  });
+  it("gives a once-per-customer offer back when the order is cancelled", async () => {
+    await Promotion.create({
+      name: "Welcome",
+      code: "HELLO10",
+      kind: "code",
+      discountType: "percentage",
+      discountValue: 10,
+      minimumSubtotalPaise: 0,
+      startsAt: new Date(Date.now() - 86400000),
+      endsAt: new Date(Date.now() + 86400000),
+      perCustomerLimit: 1,
+      active: true,
+      createdBy: customer,
+      updatedBy: customer,
+    });
+    const id = await checkout(customer, { ...input(), promotionCode: "HELLO10" });
+    expect((await Order.findById(id)).promotionDiscountPaise).toBe(1000);
+    // the offer's terms stay with the order, so packing works it out the same way if the owner edits it later
+    expect((await Order.findById(id).lean()).appliedPromotion).toMatchObject({
+      code: "HELLO10",
+      discountPaise: 1000,
+      discountType: "percentage",
+      discountValue: 10,
+    });
+    expect(await PromotionRedemption.countDocuments()).toBe(1);
+    await cancelOrder(customer, id);
+    expect(await PromotionRedemption.countDocuments()).toBe(0);
+    expect((await Promotion.findOne({ code: "HELLO10" })).redemptionCount).toBe(0);
   });
   it("releases inventory and capacity exactly once on cancellation", async () => {
     const id = await checkout(customer, input());

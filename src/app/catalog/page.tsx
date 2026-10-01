@@ -17,7 +17,7 @@ export async function generateMetadata({
   if (category)
     return {
       title: `${category.en} online in Nagothane`,
-      description: `Shop ${category.en.toLowerCase()} from Agarwal General Stores with same-day delivery across Nagothane, Roha, Pali, RIL Township and NMD.`,
+      description: `Shop ${category.en.toLowerCase()} from Agarwal General Stores with same-day delivery in and around Nagothane.`,
     };
   if (params.sort === "discount") return { title: "Today’s offers and discounts" };
   return { title: "All products" };

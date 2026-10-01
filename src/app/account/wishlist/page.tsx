@@ -42,14 +42,14 @@ export default async function SavedPage() {
     <section className="page-container">
       <PageHeading
         eyebrow={mr ? "तुमचे खाते" : "YOUR ACCOUNT"}
-        title={mr ? "जतन केलेले" : "Saved"}
-        lead={mr ? "♡ केलेले सर्व काही, बोर्डवर लावलेले आणि शेअर करता येणारे." : "Everything you hearted, on boards you can share."}
+        title={mr ? "आवडत्या वस्तू" : "Wishlist"}
+        lead={mr ? "तुम्ही ♡ केलेल्या सर्व वस्तू, आणि शेअर करता येणारे बोर्ड." : "Everything you hearted ♡, plus boards you can share."}
       />
       <div className="board-grid">
         <a href="#all-saved" className="board-tile">
           <Collage images={products.slice(0, 4).map(photo)} />
           <span className="board-tile-name">
-            <strong>{mr ? "सर्व जतन केलेले" : "All saved"}</strong>
+            <strong>{mr ? "सर्व आवडत्या वस्तू" : "All wishlist items"}</strong>
             <Heart size={16} fill="currentColor" aria-hidden="true" />
           </span>
           <small>{mr ? `${products.length} वस्तू` : `${products.length} item${products.length === 1 ? "" : "s"}`}</small>
@@ -88,7 +88,7 @@ export default async function SavedPage() {
       <section className="section" id="all-saved" aria-labelledby="all-saved-title">
         <div className="section-heading">
           <div>
-            <h2 id="all-saved-title">{mr ? "सर्व जतन केलेले" : "All saved"}</h2>
+            <h2 id="all-saved-title">{mr ? "सर्व आवडत्या वस्तू" : "All wishlist items"}</h2>
           </div>
         </div>
         {products.length ? (
@@ -101,7 +101,7 @@ export default async function SavedPage() {
           <EmptyState
             heading="h3"
             icon={Heart}
-            title={mr ? "अजून काही जतन केलेले नाही" : "Nothing saved yet"}
+            title={mr ? "तुमची यादी अजून रिकामी आहे" : "Your wishlist is empty"}
             body={mr ? "कोणत्याही उत्पादनावर ♡ टॅप करा आणि ते इथे दिसेल." : "Tap ♡ on any product and it appears here."}
             action={
               <Link className="primary-button" href="/catalog">

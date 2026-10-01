@@ -3,6 +3,9 @@
 import { useActionState } from "react";
 import { listAction } from "@/lib/lists/actions";
 import { ShareLink } from "./share-link";
+import { safeAction } from "./safe-action";
+
+const updateSharing = safeAction(listAction);
 
 /** The whole of sharing: WhatsApp, the link, and one switch for whether it lets people edit. */
 export function InvitePanel({
@@ -22,7 +25,7 @@ export function InvitePanel({
   owner: boolean;
   mr: boolean;
 }) {
-  const [state, action, pending] = useActionState(listAction, {});
+  const [state, action, pending] = useActionState(updateSharing, {});
   const message =
     kind === "board"
       ? `${mr ? "माझा बोर्ड पाहा" : "Have a look at my board"} “${name}”: ${url}`

@@ -3,9 +3,13 @@ import { PageHeading } from "@/components/page-heading";
 import Link from "next/link";
 import { LockKeyhole } from "lucide-react";
 import { randomUUID } from "node:crypto";
-import { requirePage } from "@/lib/auth/session";
-import { cartFor, deliveryRules } from "@/lib/commerce/service";
+import { currentUser, requirePage } from "@/lib/auth/session";
+import { currentLocale } from "@/lib/i18n";
+import { SignInGate } from "@/components/sign-in-prompt";
+import { AddressPopup } from "@/components/address-popup";
+import { basketFor, deliveryRules } from "@/lib/commerce/service";
 import { earliestDelivery } from "@/lib/commerce/delivery";
+import { dayLabel, ensureSlots, stillBookable } from "@/lib/commerce/slots";
 import { Address, DeliverySlot } from "@/lib/commerce/models";
 import { ServiceArea, User } from "@/lib/db/models";
 import { CheckoutForm } from "@/components/checkout-form";
@@ -13,20 +17,45 @@ import { cookies } from "next/headers";
 import { quoteCart } from "@/lib/promotions/service";
 export const metadata = { title: "Checkout", robots: { index: false } };
 export default async function Checkout() {
+  // no account yet: offer sign-in or sign-up in a popup, and come back here afterwards
+  if (!(await currentUser()))
+    return (
+      <section className="page-container">
+        <PageHeading eyebrow="Almost there" title="Checkout" />
+        <SignInGate mr={(await currentLocale()) === "mr"} />
+      </section>
+    );
   const user = await requirePage("order:own");
   const profile = await User.findById(user.id).select("preferredPaymentMethod");
-  const cart = await cartFor(user.id);
+  const { lines: cart, unavailable } = await basketFor(user.id);
+  // the order would be refused over these, so send the customer to fix them first
+  const needsAttention = [
+    ...unavailable.map((line) => `${line.name} is no longer sold.`),
+    ...cart
+      .filter((line) => line.quantity > line.available)
+      .map((line) =>
+        line.available
+          ? `Only ${line.available} of ${line.name} left.`
+          : `${line.name} is sold out.`,
+      ),
+  ];
   const addresses = await Address.find({ customerId: user.id });
   const areas = await ServiceArea.find({ enabled: true });
   const rules = await deliveryRules();
-  const earliest = earliestDelivery(new Date(), rules);
-  const slots = await DeliverySlot.find({
-    enabled: true,
-    date: { $gte: earliest },
-    $expr: { $lt: ["$reserved", "$capacity"] },
-  })
-    .sort({ date: 1 })
-    .limit(100);
+  const now = new Date();
+  const earliest = earliestDelivery(now, rules);
+  await ensureSlots();
+  // only the customer's own areas: a shared "first 100 slots" could leave an area with none
+  const slots = (
+    await DeliverySlot.find({
+      enabled: true,
+      areaId: { $in: [...new Set(addresses.map((address) => String(address.areaId)))] },
+      date: { $gte: earliest },
+      $expr: { $lt: ["$reserved", "$capacity"] },
+    })
+      .sort({ date: 1, startMinutes: 1, label: 1 })
+      .limit(300)
+  ).filter((slot) => stillBookable(slot, now));
   const options = addresses.flatMap((a) => {
     const area = areas.find(
       (s) => String(s._id) === String(a.areaId) && s.pincodes.includes(a.pin),
@@ -65,7 +94,19 @@ export default async function Checkout() {
           </p>
         }
       />
-      {!cart.length ? (
+      {needsAttention.length > 0 ? (
+        <div className="panel empty-state">
+          <h2>Some items in your basket need a change</h2>
+          <ul className="attention-list">
+            {needsAttention.map((text) => (
+              <li key={text}>{text}</li>
+            ))}
+          </ul>
+          <Link href="/cart" className="primary-button">
+            Review basket
+          </Link>
+        </div>
+      ) : !cart.length ? (
         <div className="panel empty-state">
           <h2>Your basket is empty.</h2>
           <p>Add a few items before checking out.</p>
@@ -74,13 +115,15 @@ export default async function Checkout() {
           </Link>
         </div>
       ) : !options.length ? (
-        <div className="panel empty-state">
-          <h2>Add a delivery address</h2>
-          <p>Save an address in a supported service area to continue.</p>
-          <Link href="/account/addresses" className="primary-button">
-            Manage addresses
-          </Link>
-        </div>
+        <AddressPopup
+          areas={areas.map((area) => ({
+            id: String(area._id),
+            name: area.name,
+            pincodes: [...area.pincodes],
+          }))}
+          phone={user.phone}
+          hasAddresses={addresses.length > 0}
+        />
       ) : (
         <CheckoutForm
           onlineEnabled={paymentsEnabled()}
@@ -96,7 +139,8 @@ export default async function Checkout() {
             .map((s) => ({
               id: String(s._id),
               areaId: String(s.areaId),
-              label: `${s.date} · ${s.label}`,
+              // "Today · 4:00 PM – 7:00 PM" instead of "2026-09-30 · …"
+              label: `${dayLabel(s.date, now)} · ${s.label}`,
             }))}
           subtotal={subtotal}
           promotionDiscount={quote.promotionDiscountPaise}

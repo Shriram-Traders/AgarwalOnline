@@ -143,9 +143,10 @@ describe.skipIf(!uri)("Packing, delivery and COD controls", () => {
       dimension: "fulfilment",
       next: "picking",
     });
+    // packed short with nothing said about the rest: kept as work in progress, and packing waits
     await savePacking(admin, {
       orderId,
-      items: [{ variantId, packedQuantity: 0, missing: true }],
+      items: [{ variantId, packedQuantity: 0, missing: false }],
     });
     await expect(
       changeOrderStatus(admin, {
@@ -153,7 +154,14 @@ describe.skipIf(!uri)("Packing, delivery and COD controls", () => {
         dimension: "fulfilment",
         next: "packed",
       }),
-    ).rejects.toThrow("Complete");
+    ).rejects.toThrow("Complete the packing checklist first: Rice (1kg)");
+    // nothing at all in the bag is a cancelled order, not a packed one
+    await expect(
+      savePacking(admin, {
+        orderId,
+        items: [{ variantId, packedQuantity: 0, missing: true }],
+      }),
+    ).rejects.toThrow("Nothing is packed");
   });
   it("verifies delivery, consumes stock once, and separates cash reconciliation", async () => {
     await ready();

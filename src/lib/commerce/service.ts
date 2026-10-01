@@ -26,20 +26,42 @@ import {
   earliestDelivery,
   istDate,
   rulesSchema,
+  stillBookable,
 } from "./delivery";
 import { notify } from "../engagement/service";
-import { bestPromotion } from "../promotions/service";
+import { bestPromotion, returnOffer } from "../promotions/service";
 import { Promotion, PromotionRedemption } from "../promotions/models";
 export const objectId = z.string().regex(/^[a-f\d]{24}$/i, "Invalid record.");
+/** A basket line that can't be bought any more: its product was taken off the shop (or the pack removed). */
+export type UnavailableLine = {
+  variantId: string;
+  name: string;
+  label: string;
+};
 export async function cartFor(customerId: string) {
+  return (await basketFor(customerId)).lines;
+}
+/**
+ * The basket split into lines that can be bought and lines that can't. The unavailable ones are
+ * kept (not silently skipped) so the basket can show them with a Remove button; checkout would
+ * otherwise refuse the order over an item the customer can't see.
+ */
+export async function basketFor(customerId: string) {
   await connectDB();
   const lines = await CartLine.find({ customerId });
   const result = [];
+  const unavailable: UnavailableLine[] = [];
   for (const line of lines) {
     const v = await ProductVariant.findById(line.variantId);
-    if (!v) continue;
-    const p = await Product.findOne({ _id: v.productId, status: "published" });
-    if (!p) continue;
+    const p = v ? await Product.findById(v.productId) : null;
+    if (!v || v.active === false || !p || p.status !== "published") {
+      unavailable.push({
+        variantId: String(line.variantId),
+        name: p?.name.en ?? "An item that is no longer sold",
+        label: v?.label ?? "",
+      });
+      continue;
+    }
     const inv = await InventoryItem.findOne({ variantId: v._id });
     result.push({
       id: String(line._id),
@@ -55,7 +77,7 @@ export async function cartFor(customerId: string) {
       maxQuantity: v.maxQuantity,
     });
   }
-  return result;
+  return { lines: result, unavailable };
 }
 export async function setCartLine(
   customerId: string,
@@ -73,6 +95,7 @@ export async function setCartLine(
   const variant = await ProductVariant.findById(variantId);
   if (
     !variant ||
+    variant.active === false ||
     quantity > variant.maxQuantity ||
     !(await Product.exists({ _id: variant.productId, status: "published" }))
   )
@@ -150,6 +173,9 @@ export async function checkout(customerId: string, input: unknown) {
       rules.holidays.includes(new Date(`${slot.date}T00:00:00Z`).getUTCDay())
     )
       throw Error("This delivery slot is unavailable.");
+    // a same-day window that has (nearly) passed, picked on a checkout page left open too long
+    if (!stillBookable(slot))
+      throw Error("This delivery time has passed. Please pick a later one.");
     const lines = await CartLine.find({ customerId }).session(session);
     if (!lines.length) throw Error("Your basket is empty.");
     if (lines.length > 100) throw Error("Too many basket items.");
@@ -161,13 +187,17 @@ export async function checkout(customerId: string, input: unknown) {
         session,
       );
       const product = variant
-        ? await Product.findOne({
-            _id: variant.productId,
-            status: "published",
-          }).session(session)
+        ? await Product.findById(variant.productId).session(session)
         : null;
-      if (!variant || !product || line.quantity > variant.maxQuantity)
-        throw Error("A basket item is no longer available.");
+      // name the item and say what to do: a vague "an item is unavailable" left people stuck
+      if (!variant || variant.active === false || !product || product.status !== "published")
+        throw Error(
+          `Your basket has ${product ? product.name.en : "an item"}, which is no longer sold. Remove it from your basket to continue.`,
+        );
+      if (line.quantity > variant.maxQuantity)
+        throw Error(
+          `Your basket has ${line.quantity} of ${product.name.en}, but the limit is ${variant.maxQuantity} per order. Change the quantity in your basket.`,
+        );
       const stock = await InventoryItem.updateOne(
         {
           variantId: variant._id,
@@ -178,8 +208,20 @@ export async function checkout(customerId: string, input: unknown) {
         { $inc: { reserved: line.quantity } },
         { session },
       );
-      if (stock.modifiedCount !== 1)
-        throw Error(`Insufficient stock for ${product.name.en}.`);
+      if (stock.modifiedCount !== 1) {
+        const inventory = await InventoryItem.findOne({
+          variantId: variant._id,
+        }).session(session);
+        const left = Math.max(
+          0,
+          (inventory?.onHand ?? 0) - (inventory?.reserved ?? 0),
+        );
+        throw Error(
+          left
+            ? `Your basket has ${line.quantity} of ${product.name.en}, but only ${left} ${left === 1 ? "is" : "are"} left. Change the quantity in your basket.`
+            : `Your basket has ${product.name.en}, which is sold out. Remove it from your basket to continue.`,
+        );
+      }
       const linePaise = variant.pricePaise * line.quantity;
       subtotal += linePaise;
       merchandiseSavingsPaise +=
@@ -248,6 +290,10 @@ export async function checkout(customerId: string, input: unknown) {
                   code: promotion.selected.promotion.code,
                   name: promotion.selected.promotion.name,
                   discountPaise: promotionDiscountPaise,
+                  // kept with the order: packing works the offer out again on these terms
+                  discountType: promotion.selected.promotion.discountType,
+                  discountValue: promotion.selected.promotion.discountValue,
+                  maximumDiscountPaise: promotion.selected.promotion.maximumDiscountPaise || undefined,
                 },
               }
             : {}),
@@ -386,6 +432,7 @@ export async function cancelOrder(customerId: string, idInput: unknown) {
       { $inc: { reserved: -1 } },
       { session },
     );
+    await returnOffer(id, session);
     await OrderTimelineEvent.create(
       [
         {
@@ -416,7 +463,14 @@ export async function reorder(customerId: string, orderInput: unknown) {
   await connectDB();
   const order = await Order.findOne({ _id: orderId, customerId });
   if (!order) throw Error("This order is unavailable.");
-  return addLinesToBasket(customerId, order.items);
+  // what they ordered, including anything packing found wasn't there (it may be back now)
+  return addLinesToBasket(
+    customerId,
+    order.items.map((item: { variantId: unknown; quantity: number; orderedQuantity?: number }) => ({
+      variantId: item.variantId,
+      quantity: item.orderedQuantity ?? item.quantity,
+    })),
+  );
 }
 /** Adds lines to the basket, each capped at stock and the per-order limit; lines that cannot be bought are skipped. */
 export async function addLinesToBasket(
@@ -455,7 +509,7 @@ export async function addLinesToBasket(
         0,
         (inventory?.onHand ?? 0) - (inventory?.reserved ?? 0),
       );
-      if (!variant || !product || available < 1) {
+      if (!variant || variant.active === false || !product || available < 1) {
         skipped++;
         continue;
       }
