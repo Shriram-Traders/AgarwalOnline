@@ -12,7 +12,6 @@ import { displayStatus } from "@/lib/display";
 import { PageHeading } from "@/components/page-heading";
 import { CatalogAdminNav } from "@/components/catalog-admin-nav";
 import { requirePage } from "@/lib/auth/session";
-import { catalogManagementAction } from "@/lib/catalog/manage-actions";
 import { governanceAction } from "@/lib/governance/actions";
 import { InventoryMovement } from "@/lib/commerce/models";
 import { InventoryItem, Product, ProductVariant } from "@/lib/db/models";
@@ -104,19 +103,20 @@ export default async function InventoryPage({
       )}
       <details className="panel create-staff" id="new-pack" open={params.new === "pack"}>
         <summary>Add a pack size</summary>
-        <ActionForm action={catalogManagementAction} submit="Add pack size">
+        <p className="muted">A new pack puts a new price in the shop, so an owner approves it like a price change.</p>
+        <ActionForm action={governanceAction} submit="Add pack size">
           <input type="hidden" name="operation" value="variant" />
           <div className="staff-form-grid">
             <label>
               Product
+              {/* every product, hidden ones too: the link from a hidden product used to pre-select a different one */}
               <select name="productId" defaultValue={params.product}>
-                {products
-                  .filter((item) => item.status === "published")
-                  .map((item) => (
-                    <option value={String(item._id)} key={String(item._id)}>
-                      {item.name.en}
-                    </option>
-                  ))}
+                {products.map((item) => (
+                  <option value={String(item._id)} key={String(item._id)}>
+                    {item.name.en}
+                    {item.status === "published" ? "" : " (hidden)"}
+                  </option>
+                ))}
               </select>
             </label>
             <label>
@@ -190,6 +190,7 @@ export default async function InventoryPage({
                   {product ? <Link href={`/admin/products/${product._id}`}>{product.name.en}</Link> : "Unknown product"}
                   <small>
                     {variant.label} · <code>{variant.sku}</code>
+                    {variant.active === false ? " · hidden pack" : ""}
                   </small>
                 </span>
               </span>

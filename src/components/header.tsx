@@ -1,14 +1,15 @@
 import Link from "next/link";
-import { ArrowUpRight, ChevronDown, MapPin, UserRound } from "lucide-react";
+import { ArrowUpRight, ChevronDown, Heart, MapPin, UserRound } from "lucide-react";
 import { SmartSearch } from "./smart-search";
 import { MobileNav } from "./mobile-nav";
 import { LocaleToggle } from "./locale-toggle";
 import { AccountMenu, type MenuLink } from "./account-menu";
 import { staffRoleOf, type Role } from "@/lib/auth/permissions";
 import { currentUser } from "@/lib/auth/session";
-import { Promotion } from "@/lib/promotions/models";
+import { Promotion, PromotionRedemption } from "@/lib/promotions/models";
 import { deliveryRules } from "@/lib/commerce/service";
 import { CartBar } from "./cart-bar";
+import { BackButton } from "./back-button";
 import { BasketLink } from "./basket";
 import { formatPrice } from "@/lib/display";
 import { copy, type Locale } from "@/lib/locale-types";
@@ -42,18 +43,23 @@ export async function Header({
   categories: CategoryLink[];
 }) {
   const now = new Date();
-  const [user, rules, welcome] = await Promise.all([
+  const [user, rules, offer] = await Promise.all([
     currentUser(),
     deliveryRules(),
+    // only the coupon the owner picked as the welcome offer; any live code used to be advertised
     Promotion.findOne({
       active: true,
+      welcome: true,
       code: { $type: "string", $ne: "" },
       startsAt: { $lte: now },
       endsAt: { $gte: now },
-    })
-      .sort({ minimumSubtotalPaise: 1 })
-      .select("code minimumSubtotalPaise"),
+    }).select("code minimumSubtotalPaise"),
   ]);
+  // someone who already used it isn't told about it again
+  const welcome =
+    offer && user && (await PromotionRedemption.exists({ promotionId: offer._id, customerId: user.id }))
+      ? null
+      : offer;
   const text = copy[locale];
   const workspace = workspaceLinks(user?.roles ?? [], text);
   const nav = NAV_SLUGS.map((slug) => categories.find((c) => c.slug === slug)).filter(
@@ -70,7 +76,7 @@ export async function Header({
               <>
                 <span aria-hidden="true">·</span>
                 <span>
-                  {text.welcomeCode(formatPrice(welcome.minimumSubtotalPaise))}{" "}
+                  {text.welcomeCode(welcome.minimumSubtotalPaise ? formatPrice(welcome.minimumSubtotalPaise) : "")}{" "}
                   <span className="offer-code">{welcome.code}</span>
                 </span>
               </>
@@ -90,6 +96,8 @@ export async function Header({
             Agarwal<small>General Stores</small>
           </Link>
           <nav className="primary-nav" aria-label={text.shopByCategory}>
+            {/* desktop and tablet: first in the category row; phones get the one beside search */}
+            <BackButton label={text.back} className="nav-back" />
             <Link href="/catalog">{text.all}</Link>
             {nav.map((category) => (
               <Link key={category.slug} href={`/catalog?category=${category.slug}`}>
@@ -101,6 +109,7 @@ export async function Header({
             </Link>
           </nav>
           <div className="header-actions">
+            <BackButton label={text.back} className="search-back" />
             <SmartSearch placeholder={text.searchPlaceholder} hints={[...text.searchHints]} />
             <Link href="/serviceability" className="location">
               <small>{text.promise(cutoff)}</small>
@@ -131,6 +140,10 @@ export async function Header({
                 <span>{text.signIn}</span>
               </Link>
             )}
+            <Link href="/account/wishlist" className="header-action">
+              <Heart size={20} aria-hidden="true" />
+              <span>{text.saved}</span>
+            </Link>
             <BasketLink label={text.basket} />
           </div>
         </div>

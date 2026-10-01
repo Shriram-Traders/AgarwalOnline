@@ -2,12 +2,29 @@
 import { useActionState, useEffect, useRef, useState } from "react";
 import { PasswordInput } from "@/components/password-input";
 import { keepTyped } from "@/components/action-form";
+import { safeAction } from "@/components/safe-action";
 import {
   customerEmailLoginAction,
   customerPasswordLoginAction,
   sendOTPAction,
   verifyOTPAction,
+  type AuthState,
 } from "@/lib/auth/actions";
+
+const sendCode = safeAction(sendOTPAction);
+const verifyCode = safeAction(verifyOTPAction);
+const passwordSignIn = safeAction(customerPasswordLoginAction);
+const emailSignIn = safeAction(customerEmailLoginAction);
+/**
+ * Sending the first code moves on to the code step; resending stays there. A failed resend
+ * shows its error on the code step instead of throwing away the code the customer already has.
+ */
+type SendState = AuthState & { resent?: boolean };
+async function sendOrResend(state: SendState, form: FormData): Promise<SendState> {
+  const next = await sendCode(state, form);
+  if (!state.challengeId) return next;
+  return next.error ? { ...state, error: next.error, resent: false } : { ...next, resent: true };
+}
 export function AuthForm({
   mock = false,
   locale = "en",
@@ -21,16 +38,10 @@ export function AuthForm({
   then?: string;
 }) {
   const mr = locale === "mr";
-  const [sent, send, sending] = useActionState(sendOTPAction, {});
-  const [verified, verify, verifying] = useActionState(verifyOTPAction, {});
-  const [customerSigned, customerSign, customerSigning] = useActionState(
-    customerPasswordLoginAction,
-    {},
-  );
-  const [emailSigned, emailSign, emailSigning] = useActionState(
-    customerEmailLoginAction,
-    {},
-  );
+  const [sent, send, sending] = useActionState(sendOrResend, {});
+  const [verified, verify, verifying] = useActionState(verifyCode, {});
+  const [customerSigned, customerSign, customerSigning] = useActionState(passwordSignIn, {});
+  const [emailSigned, emailSign, emailSigning] = useActionState(emailSignIn, {});
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const confirmRef = useRef<HTMLInputElement>(null);
@@ -272,15 +283,27 @@ export function AuthForm({
               {verified.error}
             </p>
           )}
+          {sent.error && (
+            <p role="alert" className="error-message">
+              {sent.error}
+            </p>
+          )}
+          {sent.resent && !sent.error && !sending && (
+            <p role="status" className="success-message">
+              {mr ? "नवीन कोड पाठवला." : "New code sent."}
+            </p>
+          )}
           <button className="primary-button" disabled={verifying}>
             {verifying ? (mr ? "पडताळत आहे…" : "Verifying…") : (mr ? "पडताळा आणि पुढे जा" : "Verify & continue")}
           </button>
           <div className="split-actions">
             <a className="secondary-button" href={sent.newAccount ? "/signup" : "/login"}>{mr ? "दुसरा क्रमांक वापरा" : "Use another number"}</a>
+            {/* formNoValidate: asking for a new code must not wait for the code box (or name and password) to be filled */}
             <button
               className="secondary-button"
               type="submit"
               formAction={send}
+              formNoValidate
               disabled={sending || resendIn > 0}
             >
               {resendIn > 0 ? (mr ? `${resendIn} सेकंदांनी पुन्हा पाठवा` : `Resend in ${resendIn}s`) : (mr ? "कोड पुन्हा पाठवा" : "Resend code")}

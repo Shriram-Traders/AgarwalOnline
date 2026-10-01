@@ -52,7 +52,9 @@ test("signs up by OTP with a password and lands on the account", async ({ page }
   await page.getByLabel("Confirm password").fill(PASSWORD);
   await page.getByLabel("Verification code").fill(OTP);
   await page.getByRole("button", { name: "Verify & continue" }).click();
-  await expect(page).toHaveURL("/account");
+  await expect(page).toHaveURL("/");
+  // customers land in the shop after signing in; the account page is one tap away
+  await page.goto("/account");
   await expect(page.getByRole("heading", { name: `Hello, ${CUSTOMER.name}` })).toBeVisible();
   const opened = await menu(page);
   if (opened) {
@@ -75,7 +77,7 @@ test("mobile number and password: rejects a wrong password, accepts the right on
   await expect(page.getByLabel("Mobile number")).toHaveValue(CUSTOMER.phone);
   await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
-  await expect(page).toHaveURL("/account");
+  await expect(page).toHaveURL("/");
   await signOut(page);
 });
 
@@ -85,7 +87,7 @@ test("email and password signs a customer in", async ({ page }) => {
   await page.getByLabel("Email address").fill(CUSTOMER.email);
   await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
   await page.getByRole("button", { name: "Sign in with email" }).click();
-  await expect(page).toHaveURL("/account");
+  await expect(page).toHaveURL("/");
   await signOut(page);
 });
 
@@ -99,7 +101,7 @@ test("OTP signs an existing customer in, and refuses a paused account", async ({
   await page.getByRole("button", { name: "Sign in with OTP" }).click();
   await page.getByLabel("Verification code").fill(OTP);
   await page.getByRole("button", { name: "Verify & continue" }).click();
-  await expect(page).toHaveURL("/account");
+  await expect(page).toHaveURL("/");
   await signOut(page);
 });
 
@@ -187,7 +189,9 @@ test("a signed-in customer can connect Google from the account page", async ({ p
   await page.getByLabel("Email address").fill(CUSTOMER.email);
   await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
   await page.getByRole("button", { name: "Sign in with email" }).click();
-  await expect(page).toHaveURL("/account");
+  await expect(page).toHaveURL("/");
+  // customers land in the shop after signing in; the account page is one tap away
+  await page.goto("/account");
   const methods = page.getByRole("region", { name: "Sign-in methods" });
   await expect(methods).toContainText("Not connected.");
   const google = await googleRedirect(page, () =>
@@ -238,7 +242,9 @@ test("a Google-only account folds into the customer's original account and shows
   await page.getByLabel("Email address").fill("gmail-person@gmail.test");
   await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
   await page.getByRole("button", { name: "Sign in with email" }).click();
-  await expect(page).toHaveURL("/account");
+  await expect(page).toHaveURL("/");
+  // customers land in the shop after signing in; the account page is one tap away
+  await page.goto("/account");
   const claim = page.getByRole("region", { name: "Ordered with us before?" });
   await claim.getByLabel("Mobile number").fill(CUSTOMER.phone);
   await claim.getByRole("button", { name: "Send code" }).click();
@@ -271,7 +277,7 @@ test("the address form pre-fills the account number, and a Google-only account c
   await page.getByLabel("Email address").fill(CUSTOMER.email);
   await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
   await page.getByRole("button", { name: "Sign in with email" }).click();
-  await expect(page).toHaveURL("/account");
+  await expect(page).toHaveURL("/");
   await page.goto("/account/addresses");
   await expect(page.getByLabel("Mobile number")).toHaveValue(CUSTOMER.phone);
   await expect(page.getByText("Also use this number to sign in")).toHaveCount(0);
@@ -287,7 +293,7 @@ test("the address form pre-fills the account number, and a Google-only account c
   await page.getByLabel("Email address").fill("gmail-shopper@gmail.test");
   await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
   await page.getByRole("button", { name: "Sign in with email" }).click();
-  await expect(page).toHaveURL("/account");
+  await expect(page).toHaveURL("/");
   await page.goto("/account/addresses");
   await expect(page.getByLabel("Mobile number")).toHaveValue("");
   await page.getByLabel("Recipient name").fill("Gmail Shopper");
@@ -324,7 +330,9 @@ test("the account page shows whether the email is confirmed and sends a confirma
   await page.getByLabel("Email address").fill(CUSTOMER.email);
   await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
   await page.getByRole("button", { name: "Sign in with email" }).click();
-  await expect(page).toHaveURL("/account");
+  await expect(page).toHaveURL("/");
+  // customers land in the shop after signing in; the account page is one tap away
+  await page.goto("/account");
   const methods = page.getByRole("region", { name: "Sign-in methods" });
   await expect(methods).toContainText(`${CUSTOMER.email} · Not confirmed yet`);
   await methods.getByRole("button", { name: "Send confirmation link" }).click();

@@ -52,6 +52,8 @@ test.beforeAll(async () => {
       NODE_ENV: "test",
     },
     stdio: "ignore",
+    // on Windows npx is a .cmd script, which Node only starts through a shell (else: spawnSync npx ENOENT)
+    shell: process.platform === "win32",
   });
   const passwordHash = await bcrypt.hash(PASSWORD, 12);
   // the seed hands its demo orders to whichever user it finds first; give them to the plain customer

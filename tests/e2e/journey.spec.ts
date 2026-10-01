@@ -138,6 +138,9 @@ test("whole journey: sign up, shop, pay, pack, deliver, reconcile", async ({ bro
   await page.getByLabel("Confirm password").fill(PASSWORD);
   await page.getByLabel("Verification code").fill("246810");
   await page.getByRole("button", { name: "Verify & continue" }).click();
+  // new customers land in the shop; the account is one tap away
+  await expect(page).toHaveURL("/");
+  await page.goto("/account");
   await expect(page.getByRole("heading", { name: "Hello, Neighbour" })).toBeVisible();
 
   // --- find a product ----------------------------------------------------
@@ -157,7 +160,8 @@ test("whole journey: sign up, shop, pay, pack, deliver, reconcile", async ({ bro
   }
   await expect(page.locator(".qty-stepper output")).toHaveText("5");
   await page.getByLabel("Offer code").fill("LOCAL10");
-  await page.getByRole("button", { name: "Apply" }).click();
+  // the typed-code box; the shop's listed offers below it have their own Apply buttons
+  await page.locator(".promo-form").getByRole("button", { name: "Apply" }).click();
   await expect(page.locator(".success-message")).toContainText(/applied/i);
   await expect(page.locator(".savings-line")).toHaveCount(2);
   await shot(page, "cart-populated");
@@ -173,20 +177,20 @@ test("whole journey: sign up, shop, pay, pack, deliver, reconcile", async ({ bro
   await shot(page, "addresses-populated");
 
   await page.goto("/checkout");
-  await page.getByLabel("Delivery slot").selectOption({ label: "2099-01-01 · 4:00 PM – 7:00 PM" });
+  await page.getByLabel("Delivery slot").selectOption({ label: "Thu, 1 Jan · 4:00 PM – 7:00 PM" });
   await shot(page, "checkout-populated");
   await page.getByRole("checkbox").check();
   await page.getByRole("button", { name: "Confirm Cash on Delivery order" }).click();
   await expect(page).toHaveURL(/\/account\/orders\/[a-f0-9]+/);
   const orderUrl = page.url();
-  await expect(page.getByText(/^Order: placed$/i)).toBeVisible();
+  await expect(page.getByText(/^Status: Order placed$/i)).toBeVisible();
   await shot(page, "order-detail-placed");
 
   // --- the account now has history ---------------------------------------
   await page.goto("/account");
   await shot(page, "account-populated");
   await page.goto("/account/orders");
-  await expect(page.locator(".order-row")).toHaveCount(1);
+  await expect(page.locator(".order-history-row")).toHaveCount(1);
   await shot(page, "orders-populated");
   await page.goto("/account/notifications");
   await shot(page, "notifications-populated");
@@ -251,7 +255,7 @@ test("whole journey: sign up, shop, pay, pack, deliver, reconcile", async ({ bro
 
   // --- the customer can track and reorder --------------------------------
   await page.goto(orderUrl);
-  await expect(page.getByText(/^Delivery: delivered$/i)).toBeVisible();
+  await expect(page.getByText(/^Status: Delivered$/i)).toBeVisible();
   await shot(page, "order-detail-delivered");
 
   expect(problems, `browser reported:\n${problems.join("\n")}`).toEqual([]);

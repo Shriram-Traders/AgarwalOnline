@@ -14,6 +14,8 @@ const packingSchema = new Schema(
         packedQuantity: Number,
         missing: Boolean,
         substitution: String,
+        // how many went in as the substitute; unset, all of the rest did
+        substituteQuantity: Number,
       },
     ],
     completedAt: Date,

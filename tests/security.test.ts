@@ -18,6 +18,29 @@ describe("security boundaries", () => {
     expect(() => parseEnv(prod)).toThrow();
     expect(parseEnv({ ...prod, ALLOW_MOCK_OTP_IN_PRODUCTION: "true" }).MOCK_OTP_CODE).toBe("000000");
   });
+  it("treats blank optional values, as .env.example ships them, as not set", () => {
+    const blank = Object.fromEntries(
+      [
+        "BETTER_AUTH_SECRET",
+        "CRON_SECRET",
+        "MOCK_OTP",
+        "MOCK_OTP_CODE",
+        "ALLOW_MOCK_OTP_IN_PRODUCTION",
+        "SMS_API_URL",
+        "SMS_API_TOKEN",
+        "CLOUDINARY_CLOUD_NAME",
+        "EVIDENCE_RETENTION_DAYS",
+        "AUDIT_RETENTION_DAYS",
+      ].map((key) => [key, ""]),
+    );
+    const parsed = parseEnv({ ...env, ...blank });
+    expect(parsed.CRON_SECRET).toBeUndefined();
+    expect(parsed.BETTER_AUTH_SECRET).toBeUndefined();
+    expect(parsed.EVIDENCE_RETENTION_DAYS).toBe(90);
+    expect(parsed.MOCK_OTP).toBe("false");
+    // required values still have to be really there
+    expect(() => parseEnv({ ...env, AUTH_SECRET: "" })).toThrow();
+  });
   it("reduces APP_ORIGIN to a bare origin", () => {
     expect(parseEnv({ ...env, APP_ORIGIN: "https://example.test/" }).APP_ORIGIN).toBe("https://example.test");
     expect(parseEnv({ ...env, APP_ORIGIN: "https://example.test/shop?x=1" }).APP_ORIGIN).toBe("https://example.test");

@@ -21,8 +21,11 @@ const TONES: Record<string, Tone> = {
   processing: "warn",
   open: "warn",
   "awaiting-review": "warn",
+  // a delivery that didn't go through needs someone to decide what happens next
+  attempted: "warn",
   cancelled: "bad",
   failed: "bad",
+  returned: "bad",
   rejected: "bad",
   refunded: "bad",
   "partially-refunded": "bad",

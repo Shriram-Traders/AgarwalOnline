@@ -10,6 +10,7 @@ import { aftercareAction } from "@/lib/aftercare/actions";
 import { UploadedEvidence } from "@/lib/evidence/models";
 import { evidenceAction } from "@/lib/evidence/actions";
 import { displayStatus } from "@/lib/display";
+import { PhotoInput } from "@/components/photo-input";
 export const metadata = { title: "Complaints & returns", robots: { index: false } };
 export default async function Complaints() {
   const user = await requirePage("complaint:own");
@@ -87,13 +88,8 @@ export default async function Complaints() {
                     value={String(c.orderId)}
                   />
                   <label>
-                    JPG, PNG or WebP · maximum 5 MB
-                    <input
-                      type="file"
-                      name="file"
-                      accept="image/jpeg,image/png,image/webp"
-                      required
-                    />
+                    JPG, PNG or WebP · big phone photos are made smaller automatically
+                    <PhotoInput />
                   </label>
                 </ActionForm>
               </article>

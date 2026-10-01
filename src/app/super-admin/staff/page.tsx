@@ -57,6 +57,9 @@ const CAN: Partial<Record<Permission, string>> = {
   "audit:read": "Read the audit trail",
 };
 
+/** Accounts made from a phone number get a stand-in address like 9000000001@phone.ags.invalid. */
+const placeholderEmail = (email?: string) => !email || email.endsWith(".invalid");
+
 export default async function StaffManagement({
   searchParams,
 }: {
@@ -135,22 +138,23 @@ export default async function StaffManagement({
                   <input name="name" defaultValue={editing.name} required />
                 </label>
                 <label>
-                  Work email
+                  Work email{" "}
+                  {placeholderEmail(editing.email) && <small>None yet</small>}
                   <input
                     name="email"
                     type="email"
-                    defaultValue={editing.email}
-                    required
+                    defaultValue={placeholderEmail(editing.email) ? "" : editing.email}
+                    required={!placeholderEmail(editing.email)}
                   />
                 </label>
                 <label>
-                  Phone
+                  Phone {!editing.phone && <small>Optional: this account has no number yet</small>}
                   <input
                     name="phone"
                     defaultValue={editing.phone}
                     inputMode="numeric"
                     pattern="[0-9]{10}"
-                    required
+                    required={Boolean(editing.phone)}
                   />
                 </label>
                 <label>
@@ -326,7 +330,11 @@ export default async function StaffManagement({
 
       <details className="panel create-staff">
         <summary>Not in the list? Create a new account</summary>
-        <ActionForm action={staffAction} submit="Create staff account">
+        <ActionForm
+          action={staffAction}
+          submit="Create staff account"
+          confirmMessage="The account on this phone number gets the role you picked and can open the store workspace. You can change or remove it later."
+        >
           <input type="hidden" name="operation" value="create" />
           <p className="muted">
             If this mobile number already has a customer account, the role is
@@ -345,7 +353,7 @@ export default async function StaffManagement({
             </label>
             <label>
               Role
-              <select name="role">
+              <select name="role" defaultValue="admin">
                 {staffRoles.map((role) => (
                   <option key={role} value={role}>
                     {labels[role]}
@@ -395,7 +403,7 @@ export default async function StaffManagement({
                         {member.name}
                         {String(member._id) === actor.id ? " (you)" : ""}
                       </strong>
-                      <small>{member.email}</small>
+                      <small>{placeholderEmail(member.email) ? "No email yet" : member.email}</small>
                     </span>
                   </span>
                 ),

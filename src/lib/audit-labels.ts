@@ -13,8 +13,14 @@ const LABELS: Record<string, string> = {
   "complaint.update": "Updated a complaint",
   "delivery-rules.update": "Changed the delivery rules",
   "delivery-slot.create": "Added a delivery slot",
+  "delivery.reassign": "Changed the rider",
+  "delivery.retry": "Put a failed delivery back for another try",
+  "delivery.unassign": "Took an order off its rider",
   "inventory.adjust": "Adjusted stock",
   "inventory.threshold.update": "Changed the stock approval limit",
+  "order.cancel": "Cancelled an order",
+  "order.return-to-shop": "Closed an order as returned to shop",
+  "packing.adjust": "Changed an order to what was packed",
   "packing.checklist": "Saved a packing checklist",
   "product.metadata.update": "Edited product details",
   "profile.phone.add": "Added a mobile number",
@@ -52,7 +58,7 @@ export function auditLabel(action: string) {
 /** Groups for the audit filter, by code prefix. */
 export const AUDIT_GROUPS = {
   "sign-ins": { label: "Sign-ins", prefixes: ["auth."] },
-  orders: { label: "Orders & delivery", prefixes: ["packing.", "cod.", "evidence.", "complaint.", "return."] },
+  orders: { label: "Orders & delivery", prefixes: ["order.", "delivery.", "packing.", "cod.", "evidence.", "complaint.", "return."] },
   catalog: { label: "Catalog & stock", prefixes: ["product.", "variant.", "category.", "inventory.", "approval.", "review."] },
   money: { label: "Offers & refunds", prefixes: ["promotion.", "refund.", "payment."] },
   team: {

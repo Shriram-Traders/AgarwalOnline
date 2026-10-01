@@ -4,10 +4,12 @@ import Image from "next/image";
 import { ArrowRight, PartyPopper, ShieldCheck, ShoppingBag } from "lucide-react";
 import { cookies } from "next/headers";
 import { currentUser } from "@/lib/auth/session";
-import { cartFor, deliveryRules } from "@/lib/commerce/service";
-import { guestCartLines } from "@/lib/commerce/guest-cart";
-import { applyPromotionAction } from "@/lib/promotions/actions";
-import { quoteCart } from "@/lib/promotions/service";
+import { basketFor, deliveryRules } from "@/lib/commerce/service";
+import { guestBasket } from "@/lib/commerce/guest-cart";
+import { cartAction } from "@/lib/commerce/actions";
+import { codeProblem, quoteCart, shopOffers } from "@/lib/promotions/service";
+import { OffersPanel } from "@/components/offers-panel";
+import { SignInToCheckout } from "@/components/sign-in-prompt";
 import { productImages } from "@/lib/catalog/images";
 import { formatPrice } from "@/lib/display";
 import { ActionForm } from "@/components/action-form";
@@ -31,8 +33,12 @@ export default async function Cart({ searchParams }: { searchParams: Promise<{ b
     return <SharedBasket userId={user.id} list={shared} baskets={others} mr={mr} />;
   }
   if (user && basket === "new") return <NewBasket baskets={others} mr={mr} />;
-  const lines =
-    user ? await cartFor(user.id) : await guestCartLines();
+  const { lines, unavailable } = user
+    ? await basketFor(user.id)
+    : await guestBasket();
+  // checkout refuses these, so say so here, where they can be fixed
+  const needsAttention =
+    unavailable.length > 0 || lines.some((line) => line.quantity > line.available);
   const rules = await deliveryRules();
   const promotionCode = (await cookies()).get("ags_promotion")?.value;
   const baseSubtotal = lines.reduce(
@@ -45,6 +51,14 @@ export default async function Cart({ searchParams }: { searchParams: Promise<{ b
     customerId: user?.id,
     deliveryPaise: estimatedDelivery,
   });
+  const offers = lines.length
+    ? await shopOffers(baseSubtotal, { customerId: user?.id, appliedId: quote.appliedPromotion?.id })
+    : [];
+  // a code typed earlier that isn't on the basket now: say why, instead of letting it vanish
+  const codeIssue =
+    promotionCode && quote.rejectedCodeReason
+      ? ((await codeProblem(promotionCode, baseSubtotal, user?.id)) ?? quote.rejectedCodeReason)
+      : undefined;
   const remaining = rules.freeThresholdPaise - baseSubtotal;
   return (
     <section className="page-container">
@@ -66,6 +80,35 @@ export default async function Cart({ searchParams }: { searchParams: Promise<{ b
           baskets={others}
           mr={mr}
         />
+      )}
+      {unavailable.length > 0 && (
+        <div className="notice unavailable-lines" role="status">
+          <p>
+            <strong>
+              {unavailable.length === 1 ? "This item is" : "These items are"} no longer sold.
+            </strong>{" "}
+            Remove {unavailable.length === 1 ? "it" : "them"} to check out.
+          </p>
+          <ul>
+            {unavailable.map((line) => (
+              <li key={line.variantId}>
+                <span>
+                  {line.name}
+                  {line.label ? ` · ${line.label}` : ""}
+                </span>
+                <ActionForm
+                  action={cartAction}
+                  submit="Remove"
+                  className="unavailable-remove"
+                  buttonClassName="secondary-button"
+                >
+                  <input type="hidden" name="variantId" value={line.variantId} />
+                  <input type="hidden" name="quantity" value="0" />
+                </ActionForm>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
       {lines.length ? (
         <div className="basket-layout">
@@ -109,11 +152,22 @@ export default async function Cart({ searchParams }: { searchParams: Promise<{ b
                     quantity={line.quantity}
                     max={Math.min(line.maxQuantity, line.available)}
                     name={line.name}
+                    available={line.available}
                   />
                   <strong>{formatPrice(line.pricePaise * line.quantity)}</strong>
                 </div>
               );
             })}
+            <OffersPanel
+              offers={offers}
+              applied={
+                quote.appliedPromotion
+                  ? { ...quote.appliedPromotion, savePaise: quote.promotionDiscountPaise }
+                  : undefined
+              }
+              typedCode={promotionCode}
+              codeIssue={codeIssue}
+            />
           </div>
           <aside className="panel">
             <h2>Summary</h2>
@@ -125,11 +179,17 @@ export default async function Cart({ searchParams }: { searchParams: Promise<{ b
                 Item savings <strong>−{formatPrice(quote.merchandiseSavingsPaise)}</strong>
               </p>
             )}
-            {quote.promotionDiscountPaise > 0 && (
+            {quote.promotionDiscountPaise > 0 ? (
               <p className="savings-line">
                 {quote.appliedPromotion?.name}{" "}
                 <strong>−{formatPrice(quote.promotionDiscountPaise)}</strong>
               </p>
+            ) : (
+              offers.some((offer) => offer.state === "ready") && (
+                <a href="#offers" className="summary-offer-link">
+                  An offer can save you money · see offers
+                </a>
+              )
             )}
             <p>
               Estimated delivery{" "}
@@ -139,16 +199,17 @@ export default async function Cart({ searchParams }: { searchParams: Promise<{ b
             <h3>
               Estimated total <strong>{formatPrice(quote.totalPaise)}</strong>
             </h3>
-            <ActionForm action={applyPromotionAction} submit="Apply" className="promo-form">
-              <label>
-                Offer code
-                <input name="code" defaultValue={promotionCode} placeholder="e.g. LOCAL10" />
-              </label>
-            </ActionForm>
-            <Link href={user ? "/checkout" : "/login"} className="primary-button">
-              {user ? "Continue to checkout" : "Sign in to checkout"}
-              <ArrowRight size={18} aria-hidden="true" />
-            </Link>
+            {needsAttention && (
+              <p className="notice">Fix the items marked in your basket before checking out.</p>
+            )}
+            {user ? (
+              <Link href="/checkout" className="primary-button">
+                Continue to checkout
+                <ArrowRight size={18} aria-hidden="true" />
+              </Link>
+            ) : (
+              <SignInToCheckout mr={mr} />
+            )}
             <p className="muted summary-note">
               <ShieldCheck size={16} aria-hidden="true" />
               Delivery charge and availability are confirmed at checkout.

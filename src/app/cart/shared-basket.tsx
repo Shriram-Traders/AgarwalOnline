@@ -10,6 +10,7 @@ import { productImages } from "@/lib/catalog/images";
 import { formatPrice } from "@/lib/display";
 import { ActionForm } from "@/components/action-form";
 import { Avatars } from "@/components/avatars";
+import { NameIdeas } from "@/components/name-ideas";
 import { CartLineControls } from "@/components/cart-line-controls";
 import { EmptyState } from "@/components/empty-state";
 import { InvitePanel } from "@/components/invite-panel";
@@ -52,6 +53,7 @@ export function BasketPills({
 }
 
 const IDEAS = ["School list", "Family monthly", "Office restock", "Festival shopping"];
+const IDEAS_MR = ["शाळेची यादी", "महिन्याची खरेदी", "ऑफिस साहित्य", "सणाची खरेदी"];
 
 export function NewBasket({ baskets, mr }: { baskets: Basket[]; mr: boolean }) {
   return (
@@ -70,13 +72,13 @@ export function NewBasket({ baskets, mr }: { baskets: Basket[]; mr: boolean }) {
           <input type="hidden" name="kind" value="basket" />
           <label>
             {mr ? "नाव" : "Name"}
-            <input name="name" list="basket-ideas" maxLength={60} required placeholder={IDEAS[0]} />
+            <NameIdeas
+              name="name"
+              ideas={mr ? IDEAS_MR : IDEAS}
+              placeholder={mr ? IDEAS_MR[0] : IDEAS[0]}
+              ideasLabel={mr ? "कल्पना" : "Ideas"}
+            />
           </label>
-          <datalist id="basket-ideas">
-            {IDEAS.map((idea) => (
-              <option key={idea} value={idea} />
-            ))}
-          </datalist>
         </ActionForm>
       </div>
     </section>

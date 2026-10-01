@@ -15,6 +15,10 @@ const promotionSchema = new Schema(
     perCustomerLimit: { type: Number, min: 1, default: 1 },
     redemptionCount: { type: Number, min: 0, default: 0 },
     active: { type: Boolean, default: false },
+    /** The coupon the top bar offers to new shoppers; the owner picks it, at most one at a time. */
+    welcome: { type: Boolean, default: false },
+    /** Coupon codes shown in the basket's list of shop offers; off for private codes handed out in person. */
+    listed: { type: Boolean, default: true },
     createdBy: { type: Schema.Types.ObjectId, ref: "User", required: true },
     updatedBy: { type: Schema.Types.ObjectId, ref: "User", required: true },
   },

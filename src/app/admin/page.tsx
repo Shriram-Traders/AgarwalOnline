@@ -9,8 +9,10 @@ import { Complaint } from "@/lib/aftercare/models";
 import { ApprovalRequest } from "@/lib/governance/models";
 import { Refund } from "@/lib/payments/models";
 import { RefreshOnFocus } from "@/components/refresh-on-focus";
+import { ensureSlots, slotGaps } from "@/lib/commerce/slots";
 import {
   Boxes,
+  CalendarClock,
   Inbox,
   PackagePlus,
   Settings,
@@ -34,15 +36,33 @@ const FILTERS = {
     label: "Packing",
     match: { orderStatus: { $ne: "cancelled" }, fulfilmentStatus: { $in: ["picking", "packed"] } },
   },
-  ready: { label: "Ready, no rider", match: { fulfilmentStatus: "ready", deliveryStatus: "unassigned" } },
+  // an order the store cancelled after packing stays "ready" with no rider; it isn't waiting for one
+  ready: {
+    label: "Ready, no rider",
+    match: { orderStatus: "confirmed", fulfilmentStatus: "ready", deliveryStatus: "unassigned" },
+  },
   "on-the-way": {
     label: "On the way",
-    match: { deliveryStatus: { $in: ["assigned", "out-for-delivery", "attempted"] } },
+    match: { deliveryStatus: { $in: ["assigned", "out-for-delivery"] } },
+  },
+  // a missed attempt or a failed delivery holds its stock until someone chooses Try again or
+  // Returned to shop on the order; before this it matched no filter and read as plain "Confirmed"
+  "not-delivered": {
+    label: "Delivery didn’t go through",
+    match: { orderStatus: "confirmed", deliveryStatus: { $in: ["attempted", "failed"] } },
   },
   delivered: { label: "Delivered", match: { deliveryStatus: "delivered" } },
   cancelled: { label: "Cancelled", match: { orderStatus: "cancelled" } },
+  // paid online, with items that weren't packed: the customer was promised that part back, and
+  // only the owner can refund it (a refund made on the Refunds page moves the order off "paid")
+  "refund-owed": {
+    label: "Refund owed",
+    match: { orderStatus: { $ne: "cancelled" }, paymentStatus: "paid", shortfallPaise: { $gt: 0 } },
+  },
 } as const;
 type Filter = keyof typeof FILTERS;
+/** Filters for the owner's own work: only they can act on these orders. */
+const OWNER_FILTERS: readonly Filter[] = ["refund-owed"];
 
 /** Each queue: how many items wait, and how long the oldest has waited. */
 type Queue = { label: string; href: string; count: number; oldest: Date | null };
@@ -98,7 +118,10 @@ export default async function Admin({
   const user = await requirePage("order:manage");
   const owner = user.roles.includes("super-admin");
   const { status, q } = await searchParams;
-  const filter = (status && status in FILTERS ? status : null) as Filter | null;
+  const shownFilters = (Object.keys(FILTERS) as Filter[]).filter(
+    (key) => owner || !OWNER_FILTERS.includes(key),
+  );
+  const filter = (status && shownFilters.includes(status as Filter) ? status : null) as Filter | null;
   const term = q?.trim().slice(0, 60);
   // order number, customer name or phone
   const search = term
@@ -111,10 +134,11 @@ export default async function Admin({
   const now = new Date();
   const todayStart = startOfTodayIST(now);
   const yesterdayStart = new Date(todayStart.getTime() - 86400000);
+  await ensureSlots();
 
-  const [orders, counts, today, yesterday, lowStock, lowCount, cashOpen, queues] = await Promise.all([
+  const [orders, counts, today, yesterday, lowStock, lowCount, cashOpen, queues, gaps] = await Promise.all([
     Order.find({ ...(filter ? FILTERS[filter].match : {}), ...search }).sort({ createdAt: -1 }).limit(50),
-    Promise.all((Object.keys(FILTERS) as Filter[]).map((key) => Order.countDocuments(FILTERS[key].match))),
+    Promise.all(shownFilters.map((key) => Order.countDocuments(FILTERS[key].match))),
     takings(todayStart, now),
     takings(yesterdayStart, todayStart),
     InventoryItem.aggregate<{ _id: unknown; available: number; label: string; name: string }>([
@@ -134,16 +158,32 @@ export default async function Admin({
       queue("Orders to confirm", "/admin?status=to-confirm#orders", Order, FILTERS["to-confirm"].match, "createdAt"),
       queue("Orders being packed", "/admin?status=packing#orders", Order, FILTERS.packing.match, "updatedAt"),
       queue("Packed, no rider assigned", "/admin?status=ready#orders", Order, FILTERS.ready.match, "updatedAt"),
+      queue(
+        "Deliveries that didn’t go through",
+        "/admin?status=not-delivered#orders",
+        Order,
+        FILTERS["not-delivered"].match,
+        "updatedAt",
+      ),
       queue("Cash collections to reconcile", "/admin/cod", CODCollection, { reconciledAt: null }, "createdAt"),
       queue("Support chats waiting for a reply", "/admin/support", ChatConversation, { status: "waiting-support" }, "updatedAt"),
       queue("Open complaints", "/admin/complaints", Complaint, { status: "open" }, "createdAt"),
       ...(owner
         ? [
             queue("Changes waiting for your approval", "/super-admin/approvals", ApprovalRequest, { state: "pending" }, "createdAt"),
+            // promised to customers when packing found items missing; nothing else reminds the owner
+            queue(
+              "Refunds owed for items not packed",
+              "/admin?status=refund-owed#orders",
+              Order,
+              FILTERS["refund-owed"].match,
+              "updatedAt",
+            ),
             queue("Refunds in progress", "/super-admin/refunds", Refund, { status: { $in: ["requested", "processing"] } }, "createdAt"),
           ]
         : []),
     ]),
+    slotGaps(now),
   ]);
   const cash = cashOpen.reduce((sum, item) => sum + item.collectedPaise, 0);
   const quickActions = [
@@ -171,6 +211,20 @@ export default async function Admin({
           </span>
         }
       />
+      {gaps.areas.length > 0 && gaps.date && (
+        <p className="notice slot-gap" role="status">
+          <CalendarClock size={16} aria-hidden="true" />
+          <span>
+            No delivery times to book in <strong>{gaps.areas.join(", ")}</strong> over the next two
+            open days, so shoppers there can’t check out.{" "}
+            {owner ? (
+              <Link href="/super-admin#weekly">Add delivery times</Link>
+            ) : (
+              "Ask the owner to add delivery times."
+            )}
+          </span>
+        </p>
+      )}
       <nav className="quick-actions" aria-label="Quick actions">
         {quickActions.map(({ href, label, icon: Icon }) => (
           <Link key={href} href={href} className="secondary-button">
@@ -233,7 +287,7 @@ export default async function Admin({
             <Link href={orderHref(null)} aria-current={!filter ? "page" : undefined}>
               All
             </Link>
-            {(Object.keys(FILTERS) as Filter[]).map((key, index) => (
+            {shownFilters.map((key, index) => (
               <Link
                 key={key}
                 href={orderHref(key)}
