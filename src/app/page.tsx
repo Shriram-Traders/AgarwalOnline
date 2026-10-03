@@ -168,7 +168,6 @@ function AisleTile({
             fill
             sizes="(max-width: 760px) 25vw, (max-width: 1100px) 25vw, 200px"
             loading={eager ? "eager" : "lazy"}
-            unoptimized
           />
         ) : (
           <AisleIcon slug={category.slug} />
@@ -233,7 +232,8 @@ export default async function Home() {
     currentLocale(),
     deliveryRules(),
   ]);
-  const [recommended, activeOffers, areaDocs] = await Promise.all([
+  // everything that only needs to know who's signed in, in one round
+  const [recommended, activeOffers, areaDocs, previousOrder] = await Promise.all([
     recommendationsFor({
       customerId: user?.id,
       limit: 8,
@@ -243,13 +243,8 @@ export default async function Home() {
       .limit(2)
       .select("name code kind discountType discountValue minimumSubtotalPaise"),
     liveAreaNames(),
+    user ? Order.findOne({ customerId: user.id }).sort({ createdAt: -1 }).select("items.variantId") : null,
   ]);
-  const previousOrder =
-    user
-      ? await Order.findOne({ customerId: user.id })
-          .sort({ createdAt: -1 })
-          .select("items.variantId")
-      : null;
   const previousIds = new Set(
     previousOrder?.items.map((item: { variantId: unknown }) =>
       String(item.variantId),
@@ -335,7 +330,7 @@ export default async function Home() {
     <>
       <section className="hero" aria-labelledby="welcome-title">
         <div className="hero-card">
-          <Image src={heroImage} alt="" fill sizes="60vw" priority unoptimized />
+          <Image src={heroImage} alt="" fill sizes="60vw" priority />
           <span className="hero-badge">{t.heroBadge}</span>
           <h1 id="welcome-title">
             {t.heroTitle(cutoff)}
@@ -372,7 +367,6 @@ export default async function Home() {
                 fill
                 sizes="(max-width: 1023px) 90vw, 400px"
                 priority
-                unoptimized
               />
             </Link>
             <p className="deal-price">

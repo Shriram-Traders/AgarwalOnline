@@ -9,6 +9,9 @@ import {
 import { ChatPanel } from "@/components/chat-panel";
 import { ActionForm } from "@/components/action-form";
 import { conversationStatusAction } from "@/lib/chat/actions";
+import { chatStatusLabel } from "@/lib/chat/labels";
+import Link from "next/link";
+import { ChevronRight } from "lucide-react";
 export const metadata = { title: "Support conversation", robots: { index: false } };
 export default async function SupportConversation({
   params,
@@ -30,7 +33,12 @@ export default async function SupportConversation({
   });
   return (
     <section className="page-container">
-      <PageHeading eyebrow="Support conversation" title={conversation.title} />
+      <nav className="breadcrumb" aria-label="Breadcrumb">
+        <Link href="/admin/support">Support chats</Link>
+        <ChevronRight size={14} aria-hidden="true" />
+        <span aria-current="page">{conversation.title}</span>
+      </nav>
+      <PageHeading eyebrow="Run the store" title={conversation.title} />
       <div className="basket-layout">
         <ChatPanel
           conversationId={id}
@@ -57,12 +65,12 @@ export default async function SupportConversation({
                   "closed",
                 ].map((s) => (
                   <option key={s} value={s}>
-                    {s}
+                    {chatStatusLabel(s)}
                   </option>
                 ))}
               </select>
             </label>
-            <label>
+            <label className="checkbox-label">
               <input type="checkbox" name="assignToSelf" />
               Assign to me
             </label>

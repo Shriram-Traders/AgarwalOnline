@@ -1,93 +1,40 @@
 import Link from "next/link";
-import type { Model } from "mongoose";
 import { requirePage } from "@/lib/auth/session";
+import { hasPermission, type Permission } from "@/lib/auth/permissions";
 import { Order } from "@/lib/commerce/models";
 import { InventoryItem } from "@/lib/db/models";
 import { CODCollection } from "@/lib/operations/models";
-import { ChatConversation } from "@/lib/chat/models";
-import { Complaint } from "@/lib/aftercare/models";
-import { ApprovalRequest } from "@/lib/governance/models";
-import { Refund } from "@/lib/payments/models";
 import { RefreshOnFocus } from "@/components/refresh-on-focus";
 import { ensureSlots, slotGaps } from "@/lib/commerce/slots";
-import {
-  Boxes,
-  CalendarClock,
-  Inbox,
-  PackagePlus,
-  Settings,
-  Sparkles,
-  Store,
-  UserCog,
-  UsersRound,
-} from "lucide-react";
-import { formatPrice } from "@/lib/display";
+import { CalendarClock, ChevronDown, CircleCheck, Inbox, Plus } from "lucide-react";
+import { formatIst, formatPrice } from "@/lib/display";
 import { PageHeading } from "@/components/page-heading";
+import { Popover } from "@/components/popover";
 import { StatTiles } from "@/components/stat-tiles";
 import { DataTable } from "@/components/data-table";
 import { EmptyState } from "@/components/empty-state";
 import { StatusPill } from "@/components/status-pill";
+import { FILTERS, OWNER_FILTERS, type OrderFilter as Filter } from "@/lib/admin/order-filters";
+import { loadQueues } from "@/lib/admin/work-queues";
 export const metadata = { title: "Overview & orders", robots: { index: false } };
 
-/** The order list's filters: what the counter asks "what's waiting at this step?" */
-const FILTERS = {
-  "to-confirm": { label: "To confirm", match: { orderStatus: "placed" } },
-  packing: {
-    label: "Packing",
-    match: { orderStatus: { $ne: "cancelled" }, fulfilmentStatus: { $in: ["picking", "packed"] } },
-  },
-  // an order the store cancelled after packing stays "ready" with no rider; it isn't waiting for one
-  ready: {
-    label: "Ready, no rider",
-    match: { orderStatus: "confirmed", fulfilmentStatus: "ready", deliveryStatus: "unassigned" },
-  },
-  "on-the-way": {
-    label: "On the way",
-    match: { deliveryStatus: { $in: ["assigned", "out-for-delivery"] } },
-  },
-  // a missed attempt or a failed delivery holds its stock until someone chooses Try again or
-  // Returned to shop on the order; before this it matched no filter and read as plain "Confirmed"
-  "not-delivered": {
-    label: "Delivery didn’t go through",
-    match: { orderStatus: "confirmed", deliveryStatus: { $in: ["attempted", "failed"] } },
-  },
-  delivered: { label: "Delivered", match: { deliveryStatus: "delivered" } },
-  cancelled: { label: "Cancelled", match: { orderStatus: "cancelled" } },
-  // paid online, with items that weren't packed: the customer was promised that part back, and
-  // only the owner can refund it (a refund made on the Refunds page moves the order off "paid")
-  "refund-owed": {
-    label: "Refund owed",
-    match: { orderStatus: { $ne: "cancelled" }, paymentStatus: "paid", shortfallPaise: { $gt: 0 } },
-  },
-} as const;
-type Filter = keyof typeof FILTERS;
-/** Filters for the owner's own work: only they can act on these orders. */
-const OWNER_FILTERS: readonly Filter[] = ["refund-owed"];
+/** "waiting 3 h": how long the oldest item in a queue has been there. */
+function waitingFor(since: Date, now: Date) {
+  const minutes = Math.max(1, Math.round((now.getTime() - since.getTime()) / 60000));
+  if (minutes < 60) return `waiting ${minutes} min`;
+  if (minutes < 60 * 24) return `waiting ${Math.round(minutes / 60)} h`;
+  const days = Math.round(minutes / 1440);
+  return `waiting ${days} ${days === 1 ? "day" : "days"}`;
+}
 
-/** Each queue: how many items wait, and how long the oldest has waited. */
-type Queue = { label: string; href: string; count: number; oldest: Date | null };
-async function queue(
-  label: string,
-  href: string,
-  model: Model<unknown>,
-  filter: object,
-  sortField: string,
-): Promise<Queue> {
-  const [count, oldest] = await Promise.all([
-    model.countDocuments(filter),
-    model.findOne(filter).sort({ [sortField]: 1 }).select(sortField).lean() as Promise<
-      Record<string, Date> | null
-    >,
-  ]);
-  return { label, href, count, oldest: oldest?.[sortField] ?? null };
-}
-function waitingFor(since: Date | null) {
-  if (!since) return "clear";
-  const minutes = Math.max(1, Math.round((Date.now() - since.getTime()) / 60000));
-  if (minutes < 60) return `oldest waiting ${minutes} min`;
-  if (minutes < 60 * 24) return `oldest waiting ${Math.round(minutes / 60)} h`;
-  return `oldest waiting ${Math.round(minutes / 1440)} d`;
-}
+/** The New menu: things people start from scratch, each shown only to those allowed to. */
+const NEW_THINGS: { href: string; label: string; permission: Permission }[] = [
+  { href: "/admin/products/new", label: "Add a product", permission: "catalog:write" },
+  { href: "/admin/inventory", label: "Adjust stock", permission: "inventory:adjust" },
+  { href: "/super-admin/promotions?edit=new#offer", label: "Create an offer", permission: "promotion:write" },
+  { href: "/super-admin/staff#add", label: "Add staff", permission: "staff:manage" },
+  { href: "/super-admin/schools?edit=new#school", label: "Add a school", permission: "settings:write" },
+];
 
 /** Orders and sales placed in [from, to), cancellations left out. */
 async function takings(from: Date, to: Date) {
@@ -154,61 +101,50 @@ export default async function Admin({
     ]),
     InventoryItem.countDocuments({ $expr: { $lte: [{ $subtract: ["$onHand", "$reserved"] }, 10] } }),
     CODCollection.find({ reconciledAt: null }).select("collectedPaise"),
-    Promise.all([
-      queue("Orders to confirm", "/admin?status=to-confirm#orders", Order, FILTERS["to-confirm"].match, "createdAt"),
-      queue("Orders being packed", "/admin?status=packing#orders", Order, FILTERS.packing.match, "updatedAt"),
-      queue("Packed, no rider assigned", "/admin?status=ready#orders", Order, FILTERS.ready.match, "updatedAt"),
-      queue(
-        "Deliveries that didn’t go through",
-        "/admin?status=not-delivered#orders",
-        Order,
-        FILTERS["not-delivered"].match,
-        "updatedAt",
-      ),
-      queue("Cash collections to reconcile", "/admin/cod", CODCollection, { reconciledAt: null }, "createdAt"),
-      queue("Support chats waiting for a reply", "/admin/support", ChatConversation, { status: "waiting-support" }, "updatedAt"),
-      queue("Open complaints", "/admin/complaints", Complaint, { status: "open" }, "createdAt"),
-      ...(owner
-        ? [
-            queue("Changes waiting for your approval", "/super-admin/approvals", ApprovalRequest, { state: "pending" }, "createdAt"),
-            // promised to customers when packing found items missing; nothing else reminds the owner
-            queue(
-              "Refunds owed for items not packed",
-              "/admin?status=refund-owed#orders",
-              Order,
-              FILTERS["refund-owed"].match,
-              "updatedAt",
-            ),
-            queue("Refunds in progress", "/super-admin/refunds", Refund, { status: { $in: ["requested", "processing"] } }, "createdAt"),
-          ]
-        : []),
-    ]),
+    loadQueues(user.roles, now),
     slotGaps(now),
   ]);
   const cash = cashOpen.reduce((sum, item) => sum + item.collectedPaise, 0);
-  const quickActions = [
-    { href: "/admin/products/new", label: "Add a product", icon: PackagePlus },
-    { href: "/admin/inventory", label: "Adjust stock", icon: Boxes },
-    { href: "/admin/customers", label: "Find a customer", icon: UsersRound },
-    ...(owner
-      ? [
-          { href: "/super-admin/promotions", label: "Create an offer", icon: Sparkles },
-          { href: "/super-admin/staff", label: "Add staff", icon: UserCog },
-          { href: "/super-admin", label: "Store settings", icon: Settings },
-        ]
-      : []),
-    { href: "/", label: "View the shop", icon: Store },
-  ];
+  // what needs someone now, oldest first; the queues with nothing waiting fold into one line
+  const waiting = queues
+    .filter((item) => item.count > 0)
+    .sort((a, b) => (a.oldest?.getTime() ?? Infinity) - (b.oldest?.getTime() ?? Infinity));
+  const clear = queues.filter((item) => item.count === 0);
+  const newThings = NEW_THINGS.filter((item) => hasPermission(user.roles, item.permission));
   return (
     <section className="page-container">
       <PageHeading
-        eyebrow="Store workspace"
+        eyebrow="Run the store"
         title={`${greeting(now)}, ${user.name}`}
-        lead="What needs you first, then today’s numbers and orders."
+        lead={
+          waiting.length
+            ? `${waiting.length} ${waiting.length === 1 ? "thing needs" : "things need"} you. Oldest first; everything else is clear.`
+            : "Nothing is waiting on the team. Today’s numbers and orders are below."
+        }
         aside={
-          <span className="live-chip">
-            <i /> Refreshes when you come back
-          </span>
+          <div className="overview-aside">
+            <span className="live-chip">
+              <i /> Refreshes when you come back
+            </span>
+            {newThings.length > 0 && (
+              <Popover
+                className="new-menu"
+                summary={
+                  <>
+                    <Plus size={17} aria-hidden="true" /> New <ChevronDown size={16} aria-hidden="true" />
+                  </>
+                }
+              >
+                <ul>
+                  {newThings.map((item) => (
+                    <li key={item.href}>
+                      <Link href={item.href}>{item.label}</Link>
+                    </li>
+                  ))}
+                </ul>
+              </Popover>
+            )}
+          </div>
         }
       />
       {gaps.areas.length > 0 && gaps.date && (
@@ -225,33 +161,55 @@ export default async function Admin({
           </span>
         </p>
       )}
-      <nav className="quick-actions" aria-label="Quick actions">
-        {quickActions.map(({ href, label, icon: Icon }) => (
-          <Link key={href} href={href} className="secondary-button">
-            <Icon size={17} aria-hidden="true" />
-            {label}
-          </Link>
-        ))}
-      </nav>
-      <div className="panel">
+      <section className="panel needs-you" id="needs-you" tabIndex={-1} aria-labelledby="needs-you-title">
         <div className="panel-heading">
           <div>
             <span className="eyebrow">Work queue</span>
-            <h2>Waiting on the team</h2>
+            <h2 id="needs-you-title">Needs you now</h2>
           </div>
         </div>
-        <ul className="work-queue">
-          {queues.map((item) => (
-            <li key={item.label} className={item.count ? "" : "clear"}>
-              <Link href={item.href}>
-                <strong>{item.count}</strong>
-                <span>{item.label}</span>
-                <small>{waitingFor(item.oldest)}</small>
+        {waiting.length > 0 ? (
+          <ol className="needs-list">
+            {waiting.map((item) => (
+              <li key={item.key} className="needs-row">
+                <strong className="needs-count">{item.count}</strong>
+                <div className="needs-what">
+                  <Link href={item.listHref}>{item.label}</Link>
+                  {item.oldest && (
+                    <span
+                      className={`wait-tag${item.late ? " is-late" : ""}`}
+                      title={`Oldest since ${formatIst(item.oldest)}`}
+                    >
+                      {waitingFor(item.oldest, now)}
+                    </span>
+                  )}
+                  <small>{item.note}</small>
+                </div>
+                <Link href={item.actionHref} className="primary-button compact-button needs-action">
+                  {item.action}
+                  <span className="sr-only">: {item.label.toLowerCase()}</span>
+                </Link>
+              </li>
+            ))}
+          </ol>
+        ) : (
+          <p className="needs-none">
+            <CircleCheck size={20} aria-hidden="true" /> Nothing is waiting. New orders, chats and complaints show up here.
+          </p>
+        )}
+        {waiting.length > 0 && clear.length > 0 && (
+          <p className="all-clear">
+            <span>
+              <CircleCheck size={16} aria-hidden="true" /> All clear:
+            </span>
+            {clear.map((item) => (
+              <Link key={item.key} href={item.listHref}>
+                {item.label}
               </Link>
-            </li>
-          ))}
-        </ul>
-      </div>
+            ))}
+          </p>
+        )}
+      </section>
       <RefreshOnFocus />
       <StatTiles
         items={[

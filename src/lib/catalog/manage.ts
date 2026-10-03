@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 import { z } from "zod";
-import { assertPermission, type Role } from "../auth/permissions";
+import { assertPermission, type Permission, type Role } from "../auth/permissions";
 import { connectDB } from "../db/connect";
 import {
   AuditLog,
@@ -10,15 +10,16 @@ import {
   User,
 } from "../db/models";
 import { objectId } from "../commerce/service";
+import { gstRateField, hsnField, optionalField } from "../tax/gst";
 
-async function authorize(actorId: string) {
+async function authorize(actorId: string, permission: Permission = "catalog:write") {
   await connectDB();
   const actor = await User.findOne({
     _id: objectId.parse(actorId),
     active: true,
   });
   if (!actor) throw Error("UNAUTHENTICATED");
-  assertPermission(actor.roles as Role[], "catalog:write");
+  assertPermission(actor.roles as Role[], permission);
 }
 
 const categoryInput = z.object({
@@ -101,6 +102,9 @@ export async function updateProductMetadata(actorId: string, input: unknown) {
       specifications: z.string().max(5000).default(""),
       featured: z.boolean(),
       bestseller: z.boolean(),
+      // printed on school quotations; a blank box clears it
+      gstRatePercent: optionalField(gstRateField),
+      hsnCode: optionalField(hsnField),
     })
     .parse(input);
   await mongoose.connection.transaction(async (session) => {
@@ -141,6 +145,8 @@ export async function updateProductMetadata(actorId: string, input: unknown) {
       specifications,
       featured: data.featured,
       bestseller: data.bestseller,
+      gstRatePercent: data.gstRatePercent,
+      hsnCode: data.hsnCode,
     };
     product.set(after);
     await product.save({ session });
@@ -223,6 +229,60 @@ export async function updateVariant(actorId: string, input: unknown) {
           details: { before, after: { label: data.label, maxQuantity: data.maxQuantity, active: data.active } },
         },
       ],
+      { session },
+    );
+  });
+}
+
+/**
+ * Who sees a product: shoppers, schools or both. Taking it away from both is what Hide is for,
+ * so at least one box stays ticked.
+ */
+export async function setProductAudience(actorId: string, input: unknown) {
+  await authorize(actorId);
+  const data = z
+    .object({ productId: objectId, showToCustomers: z.boolean(), showToSchools: z.boolean() })
+    .refine((value) => value.showToCustomers || value.showToSchools, {
+      message: "Tick Customers, Schools or both. To take it out of both, use Hide.",
+    })
+    .parse(input);
+  await mongoose.connection.transaction(async (session) => {
+    const product = await Product.findById(data.productId).session(session);
+    if (!product) throw Error("Product not found.");
+    const before = { showToCustomers: product.showToCustomers !== false, showToSchools: product.showToSchools === true };
+    const after = { showToCustomers: data.showToCustomers, showToSchools: data.showToSchools };
+    if (before.showToCustomers === after.showToCustomers && before.showToSchools === after.showToSchools) return;
+    product.set(after);
+    await product.save({ session });
+    await AuditLog.create(
+      [{ actorId, action: "product.audience", target: data.productId, details: { before, after } }],
+      { session },
+    );
+  });
+}
+
+/**
+ * The price schools see for a pack, before GST. Only an owner sets it, because only an owner
+ * prices school quotations; a blank box takes it off ("price on quotation").
+ */
+export async function setSchoolPrice(actorId: string, input: unknown) {
+  await authorize(actorId, "settings:write");
+  const data = z
+    .object({
+      variantId: objectId,
+      schoolPricePaise: optionalField(z.coerce.number().int().min(1).max(10_000_000)),
+    })
+    .parse(input);
+  await mongoose.connection.transaction(async (session) => {
+    const variant = await ProductVariant.findById(data.variantId).session(session);
+    if (!variant) throw Error("Pack not found.");
+    const before = variant.schoolPricePaise ?? null;
+    const after = data.schoolPricePaise ?? null;
+    if (before === after) return;
+    variant.set({ schoolPricePaise: data.schoolPricePaise });
+    await variant.save({ session });
+    await AuditLog.create(
+      [{ actorId, action: "variant.school-price", target: data.variantId, details: { before, after } }],
       { session },
     );
   });

@@ -234,7 +234,7 @@ export async function SharedBasket({
                 <div className="basket-line panel" key={row.variantId}>
                   <div className="basket-product">
                     <div className="basket-thumb">
-                      {image && <Image src={image} alt="" fill sizes="96px" unoptimized />}
+                      {image && <Image src={image} alt="" fill sizes="96px" />}
                     </div>
                     <div>
                       <h3>

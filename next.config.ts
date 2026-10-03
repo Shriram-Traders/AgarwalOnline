@@ -6,6 +6,8 @@ const config: NextConfig = {
   // files for any address it wasn't started on unless it is listed here
   allowedDevOrigins: process.env.DEV_LAN === "true" ? ["192.168.*.*", "10.*.*.*", "172.*.*.*"] : undefined,
   distDir: process.env.NEXT_TEST_BUILD === "true" ? ".next-e2e" : ".next",
+  // photos are resized by the services that host them (src/lib/image-loader.ts), not by a paid image service
+  images: { loader: "custom", loaderFile: "./src/lib/image-loader.ts" },
   experimental: {
     // photo uploads go through server actions, which refuse bodies over 1 MB by default;
     // photos are shrunk in the browser first (components/photo-input.tsx), this is the safety net.

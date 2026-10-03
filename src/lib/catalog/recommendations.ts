@@ -9,7 +9,13 @@ export async function recommendationsFor(options: {
   excludeSlug?: string;
   limit?: number;
 } = {}): Promise<CatalogItem[]> {
-  const all = await catalog();
+  // the catalogue and this shopper's past orders don't depend on each other
+  const [all, orders] = await Promise.all([
+    catalog(),
+    options.customerId
+      ? Order.find({ customerId: options.customerId }).sort({ createdAt: -1 }).limit(20).select("items.variantId")
+      : [],
+  ]);
   const scores = new Map<string, number>();
   const add = (slug: string, score: number) =>
     scores.set(slug, (scores.get(slug) ?? 0) + score);
@@ -20,10 +26,6 @@ export async function recommendationsFor(options: {
     if (product.variants.some((variant) => variant.available > 0)) add(product.slug, 2);
   }
   if (options.customerId) {
-    const orders = await Order.find({ customerId: options.customerId })
-      .sort({ createdAt: -1 })
-      .limit(20)
-      .select("items.variantId");
     const purchased = new Set(
       orders.flatMap((order) =>
         order.items.map((item: { variantId: unknown }) => String(item.variantId)),

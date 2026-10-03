@@ -33,7 +33,6 @@ export function ProductCard({
               fill
               sizes="(max-width: 760px) 45vw, 220px"
               loading={eager ? "eager" : "lazy"}
-              unoptimized
               className="product-photo"
             />
           ) : (

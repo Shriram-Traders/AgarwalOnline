@@ -6,7 +6,9 @@ import { requirePermission } from "../auth/session";
 import type { MutationState } from "../commerce/actions";
 import {
   saveCategory,
+  setProductAudience,
   setProductVisibility,
+  setSchoolPrice,
   updateProductMetadata,
   updateVariant,
 } from "./manage";
@@ -19,7 +21,14 @@ const SAVED = {
   product: "Product details saved.",
   visibility: "",
   pack: "Pack saved.",
+  audience: "",
+  "school-price": "School price saved.",
 };
+/** After saving who sees a product, say plainly where it now shows. */
+function audienceSaved(customers: boolean, schools: boolean) {
+  if (customers && schools) return "Shoppers and schools can both see it.";
+  return customers ? "Shoppers can see it; schools can’t." : "Schools only: shoppers can’t see it.";
+}
 export async function catalogManagementAction(
   _state: MutationState,
   form: FormData,
@@ -28,8 +37,10 @@ export async function catalogManagementAction(
     const user = await requirePermission("catalog:write");
     // new pack sizes go through governanceAction (operation "variant"), like other price changes
     const operation = z
-      .enum(["category", "product", "visibility", "pack"])
+      .enum(["category", "product", "visibility", "pack", "audience", "school-price"])
       .parse(form.get("operation"));
+    // only an owner prices for schools; the service checks again
+    if (operation === "school-price") await requirePermission("settings:write");
     const raw = formWithPaise(form);
     if (operation === "category") await saveCategory(user.id, raw);
     else if (operation === "product")
@@ -39,6 +50,13 @@ export async function catalogManagementAction(
         bestseller: form.get("bestseller") === "on",
       });
     else if (operation === "visibility") await setProductVisibility(user.id, raw);
+    else if (operation === "audience")
+      await setProductAudience(user.id, {
+        productId: raw.productId,
+        showToCustomers: form.get("showToCustomers") === "on",
+        showToSchools: form.get("showToSchools") === "on",
+      });
+    else if (operation === "school-price") await setSchoolPrice(user.id, raw);
     else await updateVariant(user.id, { ...raw, active: form.get("active") === "on" });
     revalidatePath("/admin/products", "layout");
     revalidatePath("/admin/categories");
@@ -50,12 +68,15 @@ export async function catalogManagementAction(
           ? form.get("visible") === "show"
             ? "The product is in the shop again."
             : "The product is hidden from the shop. You can show it again any time."
-          : SAVED[operation],
+          : operation === "audience"
+            ? audienceSaved(form.get("showToCustomers") === "on", form.get("showToSchools") === "on")
+            : SAVED[operation],
     };
   } catch (error) {
     if (error instanceof z.ZodError) return { error: plainMessage(error) };
     const message = error instanceof Error ? error.message : "";
-    if (/^(A category|Parent|Category|Product|Pack not found|Price)/.test(message)) return { error: message };
+    if (/^(A category|Parent|Category|Product|Pack not found|Price|Tick)/.test(message)) return { error: message };
+    if (message === "FORBIDDEN") return { error: "Only an owner can set school prices." };
     if (/duplicate key/i.test(message))
       return { error: "That web address or SKU is already in use. Pick another one." };
     log("error", "catalog.unexpected-error", { error });

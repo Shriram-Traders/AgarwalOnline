@@ -6,6 +6,7 @@ import { addLinesToBasket, objectId } from "../commerce/service";
 import { notify } from "../engagement/service";
 import { LIST_TOKEN } from "./links";
 import { ShoppingList } from "./models";
+import { shopperVisible } from "../catalog/visibility";
 
 export const LIMITS = { lists: 30, items: 100, people: 10 } as const;
 export type ListKind = "board" | "basket";
@@ -84,7 +85,7 @@ export async function saveListItem(
   if (
     !variant ||
     variant.active === false ||
-    !(await Product.exists({ _id: variant.productId, status: "published" }))
+    !(await Product.exists({ _id: variant.productId, ...shopperVisible }))
   )
     throw Error("This product is unavailable.");
   const next = Math.min(variant.maxQuantity, 100, add ? (line?.quantity ?? 0) + wanted : wanted);
@@ -174,7 +175,7 @@ export async function describeItems(items: { variantId: unknown; quantity: numbe
   ]);
   const products = await Product.find({
     _id: { $in: variants.map((variant) => variant.productId) },
-    status: "published",
+    ...shopperVisible,
   });
   const same = (a: unknown) => (b: { _id?: unknown; variantId?: unknown }) => String(b._id ?? b.variantId) === String(a);
   return items.flatMap((item) => {

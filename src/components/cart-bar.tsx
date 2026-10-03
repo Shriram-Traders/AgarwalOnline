@@ -10,7 +10,7 @@ import { useBasket } from "./basket";
 export function CartBar({ locale }: { locale: Locale }) {
   const { count, totalPaise } = useBasket();
   const pathname = usePathname();
-  const quiet = ["/cart", "/checkout", "/staff", "/admin", "/super-admin", "/delivery"];
+  const quiet = ["/cart", "/checkout", "/staff", "/admin", "/super-admin", "/delivery", "/school"];
   if (count === 0 || quiet.some((p) => pathname.startsWith(p))) return null;
   const text = copy[locale];
   return (

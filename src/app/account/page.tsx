@@ -8,6 +8,7 @@ import {
   Store,
   Heart,
   Bell,
+  School,
 } from "lucide-react";
 import { requirePage } from "@/lib/auth/session";
 import { staffHome } from "@/lib/auth/permissions";
@@ -27,6 +28,7 @@ import { currentLocale } from "@/lib/i18n";
 import { customerStage } from "@/lib/display";
 import { dayLabel } from "@/lib/commerce/slots";
 import { OrderHistory } from "@/components/order-history";
+import { SchoolMember } from "@/lib/schools/models";
 export const metadata = { title: "Your account", robots: { index: false } };
 export default async function Account({
   searchParams,
@@ -39,6 +41,7 @@ export default async function Account({
   const locale = await currentLocale();
   const mr = locale === "mr";
   const profile = await User.findById(user.id).select("preferredPaymentMethod substitutionPreference");
+  const representsSchool = Boolean(await SchoolMember.exists({ userId: user.id }));
   const customerOverview = await Promise.all([
           Order.findOne({
             customerId: user.id,
@@ -172,6 +175,16 @@ export default async function Account({
                 "/account/complaints",
                 RotateCcw,
               ],
+              ...(representsSchool
+                ? [
+                    [
+                      mr ? "शाळेचे कोटेशन" : "School quotations",
+                      mr ? "शाळेची यादी, कोटेशन आणि उत्तरे" : "Your school’s catalogue, basket and quotations",
+                      "/school",
+                      School,
+                    ],
+                  ]
+                : []),
               ...(home
                 ? [
                     [

@@ -69,6 +69,7 @@ export default async function RootLayout({
     currentUser(),
     liveAreaNames(),
   ]);
+  const staffRole = staffRoleOf(user?.roles ?? []);
   const basket = user
     ? await cartFor(user.id)
     : await (await import("@/lib/commerce/guest-cart")).guestCartLines();
@@ -91,7 +92,9 @@ export default async function RootLayout({
           )}
         >
           <AdaptiveShell
-            staffRole={staffRoleOf(user?.roles ?? [])}
+            staffRole={staffRole}
+            staffUser={user && staffRole ? { name: user.name, phone: user.phone, email: user.email } : null}
+            locale={locale}
             header={<Header locale={locale} categories={categories} />}
             footer={<SiteFooter locale={locale} categories={categories} areas={areas} />}
           >

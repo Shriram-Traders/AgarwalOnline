@@ -6,8 +6,10 @@ import { token, digest } from "../auth/crypto";
 import { connectDB } from "../db/connect";
 import { InventoryItem, Product, ProductVariant } from "../db/models";
 import { CartLine, GuestCart } from "./models";
-import { objectId, type UnavailableLine } from "./service";
+import { objectId } from "./service";
+import { resolveBasketLines } from "./basket-lines";
 import { z } from "zod";
+import { shopperVisible } from "../catalog/visibility";
 
 const GUEST_CART_COOKIE = "ags_guest_cart";
 const MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
@@ -30,7 +32,7 @@ export async function setGuestCartLine(
     (!variant ||
       variant.active === false ||
       quantity > variant.maxQuantity ||
-      !(await Product.exists({ _id: variant.productId, status: "published" })))
+      !(await Product.exists({ _id: variant.productId, ...shopperVisible })))
   )
     throw Error("This product or quantity is unavailable.");
 
@@ -78,46 +80,21 @@ export async function guestCartLines() {
 }
 /** The guest basket split like basketFor: buyable lines, and lines no longer sold (shown with Remove). */
 export async function guestBasket() {
-  const unavailable: UnavailableLine[] = [];
   const rawToken = await guestToken();
-  if (!rawToken) return { lines: [], unavailable };
+  if (!rawToken) return resolveBasketLines([]);
   await connectDB();
   const cart = await GuestCart.findOne({
     tokenHash: digest(rawToken),
     expiresAt: { $gt: new Date() },
   });
-  if (!cart) return { lines: [], unavailable };
-  const result = [];
-  for (const line of cart.lines) {
-    const variant = await ProductVariant.findById(line.variantId);
-    const product = variant ? await Product.findById(variant.productId) : null;
-    if (!variant || variant.active === false || !product || product.status !== "published") {
-      unavailable.push({
-        variantId: String(line.variantId),
-        name: product?.name.en ?? "An item that is no longer sold",
-        label: variant?.label ?? "",
-      });
-      continue;
-    }
-    const inventory = await InventoryItem.findOne({ variantId: variant._id });
-    result.push({
-      id: `${cart._id}:${variant._id}`,
-      variantId: String(variant._id),
-      productSlug: product.slug,
-      name: product.name.en,
-      image: product.images?.[0] ?? product.image,
-      label: variant.label,
+  if (!cart) return resolveBasketLines([]);
+  return resolveBasketLines(
+    cart.lines.map((line: { variantId: unknown; quantity: number }) => ({
+      id: `${cart._id}:${line.variantId}`,
+      variantId: line.variantId,
       quantity: line.quantity,
-      pricePaise: variant.pricePaise,
-      mrpPaise: variant.mrpPaise,
-      available: Math.max(
-        0,
-        (inventory?.onHand ?? 0) - (inventory?.reserved ?? 0),
-      ),
-      maxQuantity: variant.maxQuantity,
-    });
-  }
-  return { lines: result, unavailable };
+    })),
+  );
 }
 
 export async function mergeGuestCart(customerId: string) {
@@ -142,7 +119,7 @@ export async function mergeGuestCart(customerId: string) {
       const product = variant
         ? await Product.exists({
             _id: variant.productId,
-            status: "published",
+            ...shopperVisible,
           }).session(session)
         : null;
       if (!variant || variant.active === false || !inventory || !product) {

@@ -10,6 +10,7 @@ const PARENTS: [RegExp, string][] = [
   [/^\/admin\/orders\/[^/]+$/, "/admin"],
   [/^\/delivery\/orders\/[^/]+$/, "/delivery"],
   [/^\/lists\/[^/]+$/, "/"],
+  [/^\/school\/join\/[^/]+$/, "/"],
   [/^\/staff\/login$/, "/"],
 ];
 

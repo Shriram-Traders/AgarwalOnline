@@ -376,7 +376,7 @@ On other hosts, run the npm scripts from cron instead.
 
 - **Never commit secrets.** Git ignores `.env` and every other `.env.*` file except `.env.example`. Keep production values in your host's secret settings.
 - **Sessions.** better-auth stores sessions in the database and sets signed, HTTP-only, SameSite=Lax cookies. Every session, staff included, lasts 7 days. Deactivating a user or revoking their sessions takes effect on the next request.
-- **One sign-in for everyone.** Every account holds the customer role. Staff hold one extra role, sign in on `/login` like any customer, and open their workspace from the top-right account menu. Mock OTP therefore also opens staff workspaces, which is one more reason to remove it before launch.
+- **One sign-in for everyone.** Every account holds the customer role. Staff hold one extra role, sign in on `/login` like any customer, and open their workspace from the top-right account menu. Staff pages have their own header, with a search that finds settings, actions and pages (Ctrl K) instead of products. Mock OTP therefore also opens staff workspaces, which is one more reason to remove it before launch.
 - **Every protected page, action, API route and chat poll checks the session and permissions on the server.** Form posts and chat posts from other sites are rejected.
 - **Rate limits.** Sign-in, OTP, chat and search endpoints are rate limited.
 - **Minimum password length.** Customer and staff passwords need at least 8 characters.

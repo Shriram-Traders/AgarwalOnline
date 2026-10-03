@@ -1,4 +1,5 @@
 import { requirePage } from "@/lib/auth/session";
+import { FilterBar } from "@/components/filter-bar";
 import { DataTable } from "@/components/data-table";
 import { PackageCheck } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
@@ -41,7 +42,11 @@ export default async function AnalyticsPage({
         title="Analytics"
         lead="Sales, stock, customers and delivery for the dates you choose. Demo orders count when the demo data is loaded."
       />
-      <form className="audit-filters">
+      <FilterBar
+        label="Choose dates"
+        submitLabel="Apply dates"
+        clearHref={params.from || params.to ? "/admin/analytics" : undefined}
+      >
         <label>
           From
           <input type="date" name="from" defaultValue={params.from} />
@@ -50,8 +55,7 @@ export default async function AnalyticsPage({
           To
           <input type="date" name="to" defaultValue={params.to} />
         </label>
-        <button className="primary-button">Apply dates</button>
-      </form>
+      </FilterBar>
       <div className="analytics-cards">
         {cards.map(([label, value]) => (
           <article className="panel" key={label}>
@@ -80,7 +84,7 @@ export default async function AnalyticsPage({
       <div className="panel">
         <div className="panel-heading">
           <div>
-            <span className="eyebrow">ACTION NEEDED</span>
+            <span className="eyebrow">Action needed</span>
             <h2>Low stock</h2>
           </div>
           <span className="order-count">10 or fewer</span>

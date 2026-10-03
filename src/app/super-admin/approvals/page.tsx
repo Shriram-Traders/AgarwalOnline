@@ -175,7 +175,7 @@ export default async function Approvals({
             <ActionForm
               action={governanceAction}
               submit="Withdraw request"
-              className="form-stack inline-grant"
+              className="form-stack inline-grant approval-withdraw"
               buttonClassName="secondary-button"
             >
               <input type="hidden" name="operation" value="withdraw" />

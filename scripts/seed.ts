@@ -16,6 +16,8 @@ import { log } from "../src/lib/logger";
 import { Promotion, PromotionRedemption } from "../src/lib/promotions/models";
 import { GuestCart } from "../src/lib/commerce/models";
 import { ProductReview, ReviewReport } from "../src/lib/reviews/models";
+import { School, SchoolMember } from "../src/lib/schools/models";
+import { randomBytes } from "node:crypto";
 if (process.env.NODE_ENV === "production" || process.env.SEED_DEMO !== "true")
   throw new Error("Fictional seed requires non-production SEED_DEMO=true.");
 // Demo accounts and orders are for local and test databases only: with mock OTP switched on,
@@ -39,6 +41,8 @@ for (const model of [
   PromotionRedemption,
   ProductReview,
   ReviewReport,
+  School,
+  SchoolMember,
 ])
   await model.init();
 for (const c of categories)
@@ -297,6 +301,87 @@ if (demoAccounts && customer && deliveryPartner && demoArea && firstVariants.len
         expiresAt: new Date(Date.now() + 180 * 86400 * 1000),
       },
     },
+    { upsert: true },
+  );
+}
+// School quotations: a few items only schools see, and school prices on some shop items.
+const schoolOnly = [
+  { slug: "attendance-register-a4", en: "Attendance Register A4", mr: "हजेरी रजिस्टर A4", category: "paper", pack: "200 pages · hard bound", quantity: 1, price: 18900, mrp: 22000, school: 14500, gst: 18, hsn: "4820" },
+  { slug: "exercise-notebook-bundle", en: "Exercise Notebook Bundle", mr: "वह्यांचा गठ्ठा", category: "paper", pack: "12 notebooks · 172 pages", quantity: 12, price: 54000, mrp: 60000, school: 42000, gst: 0, hsn: "4820" },
+  { slug: "white-chalk-box", en: "White Chalk Box", mr: "पांढरा खडू बॉक्स", category: "school", pack: "100 dustless sticks", quantity: 100, price: 9900, mrp: 12000, gst: 5, hsn: "9609" },
+] as const;
+for (const [index, item] of schoolOnly.entries()) {
+  const c = await Category.findOne({ slug: item.category });
+  const product = await Product.findOneAndUpdate(
+    { slug: item.slug },
+    {
+      $setOnInsert: {
+        name: { en: item.en, mr: item.mr },
+        description: {
+          en: `${item.en} for schools, quoted in bulk. Fictional demonstration product.`,
+          mr: `${item.mr} — शाळांसाठी. हे प्रात्यक्षिक उत्पादन आहे.`,
+        },
+        brand: "SCHOOLMATE",
+        categoryId: c!._id,
+        categorySlug: item.category,
+        status: "published",
+        showToCustomers: false,
+        showToSchools: true,
+        gstRatePercent: item.gst,
+        hsnCode: item.hsn,
+      },
+    },
+    { upsert: true, returnDocument: "after" },
+  );
+  const variant = await ProductVariant.findOneAndUpdate(
+    { sku: `AGS-S-${String(index + 1).padStart(4, "0")}` },
+    {
+      $setOnInsert: {
+        productId: product._id,
+        label: item.pack,
+        unit: "piece",
+        packQuantity: item.quantity,
+        pricePaise: item.price,
+        mrpPaise: item.mrp,
+        maxQuantity: 10,
+        ...("school" in item ? { schoolPricePaise: item.school } : {}),
+      },
+    },
+    { upsert: true, returnDocument: "after" },
+  );
+  await InventoryItem.updateOne({ variantId: variant._id }, { $setOnInsert: { onHand: 0, reserved: 0 } }, { upsert: true });
+}
+// shop items schools can ask for too; prices before GST
+for (const [slug, schoolPricePaise] of [["geometry-box", 9900], ["eraser-sharpener-kit", 3800], ["brown-cover-rolls", undefined]] as const) {
+  const product = await Product.findOneAndUpdate(
+    { slug },
+    { $set: { showToSchools: true, gstRatePercent: 18, hsnCode: slug === "brown-cover-rolls" ? "4823" : "9017" } },
+    { returnDocument: "after" },
+  );
+  if (product && schoolPricePaise)
+    await ProductVariant.updateOne({ productId: product._id, schoolPricePaise: { $exists: false } }, { $set: { schoolPricePaise } });
+}
+// the plain demo customer (not a staff account that also shops) represents the demo school
+const schoolRep = demoAccounts ? await User.findOne({ roles: ["customer"] }) : null;
+if (schoolRep && superAdmin) {
+  const school = await School.findOneAndUpdate(
+    { name: "Fictional Vidya Mandir" },
+    {
+      $setOnInsert: {
+        contactName: "Office in-charge",
+        address: "Fictional School Road, Nagothane",
+        pin: "999999",
+        stateCode: "27",
+        notes: "Demo school only",
+        joinToken: randomBytes(18).toString("base64url"),
+        createdBy: superAdmin._id,
+      },
+    },
+    { upsert: true, returnDocument: "after" },
+  );
+  await SchoolMember.updateOne(
+    { schoolId: school._id, userId: schoolRep._id },
+    { $setOnInsert: { addedBy: superAdmin._id, via: "owner" } },
     { upsert: true },
   );
 }
