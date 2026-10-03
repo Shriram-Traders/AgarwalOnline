@@ -3,6 +3,7 @@ import { z } from "zod";
 import { connectDB } from "../db/connect";
 import { Product, User } from "../db/models";
 import { Notification, WishlistItem } from "./models";
+import { shopperVisible } from "../catalog/visibility";
 
 const recordId = z.preprocess(
   (value) => (typeof value === "string" ? value : String(value)),
@@ -27,7 +28,7 @@ export async function toggleWishlist(
 ) {
   await customer(customerId);
   const productId = recordId.parse(productInput);
-  if (!(await Product.exists({ _id: productId, status: "published" })))
+  if (!(await Product.exists({ _id: productId, ...shopperVisible })))
     throw Error("This product is unavailable.");
   const existing = await WishlistItem.findOne({ customerId, productId });
   if (existing) {
@@ -42,7 +43,7 @@ export async function toggleWishlist(
 export async function ensureSaved(customerId: string, productInput: unknown) {
   await customer(customerId);
   const productId = recordId.parse(productInput);
-  if (!(await Product.exists({ _id: productId, status: "published" })))
+  if (!(await Product.exists({ _id: productId, ...shopperVisible })))
     throw Error("This product is unavailable.");
   await WishlistItem.updateOne({ customerId, productId }, { $setOnInsert: { customerId, productId } }, { upsert: true });
 }

@@ -59,13 +59,17 @@ export default async function Products({
       (!params.category || row.category?.slug === params.category) &&
       (!params.status || row.product.status === params.status) &&
       (params.stock !== "low" || (row.available > 0 && row.available <= LOW)) &&
-      (params.stock !== "out" || row.available === 0),
+      (params.stock !== "out" || row.available === 0) &&
+      (!params.audience ||
+        (params.audience === "schools" && row.product.showToSchools === true) ||
+        (params.audience === "schools-only" && row.product.showToSchools === true && row.product.showToCustomers === false) ||
+        (params.audience === "customers-only" && row.product.showToSchools !== true)),
   );
-  const filtered = Boolean(q || params.category || params.status || params.stock);
+  const filtered = Boolean(q || params.category || params.status || params.stock || params.audience);
   return (
     <section className="page-container">
       <PageHeading
-        eyebrow="Catalog"
+        eyebrow="Run the store"
         title="Products"
         lead="Everything on your shelves. Open a product to change its details, photos or prices."
         aside={
@@ -100,6 +104,15 @@ export default async function Products({
           </select>
         </label>
         <label>
+          Who sees it
+          <select name="audience" defaultValue={params.audience ?? ""}>
+            <option value="">Everyone</option>
+            <option value="customers-only">Customers only</option>
+            <option value="schools">Offered to schools</option>
+            <option value="schools-only">Schools only</option>
+          </select>
+        </label>
+        <label>
           Status
           <select name="status" defaultValue={params.status ?? ""}>
             <option value="">Any status</option>
@@ -129,7 +142,7 @@ export default async function Products({
                 <span className="product-cell">
                   <span className={`product-thumb${image ? "" : " quiet"}`}>
                     {image ? (
-                      <Image src={image} alt="" width={44} height={44} unoptimized />
+                      <Image src={image} alt="" width={44} height={44} />
                     ) : (
                       <AisleIcon slug={product.categorySlug} />
                     )}
@@ -139,6 +152,11 @@ export default async function Products({
                     <small>
                       {category?.name.en ?? product.categorySlug}
                       {product.brand ? ` · ${product.brand}` : ""}
+                      {product.showToSchools === true
+                        ? product.showToCustomers === false
+                          ? " · Schools only"
+                          : " · Schools too"
+                        : ""}
                     </small>
                   </span>
                 </span>

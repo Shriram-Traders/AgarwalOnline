@@ -1,7 +1,8 @@
 import { listPath } from "./lists/links";
+import { schoolJoinPath } from "./schools/links";
 
 /** Pages people commonly sign in from, and are sent back to afterwards. */
-const EXACT = new Set(["/checkout", "/cart", "/account/wishlist", "/catalog"]);
+const EXACT = new Set(["/checkout", "/cart", "/account/wishlist", "/catalog", "/school"]);
 
 /**
  * Where to go after signing in, when the person started somewhere specific (checkout, a product,
@@ -12,5 +13,5 @@ export function returnPath(value: unknown) {
   if (typeof value !== "string") return null;
   if (EXACT.has(value)) return value;
   if (/^\/products\/[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value)) return value;
-  return listPath(value);
+  return listPath(value) ?? schoolJoinPath(value);
 }

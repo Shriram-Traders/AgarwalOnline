@@ -72,7 +72,7 @@ export default async function CategoriesPage({
   return (
     <section className="page-container">
       <PageHeading
-        eyebrow="Catalog"
+        eyebrow="Run the store"
         title="Categories"
         lead="The aisles shoppers browse. Every aisle needs an English and a Marathi name."
       />

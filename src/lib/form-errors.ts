@@ -50,6 +50,20 @@ const LABELS: Record<string, string> = {
   productId: "Product",
   variantId: "Pack",
   partnerId: "Delivery partner",
+  schoolPricePaise: "School price",
+  gstRatePercent: "GST rate",
+  hsnCode: "HSN code",
+  validUntil: "Valid until",
+  neededBy: "Needed by",
+  quantity: "Quantity",
+  unitPricePaise: "Unit price",
+  discountPercent: "Discount",
+  gstin: "GSTIN",
+  stateCode: "State",
+  legalName: "Legal name",
+  contactName: "Contact person",
+  address: "Address",
+  note: "Note",
 };
 
 function labelFor(key: string) {

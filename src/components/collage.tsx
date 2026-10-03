@@ -7,7 +7,7 @@ export function Collage({ images }: { images: (string | undefined)[] }) {
     <span className="collage" aria-hidden="true">
       {tiles.map((src, index) => (
         <span key={index} className="collage-tile">
-          {src && <Image src={src} alt="" fill sizes="120px" unoptimized />}
+          {src && <Image src={src} alt="" fill sizes="120px" />}
         </span>
       ))}
     </span>

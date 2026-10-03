@@ -263,10 +263,17 @@ test("Super Admin manages staff and reviews the audit trail", async ({
     email: "picker@e2e.test",
     roles: ["customer"],
   });
-  await page
-    .getByRole("link", { name: /Staff & roles/ })
-    .first()
-    .click();
+  // Staff & roles sits in the folded Setup group on a wide screen, and in the More sheet on a phone
+  const more = page.getByRole("navigation", { name: "Workspace tabs" }).getByRole("button", { name: "More" });
+  if (await more.isVisible()) {
+    await more.click();
+    await page.getByRole("dialog", { name: "Workspace menu" }).getByRole("link", { name: "Staff & roles" }).click();
+  } else {
+    const menu = page.getByRole("navigation", { name: "Staff workspace" });
+    const setup = menu.getByRole("button", { name: /^Setup/ });
+    if ((await setup.getAttribute("aria-expanded")) === "false") await setup.click();
+    await menu.getByRole("link", { name: "Staff & roles" }).click();
+  }
   // an existing account is picked from the list and given a role
   await page.getByLabel("Name, phone or email").fill("Picker");
   await page.getByRole("button", { name: "Find", exact: true }).click();
@@ -295,7 +302,8 @@ test("Super Admin manages staff and reviews the audit trail", async ({
   await expect(page.getByText("New Delivery Partner")).toBeVisible();
 
   await page.goto("/super-admin/audit");
-  await expect(page.getByText("staff.create", { exact: true })).toBeVisible();
+  // inside main: in dev a hidden streamed copy of the page can linger beside it
+  await expect(page.getByRole("main").getByText("staff.create", { exact: true })).toBeVisible();
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= window.innerWidth,
@@ -318,6 +326,13 @@ test("mobile storefront stays within viewport and navigation is visible", async 
       () => document.documentElement.scrollWidth <= window.innerWidth,
     ),
   ).toBe(true);
+  // phones switch language from the top strip, not only from the footer
+  const language = page.locator(".top-strip").getByRole("form", { name: "Language" });
+  await language.getByRole("button", { name: "मराठी" }).click();
+  await expect(language.getByRole("button", { name: "मराठी" })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("navigation", { name: "Mobile navigation" }).getByRole("link", { name: "मुख्य" })).toBeVisible();
+  await language.getByRole("button", { name: "English" }).click();
+  await expect(language.getByRole("button", { name: "English" })).toHaveAttribute("aria-pressed", "true");
   await page.screenshot({
     path: ".local/mobile-storefront.png",
     fullPage: true,

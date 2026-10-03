@@ -142,7 +142,7 @@ export default async function BoardPage({ params }: { params: Promise<{ id: stri
             return (
               <article className="board-item" key={row.variantId}>
                 <Link href={`/products/${row.slug}`} className="board-item-art" tabIndex={-1} aria-hidden="true">
-                  {image && <Image src={image} alt="" fill sizes="(max-width: 760px) 45vw, 220px" unoptimized />}
+                  {image && <Image src={image} alt="" fill sizes="(max-width: 760px) 45vw, 220px" />}
                 </Link>
                 <span className="board-item-by">
                   <Avatars names={[row.addedBy]} size="sm" label={mr ? `${row.addedBy} यांनी जोडले` : `Added by ${row.addedBy}`} />

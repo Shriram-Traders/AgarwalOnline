@@ -13,6 +13,7 @@ import mongoose from "mongoose";
 import { formWithPaise, paiseFromRupees } from "../display";
 import { plainMessage } from "../form-errors";
 import { log } from "../logger";
+import { saveTaxProfile } from "../tax/profile";
 /** Messages these actions write for the owner; anything else is unexpected and stays generic. */
 const PLAIN = /^(PIN code|An area|Switch on|Choose|The delivery|That delivery|This (area|slot|weekly)|Pick at least|Orders it can take)/;
 function safe(e: unknown) {
@@ -469,5 +470,20 @@ export async function stockThresholdAction(
     return { success: "Inventory approval threshold updated." };
   } catch (error) {
     return { error: safe(error) };
+  }
+}
+
+/** The shop's legal name, GSTIN and address, printed at the top of school quotations. */
+export async function taxDetailsAction(
+  _state: MutationState,
+  form: FormData,
+): Promise<MutationState> {
+  try {
+    const user = await requirePermission("settings:write");
+    await saveTaxProfile(user.id, Object.fromEntries(form));
+    revalidatePath("/super-admin");
+    return { success: "Business and tax details saved. Quotations sent from now on use them." };
+  } catch (e) {
+    return { error: safe(e) };
   }
 }

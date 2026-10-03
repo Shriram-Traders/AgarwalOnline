@@ -31,13 +31,10 @@ import {
 import { notify } from "../engagement/service";
 import { bestPromotion, returnOffer } from "../promotions/service";
 import { Promotion, PromotionRedemption } from "../promotions/models";
+import { isShopperVisible, shopperVisible } from "../catalog/visibility";
+import { resolveBasketLines } from "./basket-lines";
 export const objectId = z.string().regex(/^[a-f\d]{24}$/i, "Invalid record.");
-/** A basket line that can't be bought any more: its product was taken off the shop (or the pack removed). */
-export type UnavailableLine = {
-  variantId: string;
-  name: string;
-  label: string;
-};
+export type { UnavailableLine } from "./basket-lines";
 export async function cartFor(customerId: string) {
   return (await basketFor(customerId)).lines;
 }
@@ -49,35 +46,9 @@ export async function cartFor(customerId: string) {
 export async function basketFor(customerId: string) {
   await connectDB();
   const lines = await CartLine.find({ customerId });
-  const result = [];
-  const unavailable: UnavailableLine[] = [];
-  for (const line of lines) {
-    const v = await ProductVariant.findById(line.variantId);
-    const p = v ? await Product.findById(v.productId) : null;
-    if (!v || v.active === false || !p || p.status !== "published") {
-      unavailable.push({
-        variantId: String(line.variantId),
-        name: p?.name.en ?? "An item that is no longer sold",
-        label: v?.label ?? "",
-      });
-      continue;
-    }
-    const inv = await InventoryItem.findOne({ variantId: v._id });
-    result.push({
-      id: String(line._id),
-      variantId: String(v._id),
-      productSlug: p.slug,
-      name: p.name.en,
-      image: p.images?.[0] ?? p.image,
-      label: v.label,
-      quantity: line.quantity,
-      pricePaise: v.pricePaise,
-      mrpPaise: v.mrpPaise,
-      available: Math.max(0, (inv?.onHand ?? 0) - (inv?.reserved ?? 0)),
-      maxQuantity: v.maxQuantity,
-    });
-  }
-  return { lines: result, unavailable };
+  return resolveBasketLines(
+    lines.map((line) => ({ id: String(line._id), variantId: line.variantId, quantity: line.quantity })),
+  );
 }
 export async function setCartLine(
   customerId: string,
@@ -97,7 +68,7 @@ export async function setCartLine(
     !variant ||
     variant.active === false ||
     quantity > variant.maxQuantity ||
-    !(await Product.exists({ _id: variant.productId, status: "published" }))
+    !(await Product.exists({ _id: variant.productId, ...shopperVisible }))
   )
     throw Error("This product or quantity is unavailable.");
   await CartLine.updateOne(
@@ -190,7 +161,7 @@ export async function checkout(customerId: string, input: unknown) {
         ? await Product.findById(variant.productId).session(session)
         : null;
       // name the item and say what to do: a vague "an item is unavailable" left people stuck
-      if (!variant || variant.active === false || !product || product.status !== "published")
+      if (!variant || variant.active === false || !isShopperVisible(product))
         throw Error(
           `Your basket has ${product ? product.name.en : "an item"}, which is no longer sold. Remove it from your basket to continue.`,
         );
@@ -497,7 +468,7 @@ export async function addLinesToBasket(
       const product = variant
         ? await Product.exists({
             _id: variant.productId,
-            status: "published",
+            ...shopperVisible,
           }).session(session)
         : null;
       const inventory = variant

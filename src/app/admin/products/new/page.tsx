@@ -6,10 +6,14 @@ import { requirePage } from "@/lib/auth/session";
 import { governanceAction } from "@/lib/governance/actions";
 import { Category } from "@/lib/db/models";
 import { MoneyInput } from "@/components/money-input";
+import { hasPermission } from "@/lib/auth/permissions";
+import { GST_RATES } from "@/lib/tax/gst";
 export const metadata = { title: "Add a product", robots: { index: false } };
 
 export default async function NewProductPage() {
-  await requirePage("catalog:write");
+  const user = await requirePage("catalog:write");
+  // only an owner prices for schools
+  const isOwner = hasPermission(user.roles, "settings:write");
   const categories = await Category.find({}).sort({ "name.en": 1 });
   return (
     <section className="page-container">
@@ -19,7 +23,7 @@ export default async function NewProductPage() {
         <span aria-current="page">Add a product</span>
       </nav>
       <PageHeading
-        eyebrow="Catalog"
+        eyebrow="Run the store"
         title="Add a product"
         lead="Describe the product and its first pack. It goes live once an owner approves it."
       />
@@ -107,6 +111,43 @@ export default async function NewProductPage() {
             <label>
               Opening stock
               <input name="stock" inputMode="numeric" pattern="[0-9]+" required />
+            </label>
+            {isOwner && (
+              <label>
+                School price before GST (₹) <small>Optional: what schools see as the expected price</small>
+                <MoneyInput name="schoolPriceRupees" required={false} />
+              </label>
+            )}
+          </div>
+        </fieldset>
+        <fieldset className="form-section">
+          <legend>Who can see it</legend>
+          <label className="checkbox-label">
+            <input type="checkbox" name="showToCustomers" defaultChecked /> Customers
+            <small>In the shop, search, baskets and wishlists</small>
+          </label>
+          <label className="checkbox-label">
+            <input type="checkbox" name="showToSchools" /> Schools
+            <small>In the school catalogue, for quotations</small>
+          </label>
+        </fieldset>
+        <fieldset className="form-section">
+          <legend>Tax <small>Printed on school quotations; can be added later</small></legend>
+          <div className="staff-form-grid">
+            <label>
+              GST rate
+              <select name="gstRatePercent" defaultValue="">
+                <option value="">Not set</option>
+                {GST_RATES.map((rate) => (
+                  <option value={rate} key={rate}>
+                    {rate}%
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              HSN code <small>4, 6 or 8 digits</small>
+              <input name="hsnCode" inputMode="numeric" pattern="[0-9]{4}([0-9]{2}){0,2}" maxLength={8} autoComplete="off" />
             </label>
           </div>
         </fieldset>

@@ -54,9 +54,13 @@ export function useBasket() {
 export function BasketLink({ label }: { label: string }) {
   const { count } = useBasket();
   return (
-    <Link href="/cart" className="cart-button" aria-label={count > 0 ? `${label}, ${count}` : label}>
+    <Link
+      href="/cart"
+      className="cart-button"
+      title={label}
+      aria-label={count > 0 ? `${label}, ${count}` : label}
+    >
       <ShoppingBag size={20} aria-hidden="true" />
-      <span>{label}</span>
       {count > 0 && <b aria-hidden="true">{count}</b>}
     </Link>
   );

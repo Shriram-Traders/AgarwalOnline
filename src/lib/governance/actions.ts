@@ -27,7 +27,12 @@ export async function governanceAction(
       data.scheduledAt = `${data.scheduledAt}:00+05:30`;
     let success: string;
     if (operation === "product") {
-      const { live } = await submitProduct(user.id, data);
+      // unticked boxes send nothing, so read them here rather than let a default stand in
+      const { live } = await submitProduct(user.id, {
+        ...data,
+        showToCustomers: form.get("showToCustomers") === "on",
+        showToSchools: form.get("showToSchools") === "on",
+      });
       success = live ? "Product added. It is in the shop now." : "Request sent. The product goes live once an owner approves it.";
     } else if (operation === "variant") {
       const { live } = await submitVariant(user.id, data);
@@ -58,7 +63,7 @@ export async function governanceAction(
     if (e instanceof ZodError) return { error: plainMessage(e) };
     const message = e instanceof Error ? e.message : "";
     if (
-      /^(You cannot|A rejection|This request|Prices changed|Stock changed|This adjustment|A (price|stock) change|That (web address|SKU)|Only the person|Product not found|Select a category|Price must)/.test(
+      /^(You cannot|A rejection|This request|Prices changed|Stock changed|This adjustment|A (price|stock) change|That (web address|SKU)|Only the person|Only an owner|Product not found|Select a category|Price must|Tick)/.test(
         message,
       )
     )

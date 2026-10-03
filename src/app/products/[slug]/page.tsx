@@ -40,18 +40,19 @@ export default async function ProductPage({
   params: Promise<{ slug: string }>;
   searchParams: Promise<{ lang?: string }>;
 }) {
-  const user = await currentUser();
-  const p = await productBySlug((await params).slug);
+  // each round asks for everything that doesn't wait on something else, all at once
+  const [user, { slug }, { lang: requestedLocale }, savedLocale] = await Promise.all([
+    currentUser(),
+    params,
+    searchParams,
+    currentLocale(),
+  ]);
+  const p = await productBySlug(slug);
   if (!p) notFound();
-  const requestedLocale = (await searchParams).lang;
-  const locale = requestedLocale
-    ? requestedLocale === "mr"
-      ? "mr"
-      : "en"
-    : await currentLocale();
+  const locale = requestedLocale ? (requestedLocale === "mr" ? "mr" : "en") : savedLocale;
   const mr = locale === "mr";
   const image = p.image ?? productImages[p.slug];
-  const [reviews, related, rules, saved, categories, myLists] = await Promise.all([
+  const [reviews, related, rules, saved, categories, myLists, variantIds] = await Promise.all([
     ProductReview.find({ productId: p.id, status: "published" })
       .sort({ createdAt: -1 })
       .limit(20),
@@ -67,6 +68,8 @@ export default async function ProductPage({
       : null,
     catalogCategories(),
     user ? Promise.all([listsFor(user.id, "basket"), listsFor(user.id, "board")]) : null,
+    // every pack, hidden ones too: someone who bought a pack since hidden can still review
+    user ? ProductVariant.find({ productId: p.id }).distinct("_id") : [],
   ]);
   const [myBaskets, myBoards] = myLists ?? [null, null];
   const listChoices = myBaskets ? [...myBaskets.owned, ...myBaskets.shared] : [];
@@ -82,17 +85,13 @@ export default async function ProductPage({
     categories.find((category) => category.slug === p.categorySlug)?.[locale] ?? p.categorySlug;
   // the shop is the only seller; saying so is a row of noise
   const specs = p.specifications.filter((spec) => spec.label.en !== "Seller");
-  const reviewUsers = await User.find({
-    _id: { $in: reviews.map((review) => review.customerId) },
-  }).select("name");
-  const variantIds = await ProductVariant.find({ productId: p.id }).distinct("_id");
-  const canReview =
-    user !== null &&
-    (await Order.exists({
-      customerId: user.id,
-      deliveryStatus: "delivered",
-      "items.variantId": { $in: variantIds },
-    }));
+  const [reviewUsers, delivered] = await Promise.all([
+    User.find({ _id: { $in: reviews.map((review) => review.customerId) } }).select("name"),
+    user
+      ? Order.exists({ customerId: user.id, deliveryStatus: "delivered", "items.variantId": { $in: variantIds } })
+      : null,
+  ]);
+  const canReview = user !== null && Boolean(delivered);
   const averageRating = reviews.length
     ? reviews.reduce((sum, review) => sum + review.rating, 0) / reviews.length
     : 0;

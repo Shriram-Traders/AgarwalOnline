@@ -34,8 +34,13 @@ import {
   rulesAction,
   synonymAction,
   stockThresholdAction,
+  taxDetailsAction,
 } from "@/lib/admin/actions";
 import { MoneyInput } from "@/components/money-input";
+import { taxProfile } from "@/lib/tax/profile";
+import { settingsHub } from "@/lib/admin/settings-summary";
+import { SettingsHub } from "./_settings/settings-hub";
+import { GST_STATES } from "@/lib/tax/gst";
 export const metadata = { title: "Store settings", robots: { index: false } };
 
 function TimeSelect({ name, label, defaultValue }: { name: string; label: string; defaultValue: number }) {
@@ -90,7 +95,7 @@ export default async function StoreSettings({
   const until = new Date(`${today}T00:00:00Z`);
   until.setUTCDate(until.getUTCDate() + DAYS_AHEAD);
   const slotArea = params.slots && mongoose.isValidObjectId(params.slots) ? params.slots : undefined;
-  const [areas, rules, patterns, upcoming, synonyms, stockThreshold, gaps] = await Promise.all([
+  const [areas, rules, patterns, upcoming, synonyms, stockThreshold, gaps, business] = await Promise.all([
     ServiceArea.find({}).sort({ name: 1 }),
     deliveryRules(),
     SlotPattern.find({}).sort({ startMinutes: 1 }),
@@ -103,6 +108,7 @@ export default async function StoreSettings({
     SearchSynonym.find({}).limit(100),
     SystemSetting.findOne({ key: "large-stock-threshold" }).select("value"),
     slotGaps(now),
+    taxProfile(),
   ]);
   const live = areas.filter((area) => area.enabled);
   const areaName = new Map(areas.map((area) => [String(area._id), area.name as string]));
@@ -135,15 +141,32 @@ export default async function StoreSettings({
         title="Store settings"
         lead="How delivery works, where you deliver and which changes need a second look. Changes apply at checkout straight away."
       />
-      {gaps.areas.length > 0 && gaps.date && (
-        <p className="notice slot-gap" role="status">
-          <CalendarClock size={16} aria-hidden="true" /> No delivery times to book in{" "}
-          <strong>{gaps.areas.join(", ")}</strong> from {dayLabel(gaps.date, now).toLowerCase()} over the next
-          two open days, so shoppers there can’t check out. Add a weekly delivery time below.
-        </p>
-      )}
+      <SettingsHub
+        cards={settingsHub({
+          rules,
+          areas,
+          patterns,
+          upcoming,
+          gapAreas: gaps.areas.length && gaps.date ? gaps.areas : [],
+          business: {
+            legalName: business.legalName,
+            gstin: business.gstin,
+            stateName: GST_STATES.find((state) => state.code === business.stateCode)?.name,
+          },
+          stockThreshold: Number(stockThreshold?.value ?? 100),
+          synonymGroups: synonyms.length,
+          services: {
+            payments: paymentsEnabled(),
+            photos: Boolean(process.env.CLOUDINARY_CLOUD_NAME),
+            sms: Boolean(process.env.SMS_API_URL),
+          },
+          today,
+          weekdays: WEEKDAYS,
+          daysAhead: DAYS_AHEAD,
+        })}
+      />
 
-      <section className="settings-section" aria-labelledby="delivery-heading">
+      <section className="settings-section" aria-labelledby="delivery-heading" id="delivery">
         <div className="settings-intro">
           <h2 id="delivery-heading">Delivery</h2>
           <p>
@@ -157,7 +180,7 @@ export default async function StoreSettings({
           </p>
         </div>
         <div className="settings-cards">
-          <div className="panel">
+          <div className="panel" id="delivery-rules" tabIndex={-1}>
             <h2>Delivery rules</h2>
             <ActionForm action={rulesAction} submit="Save rules">
               <label>
@@ -195,7 +218,7 @@ export default async function StoreSettings({
             </ActionForm>
           </div>
 
-          <div className="panel" id="weekly">
+          <div className="panel" id="weekly" tabIndex={-1}>
             <div className="panel-heading">
               <div>
                 <span className="eyebrow">Repeats every week</span>
@@ -276,7 +299,9 @@ export default async function StoreSettings({
                 <p className="muted">No weekly delivery times yet. Add the first one below.</p>
               }
             />
-            <h3 className="subheading">Add a weekly delivery time</h3>
+            <h3 className="subheading" id="add-weekly" tabIndex={-1}>
+              Add a weekly delivery time
+            </h3>
             {areas.length ? (
               <ActionForm action={slotPatternAction} submit="Add delivery time">
                 <input type="hidden" name="operation" value="create" />
@@ -302,7 +327,7 @@ export default async function StoreSettings({
               <p className="muted">Add a delivery area below first.</p>
             )}
             {live.length > 0 && (
-              <details className="one-off">
+              <details className="one-off" id="one-off" tabIndex={-1}>
                 <summary>Add a one-off delivery time on a single date</summary>
                 <ActionForm action={slotAction} submit="Add one-off time">
                   <label>
@@ -331,7 +356,7 @@ export default async function StoreSettings({
         </div>
       </section>
 
-      <section className="settings-section" aria-labelledby="slots-heading" id="slots">
+      <section className="settings-section" aria-labelledby="slots-heading" id="slots" tabIndex={-1}>
         <div className="settings-intro">
           <h2 id="slots-heading">Upcoming delivery slots</h2>
           <p>
@@ -430,7 +455,7 @@ export default async function StoreSettings({
         </div>
       </section>
 
-      <section className="settings-section" aria-labelledby="areas-heading" id="areas">
+      <section className="settings-section" aria-labelledby="areas-heading" id="areas" tabIndex={-1}>
         <div className="settings-intro">
           <h2 id="areas-heading">Service areas</h2>
           <p>
@@ -564,7 +589,76 @@ export default async function StoreSettings({
         </div>
       </section>
 
-      <section className="settings-section" aria-labelledby="checks-heading">
+      <section className="settings-section" aria-labelledby="tax-heading" id="tax" tabIndex={-1}>
+        <div className="settings-intro">
+          <h2 id="tax-heading">Business and tax details</h2>
+          <p>Printed at the top of every school quotation, with the GST worked out from your state.</p>
+          {!business.gstin && (
+            <p className="notice">
+              No GSTIN yet. Quotations still go out, with a note that the GSTIN will be added.
+            </p>
+          )}
+        </div>
+        <div className="settings-cards">
+          <div className="panel">
+            <h2>On quotations</h2>
+            <ActionForm action={taxDetailsAction} submit="Save business details">
+              <label>
+                Legal name <small>As registered for GST</small>
+                <input name="legalName" defaultValue={business.legalName} maxLength={120} required />
+              </label>
+              <label>
+                GSTIN <small>15 characters; leave blank until registered</small>
+                <input
+                  name="gstin"
+                  defaultValue={business.gstin ?? ""}
+                  maxLength={15}
+                  autoCapitalize="characters"
+                  autoComplete="off"
+                  spellCheck={false}
+                />
+              </label>
+              <label>
+                Address
+                <textarea name="address" defaultValue={business.address} maxLength={300} required />
+              </label>
+              <label>
+                State <small>Decides CGST + SGST or IGST</small>
+                <select name="stateCode" defaultValue={business.stateCode}>
+                  {GST_STATES.map((state) => (
+                    <option value={state.code} key={state.code}>
+                      {state.name} ({state.code})
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="staff-form-grid">
+                <label>
+                  Phone <small>Optional</small>
+                  <input
+                    name="phone"
+                    defaultValue={business.phone ?? ""}
+                    inputMode="numeric"
+                    pattern="[0-9]{10}"
+                    maxLength={10}
+                    autoComplete="off"
+                  />
+                </label>
+                <label>
+                  Email <small>Optional</small>
+                  <input name="email" type="email" defaultValue={business.email ?? ""} maxLength={120} />
+                </label>
+              </div>
+              <label>
+                Quotation terms <small>Optional, like payment terms; printed at the bottom</small>
+                <textarea name="terms" defaultValue={business.terms ?? ""} maxLength={1000} />
+              </label>
+            </ActionForm>
+          </div>
+        </div>
+      </section>
+
+      <section className="settings-section" aria-labelledby="checks-heading" id="checks">
         <div className="settings-intro">
           <h2 id="checks-heading">Checks and search</h2>
           <p>
@@ -573,7 +667,7 @@ export default async function StoreSettings({
           </p>
         </div>
         <div className="settings-cards">
-          <div className="panel">
+          <div className="panel" id="stock-approval" tabIndex={-1}>
             <h2>Stock changes that need approval</h2>
             <p className="muted">
               A stock adjustment of this many units or more waits for a second owner to approve it.
@@ -591,7 +685,7 @@ export default async function StoreSettings({
               </label>
             </ActionForm>
           </div>
-          <div className="panel">
+          <div className="panel" id="synonyms" tabIndex={-1}>
             <h2>Search words that mean the same</h2>
             <p className="muted">Shoppers who type any of these words see the same products.</p>
             <ActionForm action={synonymAction} submit="Save words">
@@ -615,7 +709,7 @@ export default async function StoreSettings({
               </ul>
             )}
           </div>
-          <div className="panel integration-status">
+          <div className="panel integration-status" id="services" tabIndex={-1}>
             <h2>Connected services</h2>
             <p>
               <span className={`staff-state ${paymentsEnabled() ? "active" : "inactive"}`}>

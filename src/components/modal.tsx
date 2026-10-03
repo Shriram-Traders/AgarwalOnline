@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useId, useRef, type ReactNode } from "react";
+import { useEffect, useId, useRef, type ReactNode, type RefObject } from "react";
 import { X } from "lucide-react";
 
 const FOCUSABLE =
@@ -16,12 +16,18 @@ export function Modal({
   eyebrow,
   onClose,
   closeLabel = "Close",
+  initialFocus,
+  variant = "sheet",
   children,
 }: {
   title: ReactNode;
   eyebrow?: ReactNode;
   onClose: () => void;
   closeLabel?: string;
+  /** Where focus starts instead of the popup itself, e.g. a search box that should take typing at once. */
+  initialFocus?: RefObject<HTMLElement | null>;
+  /** "full" fills a phone screen, for search. */
+  variant?: "sheet" | "full";
   children: ReactNode;
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -30,11 +36,14 @@ export function Modal({
   useEffect(() => {
     close.current = onClose;
   }, [onClose]);
+  const first = useRef(initialFocus);
   useEffect(() => {
     const opener = document.activeElement as HTMLElement | null;
-    ref.current?.focus();
+    (first.current?.current ?? ref.current)?.focus();
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
+        // a control inside used this Escape itself (a search box clearing its text)
+        if (event.defaultPrevented) return;
         event.preventDefault();
         close.current();
         return;
@@ -66,7 +75,7 @@ export function Modal({
     <div className="modal-backdrop sheet-backdrop" role="presentation" onMouseDown={() => close.current()}>
       <div
         ref={ref}
-        className="confirm-modal sheet-modal"
+        className={`confirm-modal sheet-modal${variant === "full" ? " is-full" : ""}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}

@@ -20,6 +20,7 @@ Anything new — a page, a section, a component, a form — must be designed for
 
 - A list of records is a `DataTable` with a `FilterBar` (search plus the one or two filters people need) and a count line; the first column is the record's name, linking to its own page or an `?edit=` panel above the table. Never render a stack of open edit forms or accordions, one per record.
 - Page chrome is `PageHeading` (eyebrow "Run the store" or "Owner", a one-sentence lead, the primary action in `aside`) and a `breadcrumb` on detail pages.
+- A new staff page goes into the menu (`STAFF_NAV` in `src/lib/staff/nav.ts`) and the workspace search (`src/lib/staff/search-index.ts`); a new setting gets an `id` anchor and a search entry pointing at it.
 - Money is typed in rupees with `MoneyInput` (named `…Rupees`, converted by `formWithPaise`); number-like fields use `inputMode` + `pattern`, not `type="number"`.
 - Validation errors go through `plainMessage` in `src/lib/form-errors.ts`, so they name the field in plain English.
 - `ActionForm confirmMessage` only for money, publishing or hard-to-undo actions; the dialog reads "<submit>?" with a "Yes, …" button.

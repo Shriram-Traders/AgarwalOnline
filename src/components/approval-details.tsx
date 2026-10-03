@@ -17,6 +17,11 @@ const labels: Record<string, string> = {
   onHand: "Stock on hand",
   delta: "Stock adjustment",
   maxQuantity: "Most one shopper can buy",
+  showToCustomers: "Shoppers see it",
+  showToSchools: "Schools see it",
+  gstRatePercent: "GST rate (%)",
+  hsnCode: "HSN code",
+  schoolPricePaise: "School price (before GST)",
 };
 /** Keys the reviewer doesn't need to read (the product is already named in the title). */
 const HIDDEN = new Set(["productId"]);
@@ -44,10 +49,14 @@ export function ApprovalDetails({
                     style: "currency",
                     currency: "INR",
                   }).format(value / 100)
-                : // 0 is a real value (no stock); only a missing one is a dash
-                  value === undefined || value === null || value === ""
-                  ? "—"
-                  : String(value)}
+                : typeof value === "boolean"
+                  ? value
+                    ? "Yes"
+                    : "No"
+                  : // 0 is a real value (no stock); only a missing one is a dash
+                    value === undefined || value === null || value === ""
+                    ? "—"
+                    : String(value)}
           </dd>
         </div>
       ))}

@@ -1,5 +1,6 @@
 import mongoose, { Schema } from "mongoose";
 import { roles } from "../auth/permissions";
+import { GST_RATES, HSN_RE } from "../tax/gst";
 const opts = { timestamps: true, strict: "throw" as const };
 const ref = (name: string) => ({
   type: Schema.Types.ObjectId,
@@ -106,10 +107,20 @@ const productSchema = new Schema(
     },
     featured: { type: Boolean, default: false },
     bestseller: { type: Boolean, default: false },
+    /**
+     * Who sees it. Shoppers: missing counts as yes, so products from before schools existed
+     * stay in the shop. Schools: only when ticked.
+     */
+    showToCustomers: { type: Boolean, default: true },
+    showToSchools: { type: Boolean, default: false },
+    /** Printed on school quotations; each quotation line starts with these and can change them. */
+    gstRatePercent: { type: Number, enum: [...GST_RATES] },
+    hsnCode: { type: String, match: HSN_RE },
   },
   opts,
 );
 productSchema.index({ categoryId: 1, status: 1 });
+productSchema.index({ status: 1, showToSchools: 1 });
 const variantSchema = new Schema(
   {
     productId: ref("Product"),
@@ -141,6 +152,8 @@ const variantSchema = new Schema(
     },
     /** A hidden pack stays on past orders but can't be bought. Missing means active (older packs). */
     active: { type: Boolean, default: true },
+    /** The expected price schools see, before GST. Missing means "price on quotation". */
+    schoolPricePaise: { type: Number, min: 1, validate: Number.isSafeInteger },
   },
   opts,
 );

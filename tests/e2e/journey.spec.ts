@@ -159,10 +159,13 @@ test("whole journey: sign up, shop, pay, pack, deliver, reconcile", async ({ bro
     await page.waitForTimeout(400);
   }
   await expect(page.locator(".qty-stepper output")).toHaveText("5");
-  await page.getByLabel("Offer code").fill("LOCAL10");
-  // the typed-code box; the shop's listed offers below it have their own Apply buttons
-  await page.locator(".promo-form").getByRole("button", { name: "Apply" }).click();
-  await expect(page.locator(".success-message")).toContainText(/applied/i);
+  // coupons sit behind one line; its popup has a box for any code above the shop's own offers
+  await page.locator("#offers").getByRole("button", { name: /Apply a coupon/ }).click();
+  const coupons = page.getByRole("dialog", { name: "Coupons" });
+  await coupons.getByLabel("Enter a coupon code").fill("LOCAL10");
+  await coupons.locator(".coupon-entry").getByRole("button", { name: "Apply" }).click();
+  await expect(coupons).toBeHidden();
+  await expect(page.locator("#offers")).toContainText("LOCAL10 applied");
   await expect(page.locator(".savings-line")).toHaveCount(2);
   await shot(page, "cart-populated");
 

@@ -116,7 +116,7 @@ test("staff sign in on the same page, land in their workspace and can switch fro
   const opened = await menu(page);
   if (opened) {
     await expect(opened.getByText("Store workspace")).toBeVisible();
-    await opened.getByRole("link", { name: "Operations" }).click();
+    await opened.getByRole("link", { name: "Overview & orders" }).click();
     await expect(page).toHaveURL("/admin");
   } else {
     await page.goto("/account");
