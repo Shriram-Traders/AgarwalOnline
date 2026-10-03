@@ -7,6 +7,7 @@ import { requirePage } from "@/lib/auth/session";
 import { User } from "@/lib/db/models";
 import { Address, Order } from "@/lib/commerce/models";
 import { PageHeading } from "@/components/page-heading";
+import { FilterBar } from "@/components/filter-bar";
 export const metadata = { title: "Customers", robots: { index: false } };
 
 function safeRegex(value: string) {
@@ -50,23 +51,20 @@ export default async function CustomersPage({
         eyebrow="Run the store"
         title="Customers"
         lead="Who orders from the store, how much and how recently, for support and delivery questions."
-        aside={<span className="live-chip">{customers.length} shown</span>}
       />
-      <form className="audit-filters">
+      <FilterBar label="Find customers" submitLabel="Find" clearHref={term ? "/admin/customers" : undefined}>
         <label>
           Name or phone
-          <input
-            name="q"
-            defaultValue={term}
-            maxLength={80}
-            placeholder="Search customers"
-          />
+          <input name="q" defaultValue={term} maxLength={80} placeholder="Priya or 98765" />
         </label>
-        <button className="primary-button">Search</button>
-        <Link className="secondary-button" href="/admin/customers">
-          Clear
-        </Link>
-      </form>
+      </FilterBar>
+      <p className="results-line" role="status">
+        <span>
+          <strong>{customers.length}</strong> {customers.length === 1 ? "customer" : "customers"}
+          {term ? ` matching “${term}”` : ", newest first"}
+          {customers.length === 100 ? " (the first 100)" : ""}
+        </span>
+      </p>
       <DataTable
         caption="Customers with order counts, paid value, saved addresses and their latest order"
         rows={customers}

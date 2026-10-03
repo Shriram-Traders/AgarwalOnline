@@ -9,9 +9,12 @@ import { currentUser } from "@/lib/auth/session";
 import { Promotion, PromotionRedemption } from "@/lib/promotions/models";
 import { deliveryRules } from "@/lib/commerce/service";
 import { CartBar } from "./cart-bar";
+import { ShopAssistant } from "./shop-assistant";
+import { shopAssistantEnabled } from "@/lib/assistant/flags";
 import { BackButton } from "./back-button";
 import { BasketLink } from "./basket";
 import { formatPrice } from "@/lib/display";
+import { SchoolMember } from "@/lib/schools/models";
 import { copy, type Locale } from "@/lib/locale-types";
 
 export type CategoryLink = { slug: string; en: string; mr: string };
@@ -55,13 +58,19 @@ export async function Header({
       endsAt: { $gte: now },
     }).select("code minimumSubtotalPaise"),
   ]);
+  // both depend on who's signed in, not on each other: ask at the same time
+  const [usedWelcome, schoolMember] = user
+    ? await Promise.all([
+        offer ? PromotionRedemption.exists({ promotionId: offer._id, customerId: user.id }) : null,
+        SchoolMember.exists({ userId: user.id }),
+      ])
+    : [null, null];
   // someone who already used it isn't told about it again
-  const welcome =
-    offer && user && (await PromotionRedemption.exists({ promotionId: offer._id, customerId: user.id }))
-      ? null
-      : offer;
+  const welcome = usedWelcome ? null : offer;
   const text = copy[locale];
   const workspace = workspaceLinks(user?.roles ?? [], text);
+  // representatives of a school get a way into its quotation area
+  const representsSchool = Boolean(schoolMember);
   const nav = NAV_SLUGS.map((slug) => categories.find((c) => c.slug === slug)).filter(
     (c): c is CategoryLink => Boolean(c),
   );
@@ -108,9 +117,8 @@ export async function Header({
               {text.deals}
             </Link>
           </nav>
+          {/* logo → where we deliver → search → icons; phones put the icons in the bottom bar */}
           <div className="header-actions">
-            <BackButton label={text.back} className="search-back" />
-            <SmartSearch placeholder={text.searchPlaceholder} hints={[...text.searchHints]} />
             <Link href="/serviceability" className="location">
               <small>{text.promise(cutoff)}</small>
               <MapPin size={18} aria-hidden="true" />
@@ -118,38 +126,46 @@ export async function Header({
                 <span>{text.area}</span> <ChevronDown size={14} aria-hidden="true" />
               </strong>
             </Link>
-            {user ? (
-              <AccountMenu
-                name={user.name}
-                phone={user.phone}
-                email={user.email}
-                links={[
-                  { href: "/account", label: text.account },
-                  { href: "/account/orders", label: text.orders },
-                  { href: "/account/wishlist", label: text.saved },
-                  { href: "/account/notifications", label: text.notifications },
-                  { href: "/account/support", label: text.support },
-                ]}
-                workspace={workspace}
-                workspaceLabel={text.workspace}
-                signOutLabel={text.signOut}
-              />
-            ) : (
-              <Link href="/login" className="header-action" aria-label={text.signIn}>
-                <UserRound size={20} aria-hidden="true" />
-                <span>{text.signIn}</span>
+            <BackButton label={text.back} className="search-back" />
+            <SmartSearch placeholder={text.searchPlaceholder} hints={[...text.searchHints]} />
+            <div className="header-icons">
+              {user ? (
+                <AccountMenu
+                  label={text.account}
+                  name={user.name}
+                  phone={user.phone}
+                  email={user.email}
+                  links={[
+                    { href: "/account", label: text.account },
+                    { href: "/account/orders", label: text.orders },
+                    { href: "/account/wishlist", label: text.saved },
+                    { href: "/account/notifications", label: text.notifications },
+                    { href: "/account/support", label: text.support },
+                    ...(representsSchool ? [{ href: "/school", label: text.school }] : []),
+                  ]}
+                  workspace={workspace}
+                  workspaceLabel={text.workspace}
+                  signOutLabel={text.signOut}
+                />
+              ) : (
+                <Link href="/login" className="header-action" title={text.signIn}>
+                  <UserRound size={20} aria-hidden="true" />
+                  <span className="sr-only">{text.signIn}</span>
+                </Link>
+              )}
+              <Link href="/account/wishlist" className="header-action" title={text.saved}>
+                <Heart size={20} aria-hidden="true" />
+                <span className="sr-only">{text.saved}</span>
               </Link>
-            )}
-            <Link href="/account/wishlist" className="header-action">
-              <Heart size={20} aria-hidden="true" />
-              <span>{text.saved}</span>
-            </Link>
-            <BasketLink label={text.basket} />
+              <BasketLink label={text.basket} />
+            </div>
           </div>
         </div>
       </header>
       <MobileNav locale={locale} />
       <CartBar locale={locale} />
+      {/* hidden until the store introduces it: SHOP_ASSISTANT=on */}
+      {shopAssistantEnabled() && <ShopAssistant locale={locale} signedIn={Boolean(user)} />}
     </>
   );
 }

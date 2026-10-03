@@ -18,6 +18,9 @@ import { StatusPill } from "@/components/status-pill";
 import { AisleIcon } from "@/components/aisle-icon";
 import { PhotoInput } from "@/components/photo-input";
 import { ApprovalRequest } from "@/lib/governance/models";
+import { hasPermission } from "@/lib/auth/permissions";
+import { isShopperVisible } from "@/lib/catalog/visibility";
+import { GST_RATES } from "@/lib/tax/gst";
 export const metadata = { title: "Edit product", robots: { index: false } };
 
 const STATUS_NAMES: Record<string, string> = {
@@ -29,7 +32,9 @@ const STATUS_NAMES: Record<string, string> = {
 };
 
 export default async function EditProduct({ params }: { params: Promise<{ id: string }> }) {
-  await requirePage("catalog:write");
+  const user = await requirePage("catalog:write");
+  // only an owner prices for schools
+  const isOwner = hasPermission(user.roles, "settings:write");
   const { id } = await params;
   if (!objectId.safeParse(id).success) notFound();
   const product = await Product.findById(id);
@@ -58,6 +63,9 @@ export default async function EditProduct({ params }: { params: Promise<{ id: st
   const image = product.image ?? productImages[product.slug];
   const category = categories.find((item) => String(item._id) === String(product.categoryId));
   const live = product.status === "published";
+  const inShop = isShopperVisible(product);
+  const forCustomers = product.showToCustomers !== false;
+  const forSchools = product.showToSchools === true;
   return (
     <section className="page-container">
       <nav className="breadcrumb" aria-label="Breadcrumb">
@@ -70,7 +78,7 @@ export default async function EditProduct({ params }: { params: Promise<{ id: st
         title={product.name.en}
         lead={<StatusPill value={product.status}>{STATUS_NAMES[product.status] ?? product.status}</StatusPill>}
         aside={
-          live ? (
+          inShop ? (
             <Link href={`/products/${product.slug}`} className="secondary-button" target="_blank">
               View in the shop <ExternalLink size={16} aria-hidden="true" />
             </Link>
@@ -168,6 +176,33 @@ export default async function EditProduct({ params }: { params: Promise<{ id: st
             </div>
           </fieldset>
           <fieldset className="form-section">
+            <legend>Tax <small>Printed on school quotations</small></legend>
+            <div className="staff-form-grid">
+              <label>
+                GST rate
+                <select name="gstRatePercent" defaultValue={product.gstRatePercent ?? ""}>
+                  <option value="">Not set</option>
+                  {GST_RATES.map((rate) => (
+                    <option value={rate} key={rate}>
+                      {rate}%
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                HSN code <small>4, 6 or 8 digits</small>
+                <input
+                  name="hsnCode"
+                  defaultValue={product.hsnCode ?? ""}
+                  inputMode="numeric"
+                  pattern="[0-9]{4}([0-9]{2}){0,2}"
+                  maxLength={8}
+                  autoComplete="off"
+                />
+              </label>
+            </div>
+          </fieldset>
+          <fieldset className="form-section">
             <legend>Where it shows</legend>
             <label className="checkbox-label">
               <input type="checkbox" name="featured" defaultChecked={product.featured} /> Feature on the home page
@@ -181,10 +216,12 @@ export default async function EditProduct({ params }: { params: Promise<{ id: st
           <div className="panel visibility-panel">
             <h2>In the shop</h2>
             <p>
-              {live ? (
+              {inShop ? (
                 <StatusPill tone="ok">Shoppers can see and buy it</StatusPill>
+              ) : live ? (
+                <StatusPill tone="warn">Schools only: shoppers can’t see it</StatusPill>
               ) : (
-                <StatusPill tone="bad">Hidden from shoppers</StatusPill>
+                <StatusPill tone="bad">Hidden from shoppers and schools</StatusPill>
               )}
             </p>
             <ActionForm
@@ -202,11 +239,26 @@ export default async function EditProduct({ params }: { params: Promise<{ id: st
               <input type="hidden" name="visible" value={live ? "hide" : "show"} />
             </ActionForm>
           </div>
+          <div className="panel audience-panel">
+            <h2>Who can see it</h2>
+            <ActionForm action={catalogManagementAction} submit="Save who can see it" buttonClassName="secondary-button">
+              <input type="hidden" name="operation" value="audience" />
+              <input type="hidden" name="productId" value={id} />
+              <label className="checkbox-label">
+                <input type="checkbox" name="showToCustomers" defaultChecked={forCustomers} /> Customers
+                <small>In the shop, search, baskets and wishlists</small>
+              </label>
+              <label className="checkbox-label">
+                <input type="checkbox" name="showToSchools" defaultChecked={forSchools} /> Schools
+                <small>In the school catalogue, for quotations</small>
+              </label>
+            </ActionForm>
+          </div>
           <div className="panel">
             <h2>Photo</h2>
             <span className={`product-art editor-photo${image ? "" : " quiet"}`}>
               {image ? (
-                <Image src={image} alt={`Current photo of ${product.name.en}`} fill sizes="320px" unoptimized />
+                <Image src={image} alt={`Current photo of ${product.name.en}`} fill sizes="320px" />
               ) : (
                 <AisleIcon slug={product.categorySlug} />
               )}
@@ -243,6 +295,11 @@ export default async function EditProduct({ params }: { params: Promise<{ id: st
                           {pack.mrpPaise > pack.pricePaise && <del>{formatPrice(pack.mrpPaise)}</del>}
                         </span>
                       </div>
+                      <p className="pack-school-price muted">
+                        {pack.schoolPricePaise
+                          ? `School price ${formatPrice(pack.schoolPricePaise)} + GST`
+                          : "No school price: schools see “Price on quotation”"}
+                      </p>
                       <p className="pack-stock">
                         {left === 0 ? (
                           <StatusPill tone="bad">Sold out</StatusPill>
@@ -272,6 +329,23 @@ export default async function EditProduct({ params }: { params: Promise<{ id: st
                           </p>
                         </ActionForm>
                       </details>
+                      {isOwner && (
+                        <details>
+                          <summary>School price</summary>
+                          <ActionForm action={catalogManagementAction} submit="Save school price">
+                            <input type="hidden" name="operation" value="school-price" />
+                            <input type="hidden" name="variantId" value={String(pack._id)} />
+                            <label>
+                              School price before GST (₹) <small>Leave blank for “Price on quotation”</small>
+                              <MoneyInput
+                                name="schoolPriceRupees"
+                                defaultValue={pack.schoolPricePaise ? pack.schoolPricePaise / 100 : undefined}
+                                required={false}
+                              />
+                            </label>
+                          </ActionForm>
+                        </details>
+                      )}
                       <details>
                         <summary>Name, order limit or hide this pack</summary>
                         <ActionForm action={catalogManagementAction} submit="Save pack">

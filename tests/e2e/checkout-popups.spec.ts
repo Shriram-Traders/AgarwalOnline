@@ -1,6 +1,7 @@
 // Checkout for someone new: the basket asks them to sign in or join in a popup, checkout asks
-// for an address in a popup, and both bring them straight back. Also the basket's offers
-// (type a code on top, the shop's own codes below) and the Back button.
+// for an address in a popup, and both bring them straight back. Also the coupons (one line on
+// the basket and at checkout, opening a popup with a box for any code and the shop's own codes)
+// and the Back button.
 import { test, expect, type Page } from "@playwright/test";
 import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
@@ -97,14 +98,22 @@ test("a new shopper signs up and adds an address from checkout popups, then uses
   await expect(page.locator(".success-message")).toContainText("Basket updated");
   await page.goto("/cart");
 
-  // the shop's own codes are listed under the box for typing one; private codes are not
+  // the basket shows one line for coupons; tapping it opens the box for any code and the shop's
+  // own codes; private codes are not listed
   const offers = page.locator("#offers");
-  await expect(offers.getByLabel("Offer code")).toBeVisible();
-  const local = offers.locator(".offer-card", { hasText: "LOCAL10" });
-  await expect(local).toContainText("Add ₹390 more");
-  await expect(offers).not.toContainText("FRIEND5");
+  const preview = offers.getByRole("button", { name: /Apply a coupon/ });
+  await expect(preview).toContainText("Add ₹390 more to unlock an offer");
   await offers.scrollIntoViewIfNeeded();
-  await shot(page, "basket-offers");
+  await shot(page, "basket-coupon-row");
+  await preview.click();
+  const coupons = page.getByRole("dialog", { name: "Coupons" });
+  await expect(coupons.getByLabel("Enter a coupon code")).toBeVisible();
+  const local = coupons.locator(".offer-card", { hasText: "LOCAL10" });
+  await expect(local).toContainText("Add ₹390 more");
+  await expect(coupons).not.toContainText("FRIEND5");
+  await shot(page, "basket-coupons");
+  await coupons.getByRole("button", { name: "Close" }).click();
+  await expect(coupons).toBeHidden();
 
   // checking out without an account asks to sign in or join, right there
   await page.getByRole("button", { name: "Sign in to checkout" }).click();
@@ -150,20 +159,50 @@ test("a new shopper signs up and adds an address from checkout popups, then uses
     await page.waitForTimeout(400);
   }
   await page.reload();
+  await expect(offers.getByRole("button", { name: /Apply a coupon/ })).toContainText("1 offer available");
+  await offers.getByRole("button", { name: /Apply a coupon/ }).click();
   await local.getByRole("button", { name: "Apply" }).click();
-  await expect(local).toContainText("Applied");
-  await expect(offers.locator(".applied-offer")).toContainText("LOCAL10 applied · you save ₹54.5");
+  // a code that goes on closes the popup, and the line shows the saving
+  await expect(coupons).toBeHidden();
+  const applied = offers.getByRole("button", { name: /LOCAL10 applied/ });
+  await expect(applied).toContainText("You save ₹54.5");
   await expect(page.locator(".savings-line", { hasText: "Neighbourhood welcome" })).toBeVisible();
   await offers.scrollIntoViewIfNeeded();
-  await shot(page, "basket-offer-applied");
+  await shot(page, "basket-coupon-applied");
+  await applied.click();
+  await expect(local).toContainText("Applied");
+  await coupons.getByRole("button", { name: "Close" }).click();
   await offers.getByRole("button", { name: "Remove" }).click();
-  await expect(offers.locator(".applied-offer")).toHaveCount(0);
-  await expect(local.getByRole("button", { name: "Apply" })).toBeVisible();
+  await expect(offers.getByRole("button", { name: /Apply a coupon/ })).toBeVisible();
 
-  // a private code still works when typed
-  await offers.getByLabel("Offer code").fill("friend5");
-  await offers.locator(".promo-form").getByRole("button", { name: "Apply" }).click();
-  await expect(offers.locator(".applied-offer")).toContainText("FRIEND5 applied");
+  // a private code still works when typed in the box at the top
+  await offers.getByRole("button", { name: /Apply a coupon/ }).click();
+  await coupons.getByLabel("Enter a coupon code").fill("friend5");
+  await coupons.locator(".coupon-entry").getByRole("button", { name: "Apply" }).click();
+  await expect(coupons).toBeHidden();
+  await expect(offers.getByRole("button", { name: /FRIEND5 applied/ })).toBeVisible();
+  // a made-up code is refused inside the popup, which stays open
+  await offers.getByRole("button", { name: /FRIEND5 applied/ }).click();
+  await coupons.getByLabel("Enter a coupon code").fill("NOSUCH");
+  await coupons.locator(".coupon-entry").getByRole("button", { name: "Apply" }).click();
+  await expect(coupons.getByRole("alert")).toBeVisible();
+  await coupons.getByRole("button", { name: "Close" }).click();
+
+  // checkout carries the same line, and the same popup
+  await page.goto("/checkout");
+  const atCheckout = page.locator("#offers");
+  await expect(atCheckout.getByRole("button", { name: /FRIEND5 applied/ })).toBeVisible();
+  await shot(page, "checkout-coupon-row");
+  await atCheckout.getByRole("button", { name: /FRIEND5 applied/ }).click();
+  await expect(page.getByRole("dialog", { name: "Coupons" }).locator(".offer-card", { hasText: "LOCAL10" })).toBeVisible();
+  // Enter in the code box applies the code; it must never place the order around it
+  const atCheckoutCoupons = page.getByRole("dialog", { name: "Coupons" });
+  await atCheckoutCoupons.getByLabel("Enter a coupon code").fill("local10");
+  await atCheckoutCoupons.getByLabel("Enter a coupon code").press("Enter");
+  await expect(atCheckoutCoupons).toBeHidden();
+  await expect(atCheckout.getByRole("button", { name: /LOCAL10 applied/ })).toBeVisible();
+  await expect(page).toHaveURL("/checkout");
+  await expect(page.locator(".savings-line", { hasText: "Neighbourhood welcome" })).toBeVisible();
 });
 
 test("Back returns to the previous page, or one level up when opened from a link", async ({ page }) => {

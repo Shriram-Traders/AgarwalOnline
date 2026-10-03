@@ -93,6 +93,8 @@ Ownership and transition conditions further restrict every grant. Anonymous acce
 - `/delivery`: assigned queue, `/delivery/orders/[id]`, history, cash summary.
 - `/admin`: orders, packing, products, categories, inventory, customers, delivery, COD, support, complaints, returns, coupons, analytics.
 - `/super-admin`: approvals, staff/permissions, delivery rules, synonyms, settings, audit, revenue/refunds/COD reports.
+- `/super-admin/schools`, `/super-admin/schools/[id]`, `/super-admin/quotations`, `/super-admin/quotations/[id]`: schools, their representatives and join link, and the quotation desk (owner only).
+- `/school` (school catalogue, or the picker), `/school/quote` (the school's shared basket), `/school/quotations`, `/school/quotations/[id]` (a quotation to print, accept or ask to change), `/school/join/[token]`: for school representatives only; another school's records are "not found".
 - Route Handlers: auth, catalog search, payment order/verification/webhook, signed uploads, chat ticket/history, invoices.
 
 ## Testable implementation phases

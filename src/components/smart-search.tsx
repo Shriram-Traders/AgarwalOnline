@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { ArrowUpRight, Search, X } from "lucide-react";
 import { formatPrice } from "@/lib/display";
 
@@ -59,9 +60,17 @@ export function SmartSearch({
     return () => document.removeEventListener("pointerdown", close);
   }, [open]);
   const expanded = open && results.length > 0;
+  const pathname = usePathname();
+  const under = (path: string) => pathname === path || pathname.startsWith(`${path}/`);
+  // the account pages are about the shopper, not the shelves, and checkout is for finishing
+  // the order: no product search on either
+  if (under("/account") || under("/checkout")) return null;
+  // the basket keeps it on a computer, where it sits in the header row; a phone gives the
+  // pinned row to the items and the bill (styled in globals.css)
+  const phoneHidden = under("/cart");
   return (
     <div
-      className="smart-search"
+      className={phoneHidden ? "smart-search phone-hidden" : "smart-search"}
       ref={root}
       onKeyDown={(event) => {
         if (event.key === "Escape") setOpen(false);

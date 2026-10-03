@@ -16,6 +16,7 @@ import {
 import { plainMessage } from "../form-errors";
 import { sendClaimCode } from "../auth/claim";
 import { log } from "../logger";
+import { saveForLater } from "./save-for-later";
 export type MutationState = {
   error?: string;
   success?: string;
@@ -40,6 +41,24 @@ export async function cartAction(
   const result = await quickAddAction(state, form);
   if (!result.error) revalidatePath("/", "layout");
   return result;
+}
+/** "Save for later" on the basket: into the Wishlist, out of the basket. Signed-in shoppers only. */
+export async function saveForLaterAction(
+  _state: MutationState,
+  form: FormData,
+): Promise<MutationState> {
+  try {
+    const user = await requirePermission("profile:own");
+    await saveForLater(user.id, form.get("variantId"));
+    revalidatePath("/", "layout");
+    revalidatePath("/account/wishlist");
+    return { success: "Saved to your wishlist." };
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "";
+    if (message === "UNAUTHENTICATED") return { error: "Please sign in to save items for later." };
+    if (/^This (item|product)/.test(message)) return { error: message };
+    return { error: errorMessage(e) };
+  }
 }
 export async function addressAction(
   _state: MutationState,

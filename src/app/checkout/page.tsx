@@ -14,7 +14,8 @@ import { Address, DeliverySlot } from "@/lib/commerce/models";
 import { ServiceArea, User } from "@/lib/db/models";
 import { CheckoutForm } from "@/components/checkout-form";
 import { cookies } from "next/headers";
-import { quoteCart } from "@/lib/promotions/service";
+import { codeProblem, quoteCart, shopOffers } from "@/lib/promotions/service";
+import { CouponPicker } from "@/components/coupon-picker";
 export const metadata = { title: "Checkout", robots: { index: false } };
 export default async function Checkout() {
   // no account yet: offer sign-in or sign-up in a popup, and come back here afterwards
@@ -83,6 +84,12 @@ export default async function Checkout() {
     deliveryPaise:
       subtotal >= rules.freeThresholdPaise ? 0 : (defaultOption?.fee ?? 0),
   });
+  // the same coupons as the basket, folded into one line in the order summary
+  const offers = await shopOffers(subtotal, { customerId: user.id, appliedId: quote.appliedPromotion?.id });
+  const codeIssue =
+    promotionCode && quote.rejectedCodeReason
+      ? ((await codeProblem(promotionCode, subtotal, user.id)) ?? quote.rejectedCodeReason)
+      : undefined;
   return (
     <section className="page-container">
       <PageHeading
@@ -145,6 +152,19 @@ export default async function Checkout() {
           subtotal={subtotal}
           promotionDiscount={quote.promotionDiscountPaise}
           promotionName={quote.appliedPromotion?.name}
+          coupons={
+            <CouponPicker
+              compact
+              offers={offers}
+              applied={
+                quote.appliedPromotion
+                  ? { ...quote.appliedPromotion, savePaise: quote.promotionDiscountPaise }
+                  : undefined
+              }
+              typedCode={promotionCode}
+              codeIssue={codeIssue}
+            />
+          }
           defaultAddressId={defaultOption?.id}
           defaultMethod={profile?.preferredPaymentMethod ?? "cod"}
           threshold={rules.freeThresholdPaise}

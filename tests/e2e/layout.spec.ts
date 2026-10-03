@@ -13,6 +13,9 @@ import { User, Product, ProductVariant } from "../../src/lib/db/models";
 import { ShoppingList } from "../../src/lib/lists/models";
 import { Address, Order } from "../../src/lib/commerce/models";
 import { ChatConversation } from "../../src/lib/chat/models";
+import { QuoteBasket, QuoteRequest, School } from "../../src/lib/schools/models";
+import { istDatePlus, quoteTotals } from "../../src/lib/schools/quote-math";
+import { DEFAULT_TAX_PROFILE } from "../../src/lib/tax/gst";
 
 const uri = "mongodb://127.0.0.1:27028/ags_test_e2e?replicaSet=ags-local";
 const out = process.env.SHOT_DIR;
@@ -32,7 +35,8 @@ const routes = readdirSync("src/app", { recursive: true, encoding: "utf8" })
 function whoFor(route: string): Who {
   if (route.startsWith("/admin") || route.startsWith("/super-admin")) return "owner";
   if (route.startsWith("/delivery")) return "delivery";
-  if (route.startsWith("/account") || route === "/checkout") return "customer";
+  // the demo customer represents the seeded school
+  if (route.startsWith("/account") || route === "/checkout" || route.startsWith("/school")) return "customer";
   return "guest";
 }
 
@@ -67,7 +71,7 @@ test.beforeAll(async () => {
   await Address.updateMany({}, { customerId: customer!._id });
   const order = await Order.findOne({ assignedTo: { $exists: true } });
   const chat = await ChatConversation.create({ customerId: customer!._id, title: "Where is my order?" });
-  const product = (await Product.findOne({ status: "published" }))!;
+  const product = (await Product.findOne({ status: "published", showToCustomers: { $ne: false } }))!;
   samples["/products/[slug]"] = `/products/${product.slug}`;
   samples["/admin/products/[id]"] = `/admin/products/${product._id}`;
   samples["/account/orders/[id]"] = `/account/orders/${order!._id}`;
@@ -96,6 +100,90 @@ test.beforeAll(async () => {
   // a signed-out visitor on the invite link: the page with the most on it
   samples["/lists/[token]"] = `/lists/${board.inviteToken}`;
   samples["/admin/support/[id]"] = `/admin/support/${chat._id}`;
+  // the school area: a basket with a line, and a quotation sent once, with a draft on the desk
+  const owner = (await User.findOne({ email: EMAILS.owner }))!;
+  const school = (await School.findOne({ name: "Fictional Vidya Mandir" }))!;
+  const packs = await ProductVariant.find({ sku: /^AGS-S-/ }).sort({ sku: 1 });
+  const schoolProducts = await Product.find({ _id: { $in: packs.map((pack) => pack.productId) } });
+  await QuoteBasket.create({
+    schoolId: school._id,
+    items: [{ variantId: packs[0]._id, quantity: 120, addedBy: customer!._id }],
+    rev: 1,
+  });
+  const items = packs.map((pack) => {
+    const item = schoolProducts.find((entry) => String(entry._id) === String(pack.productId))!;
+    return {
+      variantId: pack._id,
+      productId: item._id,
+      name: item.name.en,
+      label: pack.label,
+      sku: pack.sku,
+      quantity: 250,
+      schoolPricePaise: pack.schoolPricePaise ?? undefined,
+      shopPricePaise: pack.pricePaise,
+      gstRatePercent: item.gstRatePercent ?? undefined,
+      hsnCode: item.hsnCode ?? undefined,
+      addedBy: customer!._id,
+    };
+  });
+  const lines = items.map((item) => ({
+    variantId: item.variantId,
+    name: item.name,
+    label: item.label,
+    hsnCode: item.hsnCode,
+    quantity: item.quantity,
+    unitPricePaise: item.schoolPricePaise ?? 8000,
+    gstRatePercent: item.gstRatePercent ?? 18,
+  }));
+  const totals = quoteTotals(lines, { type: "percent", percent: 5 }, "intra");
+  const validUntil = istDatePlus(15);
+  const quote = await QuoteRequest.create({
+    number: "AGSQ-20261002-00001",
+    schoolId: school._id,
+    requestedBy: customer!._id,
+    note: "Deliver to the school office, please",
+    neededBy: validUntil,
+    status: "quoted",
+    items,
+    draft: {
+      lines,
+      discountType: "percent",
+      discountValue: 5,
+      validUntil,
+      note: "Delivered in two lots",
+      updatedBy: owner._id,
+      updatedAt: new Date(),
+      sentAsVersion: 1,
+    },
+    currentVersion: 1,
+    versions: [
+      {
+        version: 1,
+        sentAt: new Date(),
+        sentBy: owner._id,
+        validUntil,
+        note: "Delivered in two lots",
+        supply: "intra",
+        seller: { name: DEFAULT_TAX_PROFILE.legalName, address: DEFAULT_TAX_PROFILE.address, stateCode: "27" },
+        buyer: { name: school.name, address: school.address, pin: school.pin, stateCode: "27" },
+        lines: lines.map((line, index) => ({ ...line, ...totals.lines[index] })),
+        taxes: totals.taxes,
+        subtotalPaise: totals.subtotalPaise,
+        discountPaise: totals.discountPaise,
+        discountLabel: "Discount (5%)",
+        taxablePaise: totals.taxablePaise,
+        cgstPaise: totals.cgstPaise,
+        sgstPaise: totals.sgstPaise,
+        igstPaise: totals.igstPaise,
+        totalPaise: totals.totalPaise,
+        emailed: { sent: 0, noEmail: 1, failed: 0 },
+      },
+    ],
+  });
+  samples["/school/join/[token]"] = `/school/join/${school.joinToken}`;
+  samples["/school/quotations/[id]"] = `/school/quotations/${quote._id}`;
+  samples["/super-admin/quotations/[id]"] = `/super-admin/quotations/${quote._id}`;
+  samples["/super-admin/schools/[id]"] = `/super-admin/schools/${school._id}`;
 });
 test.afterAll(async () => {
   await mongoose.connection.dropDatabase();

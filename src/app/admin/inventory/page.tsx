@@ -12,6 +12,7 @@ import { displayStatus } from "@/lib/display";
 import { PageHeading } from "@/components/page-heading";
 import { CatalogAdminNav } from "@/components/catalog-admin-nav";
 import { requirePage } from "@/lib/auth/session";
+import { hasPermission } from "@/lib/auth/permissions";
 import { governanceAction } from "@/lib/governance/actions";
 import { InventoryMovement } from "@/lib/commerce/models";
 import { InventoryItem, Product, ProductVariant } from "@/lib/db/models";
@@ -24,7 +25,9 @@ export default async function InventoryPage({
 }: {
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
-  await requirePage("inventory:adjust");
+  const user = await requirePage("inventory:adjust");
+  // only an owner prices for schools
+  const isOwner = hasPermission(user.roles, "settings:write");
   const params = await searchParams;
   const [products, variants, inventory, movements] = await Promise.all([
     Product.find({}).sort({ "name.en": 1 }).limit(500),
@@ -59,7 +62,7 @@ export default async function InventoryPage({
   return (
     <section className="page-container">
       <PageHeading
-        eyebrow="Catalog"
+        eyebrow="Run the store"
         title="Stock"
         lead="How many of each pack you have, how many are held for open orders, and every change."
       />
@@ -155,6 +158,12 @@ export default async function InventoryPage({
               Opening stock
               <input name="stock" inputMode="numeric" pattern="[0-9]+" required />
             </label>
+            {isOwner && (
+              <label>
+                School price before GST (₹) <small>Optional</small>
+                <MoneyInput name="schoolPriceRupees" required={false} />
+              </label>
+            )}
           </div>
         </ActionForm>
       </details>

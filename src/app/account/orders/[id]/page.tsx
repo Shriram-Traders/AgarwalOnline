@@ -28,6 +28,7 @@ import { customerStage, formatIst, formatPrice, paymentLabel } from "@/lib/displ
 import { productImages } from "@/lib/catalog/images";
 import { cancellation, orderHistory, orderTracker } from "@/lib/order-progress";
 import { lineNotes, shortfallRefund, type PackedLine } from "@/lib/operations/packing";
+import { isShopperVisible } from "@/lib/catalog/visibility";
 export const metadata = { title: "Order details", robots: { index: false } };
 
 const STAGE_ICONS: Record<string, LucideIcon> = {
@@ -47,14 +48,14 @@ const SHORT = { day: "numeric", month: "short", hour: "numeric", minute: "2-digi
 async function linePictures(variantIds: unknown[]) {
   const variants = await ProductVariant.find({ _id: { $in: variantIds } }).select("productId");
   const products = await Product.find({ _id: { $in: variants.map((v) => v.productId) } }).select(
-    "slug status image images",
+    "slug status showToCustomers image images",
   );
   const pictures = new Map<string, { href?: string; image?: string }>();
   for (const variant of variants) {
     const product = products.find((p) => String(p._id) === String(variant.productId));
     if (!product) continue;
     pictures.set(String(variant._id), {
-      href: product.status === "published" ? `/products/${product.slug}` : undefined,
+      href: isShopperVisible(product) ? `/products/${product.slug}` : undefined,
       image: product.images?.[0] ?? product.image ?? productImages[product.slug],
     });
   }
@@ -175,7 +176,7 @@ export default async function OrderDetail({
                   <li className="order-item" key={String(line.variantId)}>
                     <span className="order-item-thumb">
                       {picture?.image ? (
-                        <Image src={picture.image} alt="" fill sizes="56px" unoptimized />
+                        <Image src={picture.image} alt="" fill sizes="56px" />
                       ) : (
                         <Package size={22} strokeWidth={1.5} aria-hidden="true" />
                       )}

@@ -23,6 +23,7 @@ export function CheckoutForm({
   defaultMethod = "cod",
   idempotencyKey,
   onlineEnabled = false,
+  coupons,
 }: {
   addresses: Option[];
   slots: { id: string; areaId: string; label: string }[];
@@ -34,6 +35,8 @@ export function CheckoutForm({
   defaultMethod?: "cod" | "razorpay";
   idempotencyKey: string;
   onlineEnabled?: boolean;
+  /** The coupon preview, rendered on the server. */
+  coupons?: React.ReactNode;
 }) {
   const [method, setMethod] = useState(
     defaultMethod === "razorpay" && onlineEnabled ? "razorpay" : "cod",
@@ -130,9 +133,7 @@ export function CheckoutForm({
             {promotionName ?? "Offer"} <strong>−{formatPrice(promotionDiscount)}</strong>
           </p>
         )}
-        <p className="checkout-offer-link">
-          <Link href="/cart#offers">{promotionDiscount > 0 ? "Change offer" : "Have an offer code?"}</Link>
-        </p>
+        {coupons}
         <p>
           Delivery <strong>{fee ? formatPrice(fee) : "FREE"}</strong>
         </p>

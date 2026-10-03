@@ -15,6 +15,10 @@ import { assertPermission, hasPermission, type Permission, type Role } from "../
 import { notify } from "../engagement/service";
 import { log } from "../logger";
 import { ApprovalRequest, ApprovalHistory } from "./models";
+import { gstRateField, hsnField, optionalField } from "../tax/gst";
+
+/** A school price is optional and set before GST; a blank box means "price on quotation". */
+const schoolPriceField = optionalField(z.coerce.number().int().min(1).max(10000000));
 async function authorize(id: string, permission: Permission) {
   await connectDB();
   const user = await User.findOne({ _id: objectId.parse(id), active: true });
@@ -45,9 +49,18 @@ export const productInput = z
     pricePaise: z.coerce.number().int().positive().max(10000000),
     mrpPaise: z.coerce.number().int().positive().max(10000000),
     stock: z.coerce.number().int().min(0).max(100000),
+    // requests made before schools existed have none of these, and publish as shop-only
+    showToCustomers: z.boolean().default(true),
+    showToSchools: z.boolean().default(false),
+    gstRatePercent: optionalField(gstRateField),
+    hsnCode: optionalField(hsnField),
+    schoolPricePaise: schoolPriceField,
   })
   .refine((d) => d.pricePaise <= d.mrpPaise, {
     message: "Price must not exceed MRP",
+  })
+  .refine((d) => d.showToCustomers || d.showToSchools, {
+    message: "Tick Customers, Schools or both, so somebody can see the product.",
   });
 export const variantInput = z
   .object({
@@ -64,6 +77,7 @@ export const variantInput = z
     mrpPaise: z.coerce.number().int().positive().max(10000000),
     maxQuantity: z.coerce.number().int().min(1).max(100),
     stock: z.coerce.number().int().min(0).max(100000),
+    schoolPricePaise: schoolPriceField,
   })
   .refine((value) => value.pricePaise <= value.mrpPaise, {
     message: "Price must not exceed MRP.",
@@ -135,9 +149,16 @@ async function assertFree(fields: { slug?: string; sku?: string }, session: mong
   }
 }
 
+/** Only an owner prices for schools, so only an owner can put a school price on a new pack. */
+function assertSchoolPriceAllowed(actor: { roles: unknown }, schoolPricePaise?: number) {
+  if (schoolPricePaise != null && !hasPermission(actor.roles as Role[], "settings:write"))
+    throw Error("Only an owner can set a school price. Leave it blank; the owner can add it later.");
+}
+
 export async function submitProduct(actorId: string, input: unknown) {
-  await authorize(actorId, "approval:request");
+  const actor = await authorize(actorId, "approval:request");
   const data = productInput.parse(input);
+  assertSchoolPriceAllowed(actor, data.schoolPricePaise);
   if (!(await Category.exists({ _id: data.categoryId })))
     throw Error("Select a category.");
   let live = false;
@@ -153,8 +174,9 @@ export async function submitProduct(actorId: string, input: unknown) {
 }
 /** A new pack size follows the same approval as a price change: it puts a price in the shop. */
 export async function submitVariant(actorId: string, input: unknown) {
-  await authorize(actorId, "approval:request");
+  const actor = await authorize(actorId, "approval:request");
   const data = variantInput.parse(input);
+  assertSchoolPriceAllowed(actor, data.schoolPricePaise);
   let live = false;
   await mongoose.connection.transaction(async (session) => {
     if (!(await Product.exists({ _id: data.productId }).session(session)))
@@ -298,6 +320,7 @@ async function createPack(
         pricePaise: data.pricePaise,
         mrpPaise: data.mrpPaise,
         ...("maxQuantity" in data ? { maxQuantity: data.maxQuantity } : {}),
+        ...(data.schoolPricePaise != null ? { schoolPricePaise: data.schoolPricePaise } : {}),
       },
     ],
     { session },
@@ -336,6 +359,10 @@ async function publish(
             .map((s) => s.trim())
             .filter(Boolean),
           status: "published",
+          showToCustomers: data.showToCustomers,
+          showToSchools: data.showToSchools,
+          ...(data.gstRatePercent != null ? { gstRatePercent: data.gstRatePercent } : {}),
+          ...(data.hsnCode ? { hsnCode: data.hsnCode } : {}),
         },
       ],
       { session },
