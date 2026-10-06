@@ -19,12 +19,18 @@ describe("workspace search", () => {
     expect(ids("sunday")).toContain("settings.weekly-holiday");
     expect(ids("cod limit")[0]).toBe("settings.cod-limit");
     expect(ids("gst")).toEqual(expect.arrayContaining(["settings.gstin", "settings.gst-rate"]));
+    expect(ids("feedback")[0]).toBe("page.feedback");
+    expect(ids("low rating")).toContain("page.feedback-attention");
+    expect(ids("अभिप्राय", owner, "mr")).toContain("page.feedback");
+    expect(ids("hide review")).toContain("page.feedback-reviews");
   });
 
   it("only offers what the person may open", () => {
     expect(ids("gstin", admin)).not.toContain("settings.gstin");
     expect(ids("coupon", admin)).not.toContain("action.create-offer");
     expect(ids("stock", admin)).toContain("action.adjust-stock");
+    expect(ids("feedback", admin).some((id) => id.startsWith("page.feedback"))).toBe(false);
+    expect(ids("rating", admin)).toContain("page.reviews");
     const riderIds = ids("", rider);
     expect(riderIds).toContain("page.deliveries");
     expect(riderIds).not.toContain("page.overview");

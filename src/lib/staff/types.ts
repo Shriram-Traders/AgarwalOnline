@@ -1,5 +1,5 @@
 /** What the staff menu can show a count beside. Each is only sent to people allowed to act on it. */
-export type CountKey = "orders" | "chats" | "complaints" | "lowStock" | "approvals" | "deliveries";
+export type CountKey = "orders" | "chats" | "complaints" | "lowStock" | "approvals" | "deliveries" | "feedback";
 
 /** Body of GET /api/staff/counts. */
 export type StaffCountsResponse = {

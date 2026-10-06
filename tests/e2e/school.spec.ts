@@ -1,6 +1,7 @@
 // A school's whole quotation round trip, at desktop and phone width: a school-only item stays
 // out of the shop; a representative joins through the school's link and the owner approves;
-// the representative asks for 500, the owner prices it with GST and sends it; the school asks
+// the representative shops the school marketplace like the shop, and checkout creates a quotation
+// for 500 instead of taking payment; the owner prices it with GST and sends it; the school asks
 // for changes, gets version 2 and accepts it; and another school's representative can't look.
 import { test, expect, type Browser, type Page, type TestInfo } from "@playwright/test";
 import mongoose from "mongoose";
@@ -129,23 +130,50 @@ test("a representative joins through the link and the owner approves", async ({ 
   await shot(owner, "owner-school");
 });
 
-test("the representative asks for 500 from the school catalogue", async ({ browser }, info) => {
+test("the representative shops the school marketplace and creates a quotation at checkout", async ({ browser }, info) => {
   const rep = await as("rep", browser, info);
-  await rep.goto("/school");
-  await expect(rep.getByRole("heading", { name: "School catalogue" })).toBeVisible();
+  // the shop shows a representative the way in: a pill in the aisle row, or the phone's top strip
+  await rep.goto("/");
+  await rep.getByRole("link", { name: "For my school" }).first().click();
+  await expect(rep).toHaveURL("/school");
+  await expect(rep.getByRole("heading", { name: /Everything your school needs/ })).toBeVisible();
+  await shot(rep, "home");
+  await rep.getByRole("link", { name: "Browse school items" }).click();
+  await expect(rep).toHaveURL("/school/catalog");
   const card = rep.locator(".school-card", { hasText: "E2E Attendance Register" });
-  await expect(card.getByText("Expected ₹42.50 + GST (18%)")).toBeVisible();
-  await card.getByLabel("How many of E2E Attendance Register").fill("500");
-  await card.getByRole("button", { name: "Add to quote" }).click();
-  await expect(card.getByText("Added. The basket now has 500 of this.")).toBeVisible();
+  await expect(card.locator(".school-price")).toContainText("₹42.50");
+  await expect(card.locator(".school-price")).toContainText("+ GST (18%)");
   await shot(rep, "catalogue");
 
-  await rep.getByRole("link", { name: "Quote basket (1)" }).click();
+  // the bulk list: type a quantity and add; the choice of list is remembered
+  await rep.getByRole("link", { name: "List" }).click();
+  await expect(rep.getByRole("link", { name: "List" })).toHaveAttribute("aria-current", "true");
+  const row = rep.locator(".school-row", { hasText: "E2E Attendance Register" });
+  await row.getByLabel("How many of E2E Attendance Register").fill("500");
+  await row.getByRole("button", { name: "Add", exact: true }).click();
+  await expect(row.getByText("Added. The basket now has 500 of this.")).toBeVisible();
+  await shot(rep, "list");
+  await rep.goto("/school/catalog");
+  await expect(rep.locator(".school-row").first()).toBeVisible();
+
+  // its own page, like the shop's product page
+  await rep.locator(".school-row-item", { hasText: "E2E Attendance Register" }).click();
+  await expect(rep.getByRole("heading", { name: "E2E Attendance Register", level: 1 })).toBeVisible();
+  await expect(rep.getByText("500 already in the basket")).toBeVisible();
+
+  // the basket shows what to expect, then checkout asks for a quotation instead of payment
+  await rep.goto("/school/basket");
   await expect(rep.getByLabel("Quantity of E2E Attendance Register")).toHaveValue("500");
-  await rep.getByLabel("A note for the store").fill("Deliver to the school office");
+  await expect(rep.locator(".basket-bill")).toContainText("₹21,250.00");
+  await expect(rep.locator(".basket-bill")).toContainText("₹25,075.00");
   await shot(rep, "basket");
-  await rep.getByRole("button", { name: "Ask for a quotation" }).click();
-  await expect(rep).toHaveURL(/\/school\/quotations\/[a-f\d]{24}/);
+  await rep.getByRole("link", { name: "Continue to checkout" }).click();
+  await expect(rep).toHaveURL("/school/checkout");
+  await expect(rep.locator(".school-billing")).toContainText("E2E Vidya Mandir");
+  await rep.getByLabel("Anything the store should know").fill("Deliver to the school office");
+  await shot(rep, "checkout");
+  await rep.getByRole("button", { name: "Create quotation" }).click();
+  await expect(rep).toHaveURL(/\/school\/quotations\/[a-f\d]{24}\?sent=1/);
   await expect(rep.getByText(/Sent to the store as AGSQ-\d{8}-\d{5}/)).toBeVisible();
   quoteId = rep.url().match(/quotations\/([a-f\d]{24})/)![1];
 });
@@ -208,6 +236,6 @@ test("another school's representative finds nothing there", async ({ browser }, 
   await other.goto(`/school?s=${schoolId}`);
   await expect(other.getByRole("heading", { name: NOT_FOUND })).toBeVisible();
   await other.goto("/school");
-  await expect(other.locator("main").getByText("E2E Other School")).toBeVisible();
+  await expect(other.locator("main").getByText("E2E Other School").first()).toBeVisible();
   await expect(other.getByText("E2E Vidya Mandir")).toHaveCount(0);
 });

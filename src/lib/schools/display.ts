@@ -1,13 +1,6 @@
 import type { Tone } from "@/components/status-pill";
 import { isExpired } from "./quote-math";
 
-/** A school-area link that keeps the chosen school, for people who represent more than one. */
-export function schoolHref(path: string, schoolId: string, extra: Record<string, string | undefined> = {}) {
-  const query = new URLSearchParams({ s: schoolId });
-  for (const [key, value] of Object.entries(extra)) if (value) query.set(key, value);
-  return `${path}?${query}`;
-}
-
 type Status = "requested" | "quoted" | "changes-requested" | "accepted" | "closed";
 
 /** What a quotation's state means to the school's representatives. */

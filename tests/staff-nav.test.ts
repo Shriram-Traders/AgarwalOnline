@@ -15,6 +15,11 @@ describe("staff menu", () => {
     expect(groups(null)).toEqual([]);
     const money = navFor(rolesFor("admin")).find((group) => group.key === "money");
     expect(money?.items.map((item) => item.key)).toEqual(["cod", "analytics"]);
+    // customers' ratings are the owner's to read
+    const customers = (role: "admin" | "super-admin") =>
+      navFor(rolesFor(role)).find((group) => group.key === "customers")?.items.map((item) => item.key);
+    expect(customers("super-admin")).toEqual(["customers", "feedback", "reviews"]);
+    expect(customers("admin")).toEqual(["customers", "reviews"]);
   });
 
   it("links only to pages that exist", () => {

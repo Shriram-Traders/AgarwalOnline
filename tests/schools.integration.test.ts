@@ -16,7 +16,7 @@ import {
   updateSchool,
   withdrawAccessRequest,
 } from "../src/lib/schools/members";
-import { assertMember, memberships, schoolContext } from "../src/lib/schools/membership";
+import { assertMember, memberships, representsActiveSchool, schoolContext } from "../src/lib/schools/membership";
 
 const uri = process.env.TEST_MONGODB_URI;
 describe.skipIf(!uri)("Schools, their representatives and the join link", () => {
@@ -143,5 +143,26 @@ describe.skipIf(!uri)("Schools, their representatives and the join link", () => 
     await addRepresentative(owner, { schoolId: theirs, userId: rep });
     expect(await schoolContext(rep)).toMatchObject({ current: null, needsPick: true });
     expect((await schoolContext(rep, theirs)).current).toMatchObject({ id: theirs });
+  });
+
+  it("remembers the school someone in several chose, but never lets the choice reach another school", async () => {
+    const mine = await school();
+    const second = await school({ name: "Second School" });
+    const stranger = await school({ name: "Stranger School" });
+    expect(await representsActiveSchool(rep)).toBe(false);
+    await addRepresentative(owner, { schoolId: mine, userId: rep });
+    await addRepresentative(owner, { schoolId: second, userId: rep });
+    expect(await representsActiveSchool(rep)).toBe(true);
+    // the remembered choice picks among their own schools
+    expect(await schoolContext(rep, undefined, second)).toMatchObject({ current: { id: second }, foreign: false, needsPick: false });
+    // a stale or foreign choice is ignored, not "not found": they pick again
+    expect(await schoolContext(rep, undefined, stranger)).toMatchObject({ current: null, foreign: false, needsPick: true });
+    // a school named in the address still wins, and still can't be someone else's
+    expect((await schoolContext(rep, mine, second)).current).toMatchObject({ id: mine });
+    expect(await schoolContext(rep, stranger, second)).toMatchObject({ foreign: true, current: null });
+    // with every school paused there is nothing to open from the shop
+    await setSchoolActive(owner, { schoolId: mine, active: false });
+    await setSchoolActive(owner, { schoolId: second, active: false });
+    expect(await representsActiveSchool(rep)).toBe(false);
   });
 });

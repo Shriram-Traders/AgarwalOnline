@@ -3,7 +3,8 @@ import { formWithPaise } from "../src/lib/display";
 import { sheetFromForm } from "../src/lib/schools/quote-form";
 import { returnPath } from "../src/lib/return-path";
 import { schoolJoinHref, schoolJoinPath } from "../src/lib/schools/links";
-import { ownerStatus, repStatus, schoolHref } from "../src/lib/schools/display";
+import { ownerStatus, repStatus } from "../src/lib/schools/display";
+import { safeSchoolPath, withQuery } from "../src/lib/schools/paths";
 
 const A = "a".repeat(24);
 const B = "b".repeat(24);
@@ -64,9 +65,13 @@ describe("School links and pages", () => {
     expect(returnPath("https://example.com/school")).toBeNull();
   });
 
-  it("keeps the chosen school in links", () => {
-    expect(schoolHref("/school/quote", A)).toBe(`/school/quote?s=${A}`);
-    expect(schoolHref("/school", A, { q: "pens", category: undefined })).toBe(`/school?s=${A}&q=pens`);
+  it("builds school links with only the values that are set, and only switches into the school area", () => {
+    expect(withQuery("/school/catalog", { q: "pens", category: undefined })).toBe("/school/catalog?q=pens");
+    expect(withQuery("/school/basket", {})).toBe("/school/basket");
+    expect(safeSchoolPath("/school/quotations/abc")).toBe("/school/quotations/abc");
+    expect(safeSchoolPath("/school/catalog?q=chalk")).toBe("/school/catalog?q=chalk");
+    for (const unsafe of ["/admin", "https://example.com/school", "//evil.test/school", "/schools", "/school\..", null])
+      expect(safeSchoolPath(unsafe)).toBe("/school");
   });
 
   it("names each state plainly, and an expired quotation as expired", () => {
