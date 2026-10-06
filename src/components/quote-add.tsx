@@ -6,14 +6,22 @@ export function QuoteAdd({
   schoolId,
   name,
   packs,
+  compact = false,
 }: {
   schoolId: string;
   name: string;
   packs: { id: string; label: string; price: string }[];
+  /** One line, for the bulk list: "Add" instead of "Add to basket". */
+  compact?: boolean;
 }) {
   const key = packs[0].id;
   return (
-    <ActionForm action={schoolRepAction} submit="Add to quote" className="quote-add" buttonClassName="add-button">
+    <ActionForm
+      action={schoolRepAction}
+      submit={compact ? "Add" : "Add to basket"}
+      className={compact ? "quote-add is-compact" : "quote-add"}
+      buttonClassName="add-button"
+    >
       <input type="hidden" name="intent" value="add" />
       <input type="hidden" name="schoolId" value={schoolId} />
       {packs.length > 1 ? (

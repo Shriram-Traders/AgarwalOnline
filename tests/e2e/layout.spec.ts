@@ -16,6 +16,7 @@ import { ChatConversation } from "../../src/lib/chat/models";
 import { QuoteBasket, QuoteRequest, School } from "../../src/lib/schools/models";
 import { istDatePlus, quoteTotals } from "../../src/lib/schools/quote-math";
 import { DEFAULT_TAX_PROFILE } from "../../src/lib/tax/gst";
+import { OrderFeedback } from "../../src/lib/feedback/models";
 
 const uri = "mongodb://127.0.0.1:27028/ags_test_e2e?replicaSet=ags-local";
 const out = process.env.SHOT_DIR;
@@ -69,6 +70,11 @@ test.beforeAll(async () => {
   await User.updateMany({ email: { $in: [EMAILS.delivery, EMAILS.owner] } }, { passwordHash });
   await Order.updateMany({}, { customerId: customer!._id });
   await Address.updateMany({}, { customerId: customer!._id });
+  // every page is checked as it is, without the "How did we do?" popup over it: the demo
+  // customer has already said "Not now" about each delivery the seed didn't rate
+  const rated = await OrderFeedback.distinct("orderId");
+  for (const unrated of await Order.find({ deliveryStatus: "delivered", _id: { $nin: rated } }).select("number"))
+    await OrderFeedback.create({ orderId: unrated._id, orderNumber: unrated.number, state: "skipped" });
   const order = await Order.findOne({ assignedTo: { $exists: true } });
   const chat = await ChatConversation.create({ customerId: customer!._id, title: "Where is my order?" });
   const product = (await Product.findOne({ status: "published", showToCustomers: { $ne: false } }))!;
@@ -182,6 +188,9 @@ test.beforeAll(async () => {
   });
   samples["/school/join/[token]"] = `/school/join/${school.joinToken}`;
   samples["/school/quotations/[id]"] = `/school/quotations/${quote._id}`;
+  samples["/school/[...missing]"] = "/school/no-such-page";
+  // a school-only item's own page in the school marketplace
+  samples["/school/products/[slug]"] = `/school/products/${schoolProducts.find((p) => p.showToCustomers === false)?.slug ?? schoolProducts[0].slug}`;
   samples["/super-admin/quotations/[id]"] = `/super-admin/quotations/${quote._id}`;
   samples["/super-admin/schools/[id]"] = `/super-admin/schools/${school._id}`;
 });
@@ -255,7 +264,12 @@ test("every page holds its layout", async ({ browser }, info) => {
     const response = await page.goto(path);
     // support chat polls for messages and never goes idle
     await page.waitForLoadState("networkidle", { timeout: 5000 }).catch(() => {});
-    const problems = await page.evaluate(layoutProblems);
+    // a redirect that arrives just after "load" (/staff/login → /login on a slow server) restarts the
+    // page under the measurement: measure the page it settled on
+    const problems = await page.evaluate(layoutProblems).catch(async () => {
+      await page.waitForLoadState("load");
+      return page.evaluate(layoutProblems);
+    });
     if ((response?.status() ?? 0) >= 500) problems.unshift(`answered ${response?.status()}`);
     if (problems.length) report[path] = problems;
     if (out)

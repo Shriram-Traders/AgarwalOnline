@@ -5,6 +5,7 @@ import { PackageCheck } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { analytics } from "@/lib/analytics/service";
 import { PageHeading } from "@/components/page-heading";
+import { MetricList } from "@/components/metric-list";
 export const metadata = { title: "Analytics", robots: { index: false } };
 
 const money = (paise: number) =>
@@ -110,31 +111,5 @@ export default async function AnalyticsPage({
         />
       </div>
     </section>
-  );
-}
-
-function MetricList({
-  title,
-  rows,
-}: {
-  title: string;
-  rows: Array<[string, number]>;
-}) {
-  const max = Math.max(1, ...rows.map((row) => row[1]));
-  return (
-    <article className="panel metric-list">
-      <h2>{title}</h2>
-      {rows.length ? (
-        rows.map(([label, value]) => (
-          <div key={label}>
-            <span>{label.replaceAll("-", " ")}</span>
-            <strong>{value}</strong>
-            <i style={{ width: `${Math.max(4, (value / max) * 100)}%` }} />
-          </div>
-        ))
-      ) : (
-        <p className="muted">No data in this period.</p>
-      )}
-    </article>
   );
 }

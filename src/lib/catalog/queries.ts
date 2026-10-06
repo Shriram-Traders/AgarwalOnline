@@ -301,6 +301,11 @@ export const productBySlug = cache(async (slug: string) => {
   const all = await catalog({ slug });
   return all[0] ?? null;
 });
+/** A product in the school catalogue, with its school prices; null for anything not ticked for schools. */
+export const schoolProductBySlug = cache(async (slug: string) => {
+  const all = await catalogFor("schools", { slug });
+  return all[0] ?? null;
+});
 
 export async function catalogCategories() {
   await connectDB();

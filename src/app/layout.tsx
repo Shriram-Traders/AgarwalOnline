@@ -11,6 +11,7 @@ import { currentUser } from "@/lib/auth/session";
 import { staffRoleOf } from "@/lib/auth/permissions";
 import { cartFor } from "@/lib/commerce/service";
 import { BasketProvider } from "@/components/basket";
+import { KeyboardAware } from "@/components/keyboard-aware";
 
 const body = localFont({
   src: "../../node_modules/@fontsource-variable/manrope/files/manrope-latin-wght-normal.woff2",
@@ -58,6 +59,8 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   themeColor: "#0f172a",
   colorScheme: "light",
+  // the safe-area insets the pinned bars pad for are only reported when the page claims the whole screen
+  viewportFit: "cover",
 };
 
 export default async function RootLayout({
@@ -83,6 +86,7 @@ export default async function RootLayout({
         <a href="#main" className="skip-link">
           Skip to content
         </a>
+        <KeyboardAware />
         <BasketProvider
           lines={Object.fromEntries(
             basket.map((line) => [
