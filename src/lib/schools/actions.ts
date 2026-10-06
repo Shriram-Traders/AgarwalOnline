@@ -157,7 +157,7 @@ export async function schoolRepAction(_state: MutationState, form: FormData): Pr
         break;
       case "submit": {
         const { id } = await submitQuoteRequest(user.id, fields);
-        to = `/school/quotations/${id}?s=${form.get("schoolId")}&sent=1`;
+        to = `/school/quotations/${id}?sent=1`;
         break;
       }
       case "accept":

@@ -5,6 +5,7 @@ import { schoolByToken } from "@/lib/schools/members";
 import { SchoolAccessRequest, SchoolMember } from "@/lib/schools/models";
 import { schoolRepAction } from "@/lib/schools/actions";
 import { schoolJoinHref } from "@/lib/schools/links";
+import { switchHref } from "@/lib/schools/access";
 import { ActionForm } from "@/components/action-form";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeading } from "@/components/page-heading";
@@ -75,9 +76,9 @@ export default async function JoinSchool({ params }: { params: Promise<{ token: 
           )}
         </div>
         {member ? (
-          <Link className="primary-button" href={`/school?s=${schoolId}`}>
+          <a className="primary-button" href={switchHref(schoolId, "/school")}>
             Open the school area
-          </Link>
+          </a>
         ) : pending ? (
           <ActionForm action={schoolRepAction} submit="Withdraw request" buttonClassName="secondary-button" className="list-inline-form">
             <input type="hidden" name="intent" value="withdraw-access" />

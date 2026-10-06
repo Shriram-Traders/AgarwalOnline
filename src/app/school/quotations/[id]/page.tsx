@@ -5,16 +5,15 @@ import { currentUser } from "@/lib/auth/session";
 import { istDate } from "@/lib/commerce/delivery";
 import { User } from "@/lib/db/models";
 import { requireSchoolPage } from "@/lib/schools/access";
-import { quoteBasketView, quotationForViewer } from "@/lib/schools/quotes";
+import { quotationForViewer } from "@/lib/schools/quotes";
 import { schoolRepAction } from "@/lib/schools/actions";
 import { isExpired } from "@/lib/schools/quote-math";
-import { expectedPrice, quoteDate, quoteMoney, repStatus, schoolHref } from "@/lib/schools/display";
+import { expectedPrice, quoteDate, quoteMoney, repStatus } from "@/lib/schools/display";
 import { ActionForm } from "@/components/action-form";
 import { DataTable } from "@/components/data-table";
 import { PageHeading } from "@/components/page-heading";
 import { PrintButton } from "@/components/print-button";
 import { QuotationDocument, type QuotationVersion } from "@/components/quotation-document";
-import { SchoolNav } from "@/components/school-nav";
 import { StatusPill } from "@/components/status-pill";
 import { When } from "@/components/when";
 export const metadata = { title: "Quotation", robots: { index: false, follow: false } };
@@ -38,8 +37,7 @@ export default async function SchoolQuotation({
   if (!found) notFound();
   const { request } = found;
   // the owner may look too, but the school area itself is only for its representatives
-  const area = found.as === "rep" ? await requireSchoolPage(String(request.schoolId)) : null;
-  const basket = area ? await quoteBasketView(area.school.id) : null;
+  const area = found.as === "rep" ? await requireSchoolPage(String(request.schoolId), `/school/quotations/${id}`) : null;
   const versions: QuotationVersion[] = request.versions.map((v: { toObject: () => QuotationVersion }) => v.toObject());
   const currentVersion = versions.find((v) => v.version === request.currentVersion);
   const wanted = Number(query.v);
@@ -52,17 +50,9 @@ export default async function SchoolQuotation({
     | { response?: { kind: string; note?: string; by: unknown; at: Date } }
     | undefined)?.response;
   const answeredBy = answer ? await User.findById(answer.by).select("name") : null;
-  const back = area ? schoolHref("/school/quotations", area.school.id) : `/super-admin/quotations/${id}`;
+  const back = area ? "/school/quotations" : `/super-admin/quotations/${id}`;
   return (
     <section className="page-container school-area quotation-page">
-      {area && basket && (
-        <SchoolNav
-          school={area.school}
-          current="quotations"
-          basketLines={basket.lines.length + basket.unavailable.length}
-          otherSchools={area.schools.length > 1}
-        />
-      )}
       <nav className="breadcrumb" aria-label="Breadcrumb">
         <Link href={back}>{area ? "Quotations" : "Quotation desk"}</Link>
         <ChevronRight size={14} aria-hidden="true" />
@@ -104,7 +94,7 @@ export default async function SchoolQuotation({
               {versions.map((v) => (
                 <Link
                   key={v.version}
-                  href={`${area ? schoolHref(`/school/quotations/${id}`, area.school.id, { v: String(v.version) }) : `?v=${v.version}`}`}
+                  href={`?v=${v.version}`}
                   aria-current={v.version === shown.version ? "page" : undefined}
                 >
                   Version {v.version}

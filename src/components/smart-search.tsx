@@ -11,14 +11,28 @@ type Suggestion = {
   name: { en: string; mr: string };
   brand: string;
   pricePaise: number;
+  /** Said instead of the price, e.g. "₹42.50 + GST" in the school marketplace. */
+  priceText?: string;
 };
 
+/**
+ * The header search with live suggestions. The shop's is the default; the school marketplace
+ * points it at its own catalogue, suggestions and product pages.
+ */
 export function SmartSearch({
   placeholder,
   hints = [],
+  label = "Search products",
+  action = "/catalog",
+  suggestUrl = "/api/catalog/suggestions",
+  productBase = "/products/",
 }: {
   placeholder: string;
   hints?: string[];
+  label?: string;
+  action?: string;
+  suggestUrl?: string;
+  productBase?: string;
 }) {
   const [query, setQuery] = useState("");
   const [hint, setHint] = useState(0);
@@ -37,7 +51,7 @@ export function SmartSearch({
     const timer = window.setTimeout(async () => {
       try {
         const response = await fetch(
-          `/api/catalog/suggestions?q=${encodeURIComponent(query)}`,
+          `${suggestUrl}?q=${encodeURIComponent(query)}`,
           { signal: controller.signal },
         );
         if (response.ok) setResults(await response.json());
@@ -50,7 +64,7 @@ export function SmartSearch({
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [query]);
+  }, [query, suggestUrl]);
   useEffect(() => {
     if (!open) return;
     const close = (event: PointerEvent) => {
@@ -64,10 +78,10 @@ export function SmartSearch({
   const under = (path: string) => pathname === path || pathname.startsWith(`${path}/`);
   // the account pages are about the shopper, not the shelves, and checkout is for finishing
   // the order: no product search on either
-  if (under("/account") || under("/checkout")) return null;
+  if (under("/account") || under("/checkout") || under("/school/checkout")) return null;
   // the basket keeps it on a computer, where it sits in the header row; a phone gives the
   // pinned row to the items and the bill (styled in globals.css)
-  const phoneHidden = under("/cart");
+  const phoneHidden = under("/cart") || under("/school/basket");
   return (
     <div
       className={phoneHidden ? "smart-search phone-hidden" : "smart-search"}
@@ -76,7 +90,7 @@ export function SmartSearch({
         if (event.key === "Escape") setOpen(false);
       }}
     >
-      <form action="/catalog" className="search" role="search">
+      <form action={action} className="search" role="search">
         <Search size={20} aria-hidden="true" />
         <input
           name="q"
@@ -88,7 +102,7 @@ export function SmartSearch({
             setOpen(value.trim().length >= 2);
           }}
           onFocus={() => setOpen(true)}
-          aria-label="Search products"
+          aria-label={label}
           role="combobox"
           aria-expanded={expanded}
           aria-controls={listId}
@@ -120,7 +134,7 @@ export function SmartSearch({
           {results.map((result) => (
             <Link
               key={result.slug}
-              href={`/products/${result.slug}`}
+              href={`${productBase}${result.slug}`}
               role="option"
               aria-selected={false}
               onClick={() => setOpen(false)}
@@ -131,12 +145,12 @@ export function SmartSearch({
                   {result.name.mr} · {result.brand}
                 </small>
               </span>
-              <b>{formatPrice(result.pricePaise)}</b>
+              <b>{result.priceText ?? formatPrice(result.pricePaise)}</b>
             </Link>
           ))}
           <Link
             className="search-all"
-            href={`/catalog?q=${encodeURIComponent(query)}`}
+            href={`${action}?q=${encodeURIComponent(query)}`}
             onClick={() => setOpen(false)}
           >
             See all results <ArrowUpRight size={16} aria-hidden="true" />

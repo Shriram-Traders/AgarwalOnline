@@ -5,6 +5,7 @@ import { rolesFor } from "../src/lib/auth/permissions";
 import { ChatConversation } from "../src/lib/chat/models";
 import { Complaint } from "../src/lib/aftercare/models";
 import { ApprovalRequest } from "../src/lib/governance/models";
+import { OrderFeedback } from "../src/lib/feedback/models";
 import { loadQueues, staffCounts } from "../src/lib/admin/work-queues";
 
 const uri = process.env.TEST_MONGODB_URI;
@@ -66,5 +67,33 @@ describe.skipIf(!uri)("Staff work queues and menu counts", () => {
     const rider = await staffCounts({ id: String(someone), roles: rolesFor("delivery") });
     expect(rider.counts).toEqual({ deliveries: 0 });
     expect(rider.needsYou).toBe(0);
+  });
+
+  it("puts unread low ratings in front of the owner, and nobody else", async () => {
+    const rating = (stars: number, over: object = {}) =>
+      OrderFeedback.create({
+        orderId: new mongoose.Types.ObjectId(),
+        orderNumber: `AGS-Q-${stars}`,
+        state: "rated",
+        rating: stars,
+        submittedAt: new Date(Date.now() - 26 * 3600_000),
+        ...over,
+      });
+    const low = await rating(1);
+    await rating(2, { readAt: new Date() });
+    await rating(5);
+    await OrderFeedback.create({ orderId: new mongoose.Types.ObjectId(), orderNumber: "AGS-Q-SKIP", state: "skipped" });
+
+    const [queue] = (await loadQueues(rolesFor("super-admin"))).filter((item) => item.key === "lowRatings");
+    expect(queue).toMatchObject({ count: 1, late: true, listHref: "/super-admin/feedback?tab=attention" });
+    expect(queue.actionHref).toBe(`/super-admin/feedback?tab=attention&reply=${low._id}#reply`);
+    expect((await loadQueues(rolesFor("admin"))).some((item) => item.key === "lowRatings")).toBe(false);
+
+    const owner = await staffCounts({ id: String(someone), roles: rolesFor("super-admin") });
+    expect(owner.counts.feedback).toBe(1);
+    expect(owner.needsYou).toBe(4);
+    const admin = await staffCounts({ id: String(someone), roles: rolesFor("admin") });
+    expect(admin.counts.feedback).toBeUndefined();
+    expect(admin.needsYou).toBe(2);
   });
 });

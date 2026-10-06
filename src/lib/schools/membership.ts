@@ -22,6 +22,14 @@ export async function memberships(userId: string): Promise<SchoolSummary[]> {
   return schools.map((school) => ({ id: String(school._id), name: school.name, active: school.active !== false }));
 }
 
+/** Whether this person represents a school that is open (not paused): the shop shows them "For my school". */
+export async function representsActiveSchool(userId: string) {
+  await connectDB();
+  const rows = await SchoolMember.find({ userId }).select("schoolId");
+  if (!rows.length) return false;
+  return Boolean(await School.exists({ _id: { $in: rows.map((row) => row.schoolId) }, active: { $ne: false } }));
+}
+
 /** The active school this person represents, or "SCHOOL_UNAVAILABLE" for anything else. */
 export async function assertMember(userId: string, schoolInput: unknown, session?: ClientSession) {
   await connectDB();
@@ -36,15 +44,18 @@ export async function assertMember(userId: string, schoolInput: unknown, session
 }
 
 /**
- * Which school a page is about: the one in `?s=`, or the only one this person represents.
- * Several schools and no `?s=` means they pick; a `?s=` that isn't theirs is "not found".
+ * Which school a page is about: the one named in `?s=`, else the one they last chose (the
+ * `ags_school` preference), else the only one they represent. Several schools and no choice
+ * means they pick; a `?s=` that isn't theirs is "not found", while a stale choice is ignored.
  */
-export async function schoolContext(userId: string, wanted?: string) {
+export async function schoolContext(userId: string, wanted?: string, preferred?: string) {
   const schools = await memberships(userId);
   if (wanted) {
     const current = schools.find((school) => school.id === wanted);
     return { schools, current: current ?? null, foreign: !current, needsPick: false };
   }
+  const chosen = preferred ? schools.find((school) => school.id === preferred) : undefined;
+  if (chosen) return { schools, current: chosen, foreign: false, needsPick: false };
   const usable = schools.filter((school) => school.active);
   return {
     schools,

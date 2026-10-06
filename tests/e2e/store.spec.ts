@@ -15,6 +15,7 @@ import {
   InventoryReservation,
   DeliverySlot,
 } from "../../src/lib/commerce/models";
+import { OrderFeedback } from "../../src/lib/feedback/models";
 const uri = "mongodb://127.0.0.1:27028/ags_test_e2e?replicaSet=ags-local";
 test.beforeAll(async () => {
   await mongoose.connect(uri);
@@ -472,6 +473,8 @@ test("admin packing through partner delivery and cash reconciliation", async ({
       .getByRole("button", { name: "Verify code & mark delivered" })
       .click();
     await expect(partnerPage).toHaveURL("/delivery");
+    // the customer signs in again in later tests; they've already said "Not now" to rating this order
+    await OrderFeedback.create({ orderId: order._id, orderNumber: order.number, state: "skipped" });
     await adminPage.goto(`/admin/orders/${order._id}`);
     await adminPage
       .getByRole("button", { name: "Complete order", exact: true })
