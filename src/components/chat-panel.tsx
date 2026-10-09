@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Send, WifiOff } from "lucide-react";
 import type { MessageDTO } from "@/lib/chat/service";
+import { PolicyNotice } from "./policy-notice";
 type Sync = {
   messages: MessageDTO[];
   cursor: number;
@@ -245,11 +246,17 @@ export function ChatPanel({
               </article>
             );
           })}
-        {!messages.length && (
-          <p className="muted">
-            Tell us how we can help. Your messages are saved securely.
-          </p>
-        )}
+        {!messages.length &&
+          (staff ? (
+            <p className="muted">
+              Tell us how we can help. Your messages are saved securely.
+            </p>
+          ) : (
+            <>
+              <p className="muted">Tell us how we can help.</p>
+              <PolicyNotice kind="chat" />
+            </>
+          ))}
         <div ref={end} />
       </div>
       {typing && <p className="typing-label">Someone is typing…</p>}

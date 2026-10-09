@@ -20,14 +20,30 @@ const schema = z
       .regex(/^\d{6}$/)
       .default("246810"),
     CRON_SECRET: z.string().min(16).optional(),
-    // Resend for email verification; both blank sends nothing in production and logs emails in development
-    RESEND_API_KEY: z.string().optional(),
+    // the shop's Hostinger mailbox, for email confirmation and quotations; all blank sends nothing in
+    // production and logs emails in development
+    SMTP_USER: z.string().optional(),
+    SMTP_PASS: z.string().optional(),
     EMAIL_FROM: z.string().optional(),
     // Google sign-in; both blank hides the button
     GOOGLE_CLIENT_ID: z.string().optional(),
     GOOGLE_CLIENT_SECRET: z.string().optional(),
     SMS_API_URL: z.string().optional(),
     SMS_API_TOKEN: z.string().optional(),
+    // Web push (notifications on a phone or PC): a VAPID key pair from `npm run push:keys`. Both blank
+    // turns push off; the bell keeps working. The subject is how push services reach the shop.
+    VAPID_PUBLIC_KEY: z
+      .string()
+      .regex(/^[A-Za-z0-9_-]{87}$/, "VAPID_PUBLIC_KEY is the 87-character key from npm run push:keys")
+      .optional(),
+    VAPID_PRIVATE_KEY: z
+      .string()
+      .regex(/^[A-Za-z0-9_-]{43}$/, "VAPID_PRIVATE_KEY is the 43-character key from npm run push:keys")
+      .optional(),
+    VAPID_SUBJECT: z
+      .string()
+      .regex(/^(mailto:\S+@\S+|https:\/\/\S+)$/, "VAPID_SUBJECT is mailto:you@example.com or an https:// address")
+      .optional(),
     CLOUDINARY_CLOUD_NAME: z.string().optional(),
     CLOUDINARY_API_KEY: z.string().optional(),
     CLOUDINARY_API_SECRET: z.string().optional(),
@@ -63,17 +79,24 @@ const schema = z
         message: "Production requires HTTPS",
         path: ["APP_ORIGIN"],
       });
-    if (Boolean(env.RESEND_API_KEY) !== Boolean(env.EMAIL_FROM))
+    // EMAIL_FROM on its own is fine: it is left over from Resend on existing deployments
+    if ((env.SMTP_USER || env.SMTP_PASS) && !(env.SMTP_USER && env.SMTP_PASS && env.EMAIL_FROM))
       ctx.addIssue({
         code: "custom",
-        message: "Resend API key and sender address must be configured together",
-        path: ["RESEND_API_KEY"],
+        message: "Mailbox address, mailbox password and sender must be configured together",
+        path: ["SMTP_USER"],
       });
     if (Boolean(env.GOOGLE_CLIENT_ID) !== Boolean(env.GOOGLE_CLIENT_SECRET))
       ctx.addIssue({
         code: "custom",
         message: "Google client ID and secret must be configured together",
         path: ["GOOGLE_CLIENT_ID"],
+      });
+    if (Boolean(env.VAPID_PUBLIC_KEY) !== Boolean(env.VAPID_PRIVATE_KEY))
+      ctx.addIssue({
+        code: "custom",
+        message: "VAPID public and private keys must be configured together",
+        path: ["VAPID_PUBLIC_KEY"],
       });
     if (Boolean(env.SMS_API_URL) !== Boolean(env.SMS_API_TOKEN))
       ctx.addIssue({

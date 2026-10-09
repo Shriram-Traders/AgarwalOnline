@@ -4,16 +4,20 @@ import { ChevronRight, Hourglass } from "lucide-react";
 import { currentUser } from "@/lib/auth/session";
 import { istDate } from "@/lib/commerce/delivery";
 import { User } from "@/lib/db/models";
+import { getEnv } from "@/lib/env";
 import { requireSchoolPage } from "@/lib/schools/access";
-import { quotationForViewer } from "@/lib/schools/quotes";
+import { quotationShareHref } from "@/lib/schools/links";
+import { quotationForViewer, quoteShareToken } from "@/lib/schools/quotes";
 import { schoolRepAction } from "@/lib/schools/actions";
 import { isExpired } from "@/lib/schools/quote-math";
 import { expectedPrice, quoteDate, quoteMoney, repStatus } from "@/lib/schools/display";
 import { ActionForm } from "@/components/action-form";
 import { DataTable } from "@/components/data-table";
 import { PageHeading } from "@/components/page-heading";
+import { PolicyNotice } from "@/components/policy-notice";
 import { PrintButton } from "@/components/print-button";
 import { QuotationDocument, type QuotationVersion } from "@/components/quotation-document";
+import { ShareLink } from "@/components/share-link";
 import { StatusPill } from "@/components/status-pill";
 import { When } from "@/components/when";
 export const metadata = { title: "Quotation", robots: { index: false, follow: false } };
@@ -51,6 +55,10 @@ export default async function SchoolQuotation({
     | undefined)?.response;
   const answeredBy = answer ? await User.findById(answer.by).select("name") : null;
   const back = area ? "/school/quotations" : `/super-admin/quotations/${id}`;
+  // the view-only link only has something to show once a version is sent
+  const shareUrl = currentVersion
+    ? `${getEnv().APP_ORIGIN}${quotationShareHref(await quoteShareToken(request))}`
+    : null;
   return (
     <section className="page-container school-area quotation-page">
       <nav className="breadcrumb" aria-label="Breadcrumb">
@@ -141,6 +149,7 @@ export default async function SchoolQuotation({
                     <input type="hidden" name="intent" value="accept" />
                     <input type="hidden" name="requestId" value={id} />
                     <input type="hidden" name="version" value={shown.version} />
+                    <PolicyNotice kind="school-accept" />
                   </ActionForm>
                 )}
                 <ActionForm
@@ -174,6 +183,24 @@ export default async function SchoolQuotation({
             <Hourglass size={18} aria-hidden="true" /> The store is preparing your quotation.
           </p>
         )
+      )}
+
+      {shareUrl && (
+        <section className="panel quote-share" aria-labelledby="share-heading">
+          <h2 id="share-heading">Share this quotation</h2>
+          <p className="muted">
+            Send it to your principal or accounts office. They can see and print the latest version without signing in, but
+            only your school’s representatives can accept it or ask for changes.
+          </p>
+          <ShareLink
+            label="View-only link"
+            url={shareUrl}
+            hint="If the link reaches the wrong person, ask the store for a new one; the old one then stops working."
+            title={`Quotation ${request.number} from Agarwal General Stores`}
+            copy="Copy link"
+            copied="Copied"
+          />
+        </section>
       )}
 
       <section className="panel" aria-labelledby="asked-heading">

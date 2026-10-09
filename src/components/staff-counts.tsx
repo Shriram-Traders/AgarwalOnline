@@ -5,10 +5,16 @@ import type { StaffCountsResponse } from "@/lib/staff/types";
 
 const EMPTY: StaffCountsResponse = { at: "", counts: {}, needsYou: 0 };
 const Counts = createContext<StaffCountsResponse>(EMPTY);
+const Refresh = createContext<() => Promise<void>>(async () => {});
 
 /** The menu and bell numbers. The root layout never re-renders on navigation, so they're fetched here. */
 export function useStaffCounts() {
   return useContext(Counts);
+}
+
+/** Asks for the numbers again now, e.g. when the new-order sound hears of an order. */
+export function useRefreshStaffCounts() {
+  return useContext(Refresh);
 }
 
 /**
@@ -49,5 +55,9 @@ export function StaffCountsProvider({ children }: { children: ReactNode }) {
       last.current = 0;
     };
   }, [refresh]);
-  return <Counts.Provider value={counts}>{children}</Counts.Provider>;
+  return (
+    <Refresh.Provider value={refresh}>
+      <Counts.Provider value={counts}>{children}</Counts.Provider>
+    </Refresh.Provider>
+  );
 }

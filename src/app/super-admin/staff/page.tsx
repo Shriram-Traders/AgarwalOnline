@@ -2,6 +2,7 @@ import Link from "next/link";
 import mongoose from "mongoose";
 import { UsersRound } from "lucide-react";
 import { ActionForm } from "@/components/action-form";
+import { PolicyNotice } from "@/components/policy-notice";
 import { PasswordInput } from "@/components/password-input";
 import { RecordHistory } from "@/components/record-history";
 import { PageHeading } from "@/components/page-heading";
@@ -19,6 +20,7 @@ import {
 } from "@/lib/auth/permissions";
 import { User } from "@/lib/db/models";
 import { staffAction } from "@/lib/staff/actions";
+import { PhoneInput } from "@/components/phone-input";
 export const metadata = { title: "Staff & roles", robots: { index: false } };
 
 const labels: Record<string, string> = {
@@ -41,8 +43,8 @@ const CAN: Partial<Record<Permission, string>> = {
   "order:manage": "Confirm, pack and complete orders",
   "packing:write": "Fill in packing checklists",
   "delivery:assign": "Assign delivery partners",
-  "cod:reconcile": "Reconcile cash handovers",
-  "catalog:write": "Edit products and aisles",
+  "cod:reconcile": "Reconcile cash handovers and record family tab payments",
+  "catalog:write": "Edit products, categories and school kits",
   "inventory:adjust": "Adjust stock",
   "approval:request": "Ask for price and stock changes",
   "chat:support": "Answer support chats",
@@ -54,6 +56,7 @@ const CAN: Partial<Record<Permission, string>> = {
   "staff:manage": "Add staff and change roles",
   "promotion:write": "Create and pause offers",
   "refund:write": "Issue refunds",
+  "tab:approve": "Open, limit and close family tabs",
   "audit:read": "Read the audit trail",
 };
 
@@ -149,10 +152,8 @@ export default async function StaffManagement({
                 </label>
                 <label>
                   Phone {!editing.phone && <small>Optional: this account has no number yet</small>}
-                  <input
-                    name="phone"
+                  <PhoneInput
                     defaultValue={editing.phone}
-                    inputMode="numeric"
                     pattern="[0-9]{10}"
                     required={Boolean(editing.phone)}
                   />
@@ -341,15 +342,11 @@ export default async function StaffManagement({
             added to it and the other fields are optional. Otherwise all fields
             create a new account.
           </p>
+          <PolicyNotice kind="staff" />
           <div className="staff-form-grid">
             <label>
               Phone
-              <input
-                name="phone"
-                inputMode="numeric"
-                pattern="[0-9]{10}"
-                required
-              />
+              <PhoneInput pattern="[0-9]{10}" required />
             </label>
             <label>
               Role

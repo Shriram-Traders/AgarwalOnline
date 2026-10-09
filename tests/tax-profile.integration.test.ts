@@ -39,6 +39,21 @@ describe.skipIf(!uri)("The shop's business and tax details", () => {
     expect(await AuditLog.countDocuments({ action: "tax-details.update" })).toBe(1);
   });
 
+  it("keeps the grievance officer for the Contact page, and still reads details saved before it existed", async () => {
+    const details = { legalName: "Agarwal General Stores", address: "Main Road, Nagothane, Raigad 402106", stateCode: "27" };
+    // saved before the grievance fields were added
+    await SystemSetting.create({ key: "tax-details", value: details });
+    expect(await taxProfile()).toMatchObject({ ...details, configured: true });
+    expect((await taxProfile()).grievanceName).toBeUndefined();
+    await saveTaxProfile(owner, { ...details, grievanceName: "  R. Agarwal ", grievanceDesignation: "Proprietor" });
+    expect(await taxProfile()).toMatchObject({ grievanceName: "R. Agarwal", grievanceDesignation: "Proprietor" });
+    // blank fields are left out, not stored as empty
+    await saveTaxProfile(owner, { ...details, grievanceName: "", grievanceDesignation: "" });
+    const saved = (await SystemSetting.findOne({ key: "tax-details" })).value;
+    expect(saved).not.toHaveProperty("grievanceName");
+    expect(saved).not.toHaveProperty("grievanceDesignation");
+  });
+
   it("refuses a GSTIN from another state, and anyone but an owner", async () => {
     const details = { legalName: "Agarwal General Stores", gstin: "27AAPFU0939F1ZV", address: "Main Road, Nagothane", stateCode: "24" };
     await expect(saveTaxProfile(owner, details)).rejects.toThrow();

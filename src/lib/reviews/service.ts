@@ -12,7 +12,7 @@ import { ProductReview } from "./models";
  */
 export async function saveReview(
   customerId: string,
-  data: { productId: string; rating: number; title: string; body: string },
+  data: { productId: string; rating: number; title?: string; body?: string },
 ): Promise<"published" | "hidden" | null> {
   await connectDB();
   // every pack, hidden ones too: someone who bought a pack since hidden can still review
@@ -28,7 +28,13 @@ export async function saveReview(
   const review = await ProductReview.findOneAndUpdate(
     { customerId, productId: data.productId },
     {
-      $set: { verifiedOrderId: verifiedOrder._id, rating: data.rating, title: data.title, body: data.body },
+      $set: {
+        verifiedOrderId: verifiedOrder._id,
+        rating: data.rating,
+        // a title or body left out (a one-tap star rating) keeps the words written earlier
+        ...(data.title !== undefined && { title: data.title }),
+        ...(data.body !== undefined && { body: data.body }),
+      },
       $setOnInsert: { status: "published" },
     },
     { upsert: true, runValidators: true, returnDocument: "after" },

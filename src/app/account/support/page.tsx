@@ -5,6 +5,7 @@ import { PageHeading } from "@/components/page-heading";
 import { requirePage } from "@/lib/auth/session";
 import { ChatConversation, ChatMessage, ChatReceipt } from "@/lib/chat/models";
 import { ActionForm } from "@/components/action-form";
+import { PolicyNotice } from "@/components/policy-notice";
 import { conversationAction } from "@/lib/chat/actions";
 import { displayStatus } from "@/lib/display";
 export const metadata = { title: "Talk to the store", robots: { index: false } };
@@ -67,6 +68,7 @@ export default async function Support() {
                 required
               />
             </label>
+            <PolicyNotice kind="chat" />
           </ActionForm>
         </div>
       </div>

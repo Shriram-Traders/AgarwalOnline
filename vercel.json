@@ -4,6 +4,7 @@
   "crons": [
     { "path": "/api/cron/expire-reservations", "schedule": "0 21 * * *" },
     { "path": "/api/cron/retention", "schedule": "30 21 * * *" },
-    { "path": "/api/cron/publish-scheduled", "schedule": "30 0 * * *" }
+    { "path": "/api/cron/publish-scheduled", "schedule": "30 0 * * *" },
+    { "path": "/api/cron/tab-statements", "schedule": "30 0 1 * *" }
   ]
 }

@@ -11,11 +11,14 @@ import {
   ServiceArea,
 } from "../../src/lib/db/models";
 import {
+  Address,
   Order,
   InventoryReservation,
   DeliverySlot,
 } from "../../src/lib/commerce/models";
+import { Family } from "../../src/lib/family/models";
 import { OrderFeedback } from "../../src/lib/feedback/models";
+import { POLICY_VERSION } from "../../src/lib/legal/version";
 const uri = "mongodb://127.0.0.1:27028/ags_test_e2e?replicaSet=ags-local";
 test.beforeAll(async () => {
   await mongoose.connect(uri);
@@ -94,7 +97,38 @@ test.beforeAll(async () => {
       roles: ["customer"],
       passwordHash: await bcrypt.hash("Local-test-password-123", 12),
     },
+    {
+      phone: "9000000091",
+      name: "Fictional Parent",
+      email: "parent@e2e.test",
+      roles: ["customer"],
+      passwordHash: await bcrypt.hash("Local-test-password-123", 12),
+    },
+    {
+      phone: "9000000092",
+      name: "Fictional Partner",
+      email: "partner@e2e.test",
+      roles: ["customer"],
+      passwordHash: await bcrypt.hash("Local-test-password-123", 12),
+    },
+    {
+      phone: "9000000093",
+      name: "Fictional Tabholder",
+      email: "tabholder@e2e.test",
+      roles: ["customer"],
+      passwordHash: await bcrypt.hash("Local-test-password-123", 12),
+    },
   ]);
+  // the parent checks out a school kit, so they need somewhere to deliver it
+  await Address.create({
+    customerId: (await User.findOne({ email: "parent@e2e.test" }))!._id,
+    name: "Fictional Parent",
+    phone: "9000000091",
+    line: "Fictional lane",
+    pin: "999999",
+    areaId: a._id,
+    isDefault: true,
+  });
 });
 test.afterAll(async () => {
   await mongoose.connection.dropDatabase();
@@ -142,7 +176,9 @@ test("customer OTP, basket, address, COD, tracking and cancellation", async ({
   expect(sessionCookie?.sameSite).toBe("Lax");
   await page.goto("/products/everyday-basmati-rice");
   await page.getByRole("button", { name: "Add to basket" }).click();
-  await expect(page.getByRole("status")).toContainText("Basket updated");
+  await expect(page.locator("main").getByText("1 in basket")).toBeVisible();
+  // shown at once, saved just after: wait for the save before leaving the page
+  await expect(page.locator("main .product-quantity").first()).toHaveAttribute("aria-busy", "false");
   await page.goto("/account/addresses");
   await page.getByLabel("Recipient name").fill("Fictional Neighbour");
   await page.getByLabel("Mobile number").fill("9000000088");
@@ -164,17 +200,25 @@ test("customer OTP, basket, address, COD, tracking and cancellation", async ({
   await expect(page.getByRole("status")).toContainText("Address saved");
   await page.goto("/checkout");
   await page
-    .getByLabel("Delivery slot")
-    .selectOption({ label: "Thu, 1 Jan · 4:00 PM – 7:00 PM" });
+    .getByRole("radio", { name: "Thu, 1 Jan · 4:00 PM – 7:00 PM" })
+    .check();
   await expect(
     page.getByRole("heading", { name: "Total to collect: ₹139" }),
   ).toBeVisible();
+  // the box also agrees to the Terms, which open in a new tab so the checkout isn't lost
+  const terms = page.locator(".checkout-summary").getByRole("link", { name: /Terms & Conditions/ });
+  await expect(terms).toHaveAttribute("href", "/p/terms-and-conditions");
+  await expect(terms).toHaveAttribute("target", "_blank");
   await page.getByRole("checkbox").check();
   await page
     .getByRole("button", { name: "Confirm Cash on Delivery order" })
     .click();
   await expect(page).toHaveURL(/\/account\/orders\/[a-f0-9]+/);
   await expect(page.getByText(/^Status: Order placed$/i)).toBeVisible();
+  // the order keeps the Terms version that was ticked, and says so
+  const placed = await Order.findById(page.url().split("/").pop());
+  expect(placed.termsVersion).toBe(POLICY_VERSION);
+  await expect(page.getByText(`Version ${POLICY_VERSION}`)).toBeVisible();
   await page.getByRole("checkbox").check();
   await page.getByRole("button", { name: "Cancel this order" }).click();
   // the confirm dialog is aria-modal, so it must take focus and close on Escape
@@ -318,7 +362,7 @@ test("mobile storefront stays within viewport and navigation is visible", async 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
   await expect(page.getByRole("combobox", { name: "Search products" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Shop by aisle" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Shop by category" })).toBeVisible();
   await expect(
     page.getByRole("navigation", { name: "Mobile navigation" }),
   ).toBeVisible();
@@ -430,7 +474,8 @@ test("admin packing through partner delivery and cash reconciliation", async ({
         .getByLabel("Password", { exact: true })
         .fill("Local-test-password-123");
       await p.getByRole("button", { name: "Sign in with email" }).click();
-      await expect(p).not.toHaveURL(/staff\/login/);
+      // signed in once the page leaves /login; going on before that loses the session under load
+      await p.waitForURL((url) => url.pathname !== "/login", { timeout: 30_000 });
     }
     await adminPage.goto(`/admin/orders/${order._id}`);
     await adminPage
@@ -641,4 +686,142 @@ test("a second basket is filled from a product page and ordered", async ({ page 
   await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "Order Family monthly" }).click();
   await expect(page).toHaveURL(/\/checkout$/);
+});
+
+test("a family: start it, add a child, and a partner joins with the one-time link", async ({ page, browser }) => {
+  await page.goto("/login");
+  await emailSignIn(page, "parent@e2e.test");
+  await page.waitForURL((url) => url.pathname !== "/login");
+  await page.goto("/account");
+  await page.getByRole("link", { name: /^Family/ }).click();
+  await page.getByLabel("Family name").fill("Sharma family");
+  await page.getByRole("button", { name: "Start the family" }).click();
+  await expect(page.getByRole("heading", { name: "Sharma family", level: 1 })).toBeVisible();
+  // with no children yet, the add-child form is already open
+  await page.getByLabel("Name", { exact: true }).fill("Aarav");
+  await page.getByLabel("School").fill("St. Mary's");
+  await page.getByLabel("Class").selectOption("5");
+  await page.getByRole("button", { name: "Add child" }).click();
+  await expect(page.getByText("Class 5 · St. Mary's")).toBeVisible();
+  await page.getByRole("button", { name: "Invite someone to the family" }).click();
+  const invite = new URL(await page.getByLabel("Link", { exact: true }).inputValue()).pathname;
+  await shot(page, "family-invite");
+  await page.keyboard.press("Escape");
+
+  // the partner opens it signed out, signs in, lands back on it and joins
+  const context = await browser.newContext({ baseURL: "http://127.0.0.1:3002", viewport: page.viewportSize()! });
+  const partner = await context.newPage();
+  try {
+    await partner.goto(invite);
+    await expect(partner.getByText("What joining shares")).toBeVisible();
+    await partner.getByRole("link", { name: "Sign in to join" }).click();
+    await emailSignIn(partner, "partner@e2e.test");
+    await expect(partner).toHaveURL(invite);
+    await partner.getByRole("button", { name: /Join .Sharma family./ }).click();
+    await expect(partner).toHaveURL(/\/account\/family$/);
+    await expect(partner.getByText("Class 5 · St. Mary's")).toBeVisible();
+    // one link, one person: it no longer opens
+    await partner.goto(invite);
+    await expect(partner.getByRole("heading", { name: /couldn.t find/ })).toBeVisible();
+  } finally {
+    await context.close();
+  }
+
+  await page.reload();
+  await expect(page.getByText(/You and Fictional/)).toBeVisible();
+
+  // the store builds Aarav's class list on a board and publishes it as a kit; both parents are told
+  const staff = await browser.newContext({ baseURL: "http://127.0.0.1:3002", viewport: page.viewportSize()! });
+  const desk = await staff.newPage();
+  try {
+    await desk.goto("/login");
+    await emailSignIn(desk, "owner@e2e.test");
+    await desk.waitForURL((url) => url.pathname !== "/login");
+    await desk.goto("/products/everyday-basmati-rice");
+    await desk.locator("summary", { hasText: "Save" }).click();
+    await desk.getByLabel("New board").fill("St. Mary's Class 5");
+    await desk.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(desk.getByText("Saved to the board.")).toBeVisible();
+    await desk.goto("/admin/kits");
+    const add = desk.locator("details.create-staff");
+    await add.locator("summary").click();
+    await add.getByLabel("School", { exact: true }).fill("St. Mary's");
+    await add.getByRole("combobox", { name: "Class", exact: true }).selectOption("5");
+    await add.getByLabel(/Items from your board/).selectOption({ index: 1 });
+    await add.getByRole("button", { name: "Save as draft" }).click();
+    await expect(desk).toHaveURL(/edit=/);
+    await desk.getByRole("button", { name: "Publish this kit" }).click();
+    await desk.getByRole("button", { name: /^Yes, / }).click();
+    await expect(desk.getByText("Published. 2 parents were told.")).toBeVisible();
+    await shot(desk, "school-kit-admin");
+  } finally {
+    await staff.close();
+  }
+
+  // one tap puts the kit in the basket and opens checkout with the order already for Aarav
+  await page.reload();
+  await shot(page, "family-hub");
+  await page.getByRole("button", { name: /Buy the kit/ }).click();
+  await expect(page).toHaveURL(/\/checkout\?for=/);
+  await expect(page.getByLabel("Who is it for?").locator("option:checked")).toHaveText(/Aarav/);
+});
+
+test("a family tab: asked for, opened by the owner, an order on it, paid at the desk", async ({ page, browser }) => {
+  const holder = (await User.findOne({ email: "tabholder@e2e.test" }))!;
+  await Family.create({ name: "Khata family", ownerId: holder._id, adults: [holder._id], inviteToken: "e2e-khata-invite-token00" });
+  const area = (await ServiceArea.findOne({ key: "fictional-e2e" }))!;
+  await Address.create({ customerId: holder._id, name: "Tab Holder", phone: "9000000093", line: "Fictional lane 2", pin: "999999", areaId: area._id, isDefault: true });
+  await page.goto("/login");
+  await emailSignIn(page, "tabholder@e2e.test");
+  await page.waitForURL((url) => url.pathname !== "/login");
+  await page.goto("/account/family");
+  await page.getByRole("button", { name: "Ask the store for a tab" }).click();
+  await expect(page.getByText("You asked for a tab.")).toBeVisible();
+
+  // the owner opens it with a ₹500 limit
+  const office = await browser.newContext({ baseURL: "http://127.0.0.1:3002", viewport: page.viewportSize()! });
+  const desk = await office.newPage();
+  try {
+    await desk.goto("/login");
+    await emailSignIn(desk, "owner@e2e.test");
+    await desk.waitForURL((url) => url.pathname !== "/login");
+    await desk.goto("/admin/tabs?status=requested");
+    await desk.getByRole("link", { name: /Khata family/ }).click();
+    await desk.getByLabel("Tab limit").fill("500");
+    await desk.getByRole("button", { name: "Open the tab" }).click();
+    await desk.getByRole("button", { name: /^Yes, / }).click();
+    // the open tab's controls replace the request's
+    await expect(desk.getByRole("button", { name: "Pause the tab" })).toBeVisible();
+
+    // the family puts an order on it: nothing to pay at checkout
+    await page.goto("/products/everyday-basmati-rice");
+    await page.getByRole("button", { name: "Add to basket" }).click();
+    await expect(page.getByRole("status")).toContainText("Basket updated");
+    await page.goto("/checkout");
+    await page.getByLabel("Delivery slot").selectOption({ label: "Thu, 1 Jan · 4:00 PM – 7:00 PM" });
+    await page.getByRole("radio", { name: /Add to family tab/ }).check();
+    await expect(page.getByRole("heading", { name: "Total on the tab: ₹139" })).toBeVisible();
+    // only Cash on Delivery asks for the extra tick
+    await expect(page.getByRole("checkbox")).toHaveCount(0);
+    await page.getByRole("button", { name: "Put this order on the family tab" }).click();
+    await expect(page).toHaveURL(/\/account\/orders\/[a-f0-9]+/);
+    await expect(page.getByText("On your family tab, settled with the store monthly")).toBeVisible();
+    await page.goto("/account/family");
+    await expect(page.locator("#tab")).toContainText("₹139");
+    await shot(page, "family-tab");
+
+    // the desk records the UPI payment, and nothing is owed
+    await desk.reload();
+    await desk.getByLabel("Amount received").fill("139");
+    await desk.getByLabel("Paid by").selectOption("upi");
+    await desk.getByLabel(/^Reference/).fill("412345678901");
+    await desk.getByRole("button", { name: "Record payment" }).click();
+    await desk.getByRole("button", { name: /^Yes, / }).click();
+    // paid in full: the payment is listed and the form to take more is gone
+    await expect(desk.getByText("UPI 412345678901")).toBeVisible();
+    await expect(desk.getByRole("button", { name: "Record payment" })).toHaveCount(0);
+    await shot(desk, "family-tab-admin");
+  } finally {
+    await office.close();
+  }
 });

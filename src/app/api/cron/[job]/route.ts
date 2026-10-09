@@ -2,6 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import { expireReservations } from "@/lib/payments/service";
 import { publishScheduled } from "@/lib/governance/service";
 import { runRetention } from "@/lib/retention";
+import { sendTabStatements } from "@/lib/family/tab";
 import { getEnv } from "@/lib/env";
 
 export const runtime = "nodejs";
@@ -11,6 +12,7 @@ const jobs: Record<string, () => Promise<unknown>> = {
   "expire-reservations": async () => ({ released: await expireReservations() }),
   "publish-scheduled": async () => ({ published: await publishScheduled() }),
   retention: runRetention,
+  "tab-statements": async () => ({ sent: await sendTabStatements() }),
 };
 
 // Vercel Cron sends "Authorization: Bearer $CRON_SECRET". Without a configured secret, every call is refused.

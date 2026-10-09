@@ -1,8 +1,10 @@
 "use client";
 import { useActionState, useEffect, useRef, useState } from "react";
 import { PasswordInput } from "@/components/password-input";
+import { PhoneInput, codeDigits } from "@/components/phone-input";
 import { keepTyped } from "@/components/action-form";
 import { safeAction } from "@/components/safe-action";
+import { LegalText } from "@/components/legal-text";
 import {
   customerEmailLoginAction,
   customerPasswordLoginAction,
@@ -101,12 +103,7 @@ export function AuthForm({
             {mr ? "मोबाईल क्रमांक" : "Mobile number"}
             <div className="phone-input">
               <span>+91</span>
-              <input
-                name="phone"
-                type="tel"
-                inputMode="numeric"
-                pattern="[6-9][0-9]{9}"
-                maxLength={10}
+              <PhoneInput
                 autoComplete="username"
                 defaultValue={customerSigned.phone}
                 placeholder={mr ? "१० अंकी मोबाईल क्रमांक" : "10-digit mobile number"}
@@ -181,12 +178,7 @@ export function AuthForm({
             {mr ? "मोबाईल क्रमांक" : "Mobile number"}
             <div className="phone-input">
               <span>+91</span>
-              <input
-                name="phone"
-                type="tel"
-                inputMode="numeric"
-                pattern="[6-9][0-9]{9}"
-                maxLength={10}
+              <PhoneInput
                 autoComplete="tel-national"
                 placeholder={mr ? "१० अंकी मोबाईल क्रमांक" : "10-digit mobile number"}
                 required
@@ -268,16 +260,28 @@ export function AuthForm({
               type="text"
               inputMode="numeric"
               pattern="[0-9]{6}"
-              maxLength={6}
               autoComplete="one-time-code"
               enterKeyHint="done"
+              onInput={codeDigits}
               className="otp-input"
               aria-describedby="otp-help"
               required
             />
           </label>
           <small className="muted" id="otp-help">{mr ? "SMS मधील सहा अंक टाका." : "Enter the six digits shown in your SMS."}</small>
-          {sent.newAccount && <p className="muted">{mr ? "पडताळणीनंतर तुमचे खाते तयार होईल आणि दुकानाच्या गोपनीयता अटी लागू होतील." : "Verification creates your account and accepts the store’s privacy terms."}</p>}
+          {sent.newAccount && (
+            <p className="muted">
+              <LegalText
+                newTab
+                mr={mr}
+                text={
+                  mr
+                    ? "पडताळणीनंतर तुमचे खाते तयार होईल. पुढे जाऊन तुम्ही आमच्या [अटी व शर्ती](/p/terms-and-conditions) आणि [गोपनीयता धोरण](/p/privacy-policy) ला संमती देता."
+                    : "Verifying creates your account. By continuing you agree to our [Terms & Conditions](/p/terms-and-conditions) and [Privacy Policy](/p/privacy-policy)."
+                }
+              />
+            </p>
+          )}
           {verified.error && (
             <p role="alert" className="error-message">
               {verified.error}

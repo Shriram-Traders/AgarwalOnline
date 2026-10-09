@@ -6,6 +6,7 @@ import { feedbackCopy } from "@/lib/feedback/copy";
 import { tagsFor, type FeedbackTag } from "@/lib/feedback/rules";
 import type { Locale } from "@/lib/locale-types";
 import { Modal } from "./modal";
+import { PolicyNotice } from "./policy-notice";
 import { safeAction } from "./safe-action";
 import { StarInput } from "./star-input";
 
@@ -130,6 +131,7 @@ export function FeedbackSheet({
                   placeholder={text.morePlaceholder}
                 />
               </label>
+              <PolicyNotice kind="feedback" locale={locale} />
             </>
           ) : (
             <p className="muted feedback-hint">{text.pickStar}</p>

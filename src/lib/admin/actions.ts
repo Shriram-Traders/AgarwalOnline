@@ -482,7 +482,8 @@ export async function taxDetailsAction(
     const user = await requirePermission("settings:write");
     await saveTaxProfile(user.id, Object.fromEntries(form));
     revalidatePath("/super-admin");
-    return { success: "Business and tax details saved. Quotations sent from now on use them." };
+    revalidatePath("/p/contact-and-grievance");
+    return { success: "Business and tax details saved. Quotations sent from now on and the Contact page use them." };
   } catch (e) {
     return { error: safe(e) };
   }

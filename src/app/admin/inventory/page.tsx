@@ -10,6 +10,7 @@ import { StatusPill } from "@/components/status-pill";
 import { When } from "@/components/when";
 import { displayStatus } from "@/lib/display";
 import { PageHeading } from "@/components/page-heading";
+import { StockImport } from "@/components/stock-import";
 import { CatalogAdminNav } from "@/components/catalog-admin-nav";
 import { requirePage } from "@/lib/auth/session";
 import { hasPermission } from "@/lib/auth/permissions";
@@ -104,6 +105,10 @@ export default async function InventoryPage({
           </ActionForm>
         </div>
       )}
+      <details className="panel create-staff" id="stock-sheet" open={params.sheet === "1"}>
+        <summary>Update stock from a spreadsheet</summary>
+        <StockImport />
+      </details>
       <details className="panel create-staff" id="new-pack" open={params.new === "pack"}>
         <summary>Add a pack size</summary>
         <p className="muted">A new pack puts a new price in the shop, so an owner approves it like a price change.</p>

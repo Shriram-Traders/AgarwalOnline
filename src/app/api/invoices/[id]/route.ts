@@ -1,9 +1,8 @@
 import { currentUser } from "@/lib/auth/session";
-import { hasPermission } from "@/lib/auth/permissions";
-import { Order } from "@/lib/commerce/models";
-import { objectId } from "@/lib/commerce/service";
 import { lineNotes, shortfallRefund, type PackedLine } from "@/lib/operations/packing";
 import { Refund } from "@/lib/payments/models";
+import { invoiceOrder } from "@/lib/family/service";
+import { methodLabel } from "@/lib/display";
 
 function escape(value: unknown) {
   return String(value ?? "")
@@ -19,14 +18,8 @@ export async function GET(
 ) {
   const user = await currentUser();
   if (!user) return new Response("Authentication required", { status: 401 });
-  const { id } = await params;
-  if (!objectId.safeParse(id).success)
-    return new Response("Invoice not found", { status: 404 });
-  // staff who manage orders may open any invoice; everyone else only their own
-  const order = await Order.findOne({
-    _id: id,
-    ...(hasPermission(user.roles, "order:manage") ? {} : { customerId: user.id }),
-  });
+  // staff who manage orders may open any invoice; everyone else their own, or their family's
+  const order = await invoiceOrder(user, (await params).id);
   if (!order) return new Response("Invoice not found", { status: 404 });
   const rupees = (paise: number) => `₹${(paise / 100).toFixed(2)}`;
   // a cash bill follows what was packed; an online payment stays as paid, with the shortfall noted
@@ -60,7 +53,7 @@ export async function GET(
             : "; the store arranges that refund separately."
       }</p>`
     : "";
-  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${escape(order.number)} invoice</title><style>body{font:15px Arial;color:#0f172a;max-width:760px;margin:48px auto;padding:0 24px}header{display:flex;justify-content:space-between;border-bottom:3px solid #1e3a8a;padding-bottom:22px}h1{font-size:24px;margin:0}.muted,small{display:block;color:#5b6472;margin-top:4px}table{width:100%;border-collapse:collapse;margin:32px 0}th,td{text-align:left;padding:12px 8px;border-bottom:1px solid #e5e8ee}th:last-child,td:last-child{text-align:right}.totals{margin-left:auto;width:300px}.totals p{display:flex;justify-content:space-between}.grand{font-size:20px;font-weight:700;border-top:2px solid #0f172a;padding-top:12px}small.note{color:#9a3412;font-weight:600}@media print{body{margin:20px auto}}</style></head><body><header><div><h1>AGARWAL GENERAL STORES</h1><span class="muted">Everything You Need, Delivered to Your Doorstep</span></div><div><strong>Order invoice</strong><span class="muted">${escape(order.number)}</span></div></header><p><strong>Deliver to:</strong><br>${escape(order.address.name)}<br>${escape(order.address.line)}, ${escape(order.address.areaName)} ${escape(order.address.pin)}</p><p class="muted">Ordered ${new Date(order.createdAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })} · ${escape(order.paymentMethod.toUpperCase())} · ${escape(order.paymentStatus)}</p><table><thead><tr><th>Item</th><th>Qty</th><th>Price</th><th>Total</th></tr></thead><tbody>${rows}</tbody></table><div class="totals"><p><span>Subtotal</span><strong>${rupees(order.subtotalPaise)}</strong></p>${offer}<p><span>Delivery</span><strong>${rupees(order.deliveryPaise)}</strong></p><p class="grand"><span>Total</span><span>${rupees(order.totalPaise)}</span></p></div>${asOrdered}${shortfall}<p class="muted">Computer-generated order invoice. Tax details are not shown because GST configuration has not been supplied.</p></body></html>`;
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${escape(order.number)} invoice</title><style>body{font:15px Arial;color:#0f172a;max-width:760px;margin:48px auto;padding:0 24px}header{display:flex;justify-content:space-between;border-bottom:3px solid #1e3a8a;padding-bottom:22px}h1{font-size:24px;margin:0}.muted,small{display:block;color:#5b6472;margin-top:4px}table{width:100%;border-collapse:collapse;margin:32px 0}th,td{text-align:left;padding:12px 8px;border-bottom:1px solid #e5e8ee}th:last-child,td:last-child{text-align:right}.totals{margin-left:auto;width:300px}.totals p{display:flex;justify-content:space-between}.grand{font-size:20px;font-weight:700;border-top:2px solid #0f172a;padding-top:12px}small.note{color:#9a3412;font-weight:600}@media print{body{margin:20px auto}}</style></head><body><header><div><h1>AGARWAL GENERAL STORES</h1><span class="muted">Everything You Need, Delivered to Your Doorstep</span></div><div><strong>Order invoice</strong><span class="muted">${escape(order.number)}</span></div></header><p><strong>Deliver to:</strong><br>${escape(order.address.name)}<br>${escape(order.address.line)}, ${escape(order.address.areaName)} ${escape(order.address.pin)}</p><p class="muted">Ordered ${new Date(order.createdAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })} · ${escape(methodLabel(order.paymentMethod))} · ${escape(order.paymentStatus)}</p><table><thead><tr><th>Item</th><th>Qty</th><th>Price</th><th>Total</th></tr></thead><tbody>${rows}</tbody></table><div class="totals"><p><span>Subtotal</span><strong>${rupees(order.subtotalPaise)}</strong></p>${offer}<p><span>Delivery</span><strong>${rupees(order.deliveryPaise)}</strong></p><p class="grand"><span>Total</span><span>${rupees(order.totalPaise)}</span></p></div>${asOrdered}${shortfall}<p class="muted">Computer-generated order invoice. Tax details are not shown because GST configuration has not been supplied.</p></body></html>`;
   return new Response(html, {
     headers: {
       "Content-Type": "text/html; charset=utf-8",

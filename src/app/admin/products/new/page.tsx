@@ -8,6 +8,7 @@ import { Category } from "@/lib/db/models";
 import { MoneyInput } from "@/components/money-input";
 import { hasPermission } from "@/lib/auth/permissions";
 import { GST_RATES } from "@/lib/tax/gst";
+import { ProductPhotos } from "@/components/product-photos";
 export const metadata = { title: "Add a product", robots: { index: false } };
 
 export default async function NewProductPage() {
@@ -25,7 +26,7 @@ export default async function NewProductPage() {
       <PageHeading
         eyebrow="Run the store"
         title="Add a product"
-        lead="Describe the product and its first pack. It goes live once an owner approves it."
+        lead="Describe the product, add its photos and its first pack. It goes live once an owner approves it."
       />
       <ActionForm action={governanceAction} submit="Send for approval" className="form-stack panel editor-panel">
         <input type="hidden" name="operation" value="product" />
@@ -54,7 +55,7 @@ export default async function NewProductPage() {
           <legend>How shoppers find it</legend>
           <div className="staff-form-grid">
             <label>
-              Aisle
+              Category
               <select name="categoryId" required>
                 {categories.map((item) => (
                   <option value={String(item._id)} key={String(item._id)}>
@@ -76,6 +77,12 @@ export default async function NewProductPage() {
               <input name="aliases" />
             </label>
           </div>
+        </fieldset>
+        <fieldset className="form-section" id="photos">
+          <legend>
+            Photos <small>Optional · the first is the cover</small>
+          </legend>
+          <ProductPhotos mode="draft" initial={[]} name="the new product" />
         </fieldset>
         <fieldset className="form-section">
           <legend>First pack</legend>

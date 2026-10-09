@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 
 /** The server refuses bodies over this (next.config.ts serverActions.bodySizeLimit leaves room for the form fields). */
-const MAX_BYTES = 3.5 * 1024 * 1024;
+export const MAX_BYTES = 3.5 * 1024 * 1024;
 const MAX_EDGE = 1600;
 
 /**
@@ -10,7 +10,7 @@ const MAX_EDGE = 1600;
  * server) will take, so shrink the photo in the browser first: 1600px on the long edge as a
  * JPEG is a few hundred KB and still plenty for a product card or proof of delivery.
  */
-async function shrink(file: File): Promise<File> {
+export async function shrink(file: File): Promise<File> {
   const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" }).catch(() => null);
   if (!bitmap) return file;
   const scale = Math.min(1, MAX_EDGE / Math.max(bitmap.width, bitmap.height));
@@ -41,7 +41,7 @@ async function shrink(file: File): Promise<File> {
   });
 }
 
-const size = (bytes: number) =>
+export const size = (bytes: number) =>
   bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
 
 /** A photo picker for upload forms: shrinks big camera photos before the form is sent. */

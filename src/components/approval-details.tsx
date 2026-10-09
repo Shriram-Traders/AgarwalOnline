@@ -1,3 +1,5 @@
+import Image from "next/image";
+
 const labels: Record<string, string> = {
   slug: "Web address",
   nameEn: "English name",
@@ -22,6 +24,7 @@ const labels: Record<string, string> = {
   gstRatePercent: "GST rate (%)",
   hsnCode: "HSN code",
   schoolPricePaise: "School price (before GST)",
+  images: "Photos (the first is the cover)",
 };
 /** Keys the reviewer doesn't need to read (the product is already named in the title). */
 const HIDDEN = new Set(["productId"]);
@@ -42,7 +45,17 @@ export function ApprovalDetails({
         <div key={key}>
           <dt>{labels[key] ?? key}</dt>
           <dd>
-            {key === "categoryId" && categoryName
+            {key === "images" && Array.isArray(value)
+              ? value.length
+                ? (
+                    <span className="approval-photos">
+                      {value.map((url, index) => (
+                        <Image key={String(url)} src={String(url)} alt={`Photo ${index + 1}`} width={64} height={64} />
+                      ))}
+                    </span>
+                  )
+                : "None"
+              : key === "categoryId" && categoryName
               ? categoryName
               : key.endsWith("Paise") && typeof value === "number"
                 ? new Intl.NumberFormat("en-IN", {

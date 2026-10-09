@@ -173,6 +173,8 @@ export async function checkoutAction(
       idempotencyKey: form.get("idempotencyKey"),
       method: form.get("method"),
       promotionCode: (await cookies()).get("ags_promotion")?.value,
+      termsVersion: form.get("termsVersion"),
+      forId: form.get("forId") ?? undefined,
     });
   } catch (e) {
     return { error: errorMessage(e) };

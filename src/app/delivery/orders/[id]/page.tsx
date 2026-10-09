@@ -4,6 +4,7 @@ import { requirePage } from "@/lib/auth/session";
 import { Order } from "@/lib/commerce/models";
 import { objectId } from "@/lib/commerce/service";
 import { ActionForm } from "@/components/action-form";
+import { PolicyNotice } from "@/components/policy-notice";
 import { operationAction } from "@/lib/operations/actions";
 import { evidenceAction } from "@/lib/evidence/actions";
 import { UploadedEvidence } from "@/lib/evidence/models";
@@ -55,6 +56,7 @@ export default async function DeliveryOrder({
               Open navigation
             </a>
           </div>
+          <PolicyNotice kind="rider" />
           <p style={{ marginTop: 20 }}>
             {o.deliveryDate} · {o.deliveryWindow}
           </p>
@@ -76,7 +78,9 @@ export default async function DeliveryOrder({
           <h2>
             {o.paymentMethod === "cod"
               ? `Collect ₹${o.totalPaise / 100}`
-              : "Prepaid order"}
+              : o.paymentMethod === "tab"
+                ? "Family tab · collect nothing"
+                : "Prepaid order"}
           </h2>
           {o.paymentMethod === "cod" && o.originalTotalPaise != null && (
             <p className="muted">

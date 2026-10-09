@@ -38,7 +38,7 @@ export default async function SchoolCatalog({ searchParams }: { searchParams: Pr
         </div>
       </div>
       {aisles.length > 1 && (
-        <nav className="catalog-chips" aria-label="School aisles">
+        <nav className="catalog-chips" aria-label="School categories">
           <Link href={href({ category: undefined })} aria-current={!category ? "page" : undefined}>
             All
           </Link>

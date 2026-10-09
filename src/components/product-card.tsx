@@ -6,30 +6,33 @@ import { discountPercent, formatPrice } from "@/lib/display";
 import { QuickAdd } from "./quick-add";
 import { WishlistButton } from "./wishlist-button";
 import { AisleIcon } from "./aisle-icon";
+import { savedProductIds } from "@/lib/engagement/saved";
 
-export function ProductCard({
+export async function ProductCard({
   product: p,
   locale = "en",
-  saved = false,
+  saved,
   eager = false,
 }: {
   product: CatalogItem;
   locale?: "en" | "mr";
+  /** Leave out to look it up: the heart shows whether the signed-in shopper saved it. */
   saved?: boolean;
   eager?: boolean;
 }) {
+  const isSaved = saved ?? (await savedProductIds()).has(p.id);
   const v = p.variants[0];
   const image = p.image ?? productImages[p.slug];
   const off = discountPercent(v.pricePaise, v.mrpPaise);
   return (
     <article className="product-card">
-      <WishlistButton productId={p.id} name={p.name[locale]} saved={saved} />
+      <WishlistButton productId={p.id} name={p.name[locale]} saved={isSaved} />
       <Link href={`/products/${p.slug}?lang=${locale}`} className="product-link">
         <div className={`product-art${image ? "" : " quiet"}`}>
           {image ? (
             <Image
               src={image}
-              alt={`Representative ${p.name.en.toLowerCase()} photography`}
+              alt="" /* the name is the next line of the link; the product page carries the photo note */
               fill
               sizes="(max-width: 760px) 45vw, 220px"
               loading={eager ? "eager" : "lazy"}
@@ -43,7 +46,8 @@ export function ProductCard({
         </div>
         {/* the shopper's chosen language only; the product page shows both names */}
         <h3 lang={locale}>{p.name[locale]}</h3>
-        {p.reviewCount > 0 && (
+        {/* one or two reviews say little; the card shows a rating from three */}
+        {p.reviewCount >= 3 && (
           <span
             className="product-rating"
             aria-label={`${p.rating.toFixed(1)} out of 5 from ${p.reviewCount} reviews`}

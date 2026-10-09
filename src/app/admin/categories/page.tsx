@@ -36,9 +36,9 @@ function CategoryFields({ category, all }: { category?: CategoryDoc; all: Catego
         />
       </label>
       <label>
-        Inside another aisle
+        Inside another category
         <select name="parentId" defaultValue={String(category?.parentId ?? "")}>
-          <option value="">No, a top-level aisle</option>
+          <option value="">No, a top-level category</option>
           {all
             .filter((item) => String(item._id) !== String(category?._id))
             .map((item) => (
@@ -74,21 +74,21 @@ export default async function CategoriesPage({
       <PageHeading
         eyebrow="Run the store"
         title="Categories"
-        lead="The aisles shoppers browse. Every aisle needs an English and a Marathi name."
+        lead="The categories shoppers browse. Every category needs an English and a Marathi name."
       />
       <CatalogAdminNav />
       {editing && (
         <div className="panel adjust-panel" id="edit">
           <div className="panel-heading">
             <div>
-              <span className="eyebrow">Edit aisle</span>
+              <span className="eyebrow">Edit category</span>
               <h2>{editing.name.en}</h2>
             </div>
             <Link href="/admin/categories" className="text-button">
               Close
             </Link>
           </div>
-          <ActionForm action={catalogManagementAction} submit="Save aisle">
+          <ActionForm action={catalogManagementAction} submit="Save category">
             <input type="hidden" name="operation" value="category" />
             <input type="hidden" name="categoryId" value={String(editing._id)} />
             <CategoryFields category={editing} all={categories} />
@@ -96,19 +96,19 @@ export default async function CategoriesPage({
         </div>
       )}
       <details className="panel create-staff">
-        <summary>Add an aisle</summary>
-        <ActionForm action={catalogManagementAction} submit="Add aisle">
+        <summary>Add a category</summary>
+        <ActionForm action={catalogManagementAction} submit="Add category">
           <input type="hidden" name="operation" value="category" />
           <CategoryFields all={categories} />
         </ActionForm>
       </details>
       <DataTable
-        caption="Aisles with their Marathi name, web address and number of products"
+        caption="Categories with their Marathi name, web address and number of products"
         rows={categories}
         rowKey={(category) => String(category._id)}
         columns={[
           {
-            header: "Aisle",
+            header: "Category",
             cell: (category) => (
               <span className="product-cell">
                 <span>
@@ -135,7 +135,7 @@ export default async function CategoriesPage({
           },
         ]}
         empty={
-          <EmptyState icon={FolderTree} title="No aisles yet" body="Add the first aisle above so products have somewhere to live." heading="h3" />
+          <EmptyState icon={FolderTree} title="No categories yet" body="Add the first category above so products have somewhere to live." heading="h3" />
         }
       />
     </section>

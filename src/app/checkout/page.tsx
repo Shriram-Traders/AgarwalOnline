@@ -16,8 +16,13 @@ import { CheckoutForm } from "@/components/checkout-form";
 import { cookies } from "next/headers";
 import { codeProblem, quoteCart, shopOffers } from "@/lib/promotions/service";
 import { CouponPicker } from "@/components/coupon-picker";
+import { familyOf } from "@/lib/family/service";
+import { tabStanding } from "@/lib/family/checkout";
+import { formatPrice } from "@/lib/display";
+import { classLabel } from "@/lib/family/models";
+import { firstName } from "@/lib/lists/service";
 export const metadata = { title: "Checkout", robots: { index: false } };
-export default async function Checkout() {
+export default async function Checkout({ searchParams }: { searchParams: Promise<{ for?: string }> }) {
   // no account yet: offer sign-in or sign-up in a popup, and come back here afterwards
   if (!(await currentUser()))
     return (
@@ -77,6 +82,39 @@ export default async function Checkout() {
   const defaultAddress = addresses.find((address) => address.isDefault) ?? addresses[0];
   const defaultOption = options.find((option) => option.id === String(defaultAddress?._id));
   const subtotal = cart.reduce((n, line) => n + line.pricePaise * line.quantity, 0);
+  // in a family, the order is tagged with who it is for; "Buy kit" arrives with the child picked
+  const family = await familyOf(user.id);
+  const adults = family ? await User.find({ _id: { $in: family.adults } }).select("name") : [];
+  const people = family
+    ? [
+        { id: user.id, label: "Me" },
+        ...adults
+          .filter((adult) => String(adult._id) !== user.id)
+          .map((adult) => ({ id: String(adult._id), label: firstName(adult.name) })),
+        ...family.children.map((child: { _id: unknown; name: string; className: string }) => ({
+          id: String(child._id),
+          label: `${child.name} · ${classLabel(child.className)}`,
+        })),
+      ]
+    : undefined;
+  // the family tab, when there is one: what is left on it, or why it can't take this order
+  const standing = family ? await tabStanding(user.id) : null;
+  const tab =
+    standing && standing.status !== "closed"
+      ? {
+          availablePaise: standing.availablePaise,
+          blocked:
+            standing.status === "requested"
+              ? "Your family tab is waiting for the store to open it."
+              : standing.status === "paused"
+                ? "Your family tab is paused. Talk to the store to reopen it."
+                : standing.overdue
+                  ? `${formatPrice(standing.duePaise)} from last month is due on your family tab. Pay it at the store or to the rider to use the tab again.`
+                  : undefined,
+        }
+      : undefined;
+  const wanted = (await searchParams).for;
+  const defaultFor = people?.some((person) => person.id === wanted) ? wanted : user.id;
   const promotionCode = (await cookies()).get("ags_promotion")?.value;
   const quote = await quoteCart(cart, {
     code: promotionCode,
@@ -148,6 +186,8 @@ export default async function Checkout() {
               areaId: String(s.areaId),
               // "Today · 4:00 PM – 7:00 PM" instead of "2026-09-30 · …"
               label: `${dayLabel(s.date, now)} · ${s.label}`,
+              day: dayLabel(s.date, now),
+              time: s.label as string,
             }))}
           subtotal={subtotal}
           promotionDiscount={quote.promotionDiscountPaise}
@@ -169,6 +209,9 @@ export default async function Checkout() {
           defaultMethod={profile?.preferredPaymentMethod ?? "cod"}
           threshold={rules.freeThresholdPaise}
           idempotencyKey={randomUUID()}
+          people={people}
+          defaultFor={defaultFor}
+          tab={tab}
         />
       )}
     </section>

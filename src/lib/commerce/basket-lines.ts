@@ -1,5 +1,6 @@
 import { Product, ProductVariant } from "../db/models";
 import { shopShelf } from "../catalog/queries";
+import { orderedPhotos } from "../catalog/photos";
 
 /** A basket line that can't be bought any more: its product was taken off the shop (or the pack removed). */
 export type UnavailableLine = {
@@ -35,7 +36,7 @@ export async function resolveBasketLines(raw: { id: string; variantId: unknown; 
       categorySlug: p.categorySlug as string,
       productSlug: p.slug as string,
       name: p.name.en as string,
-      image: (p.images?.[0] ?? p.image) as string | undefined,
+      image: orderedPhotos(p)[0],
       label: v.label as string,
       quantity: line.quantity,
       pricePaise: v.pricePaise as number,

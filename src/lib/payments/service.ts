@@ -409,7 +409,10 @@ async function finishRefund(
         userId: order.customerId,
         type: "refund",
         title: "Refund completed",
-        body: `₹${refund.amountPaise / 100} was refunded for ${order.number}.`,
+        body:
+          refund.mode === "tab"
+            ? `₹${refund.amountPaise / 100} for ${order.number} was taken off your family tab.`
+            : `₹${refund.amountPaise / 100} was refunded for ${order.number}.`,
         href: `/account/orders/${order._id}`,
       },
       session,
@@ -455,7 +458,7 @@ export async function createRefund(actorId: string, input: unknown) {
           requestedBy: actorId,
           amountPaise: data.amountPaise,
           reason: data.reason,
-          mode: order.paymentMethod === "razorpay" ? "razorpay" : "manual",
+          mode: order.paymentMethod === "razorpay" ? "razorpay" : order.paymentMethod === "tab" ? "tab" : "manual",
         },
       ],
       { session },
@@ -503,6 +506,11 @@ export async function processRefund(
     status: { $in: ["requested", "failed"] },
   });
   if (!refund) throw Error("This refund is already being processed.");
+  if (refund.mode === "tab") {
+    // a tab refund is credit on the tab: nothing leaves the till, so there is no reference
+    await finishRefund(refund._id, actorId);
+    return;
+  }
   if (refund.mode === "manual") {
     if (data.externalReference.length < 3)
       throw Error("Enter the cash or bank refund reference.");

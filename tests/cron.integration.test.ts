@@ -51,7 +51,7 @@ describe.skipIf(!uri)("cron jobs against a database", () => {
       { token: "expired", expiresAt: new Date(Date.now() - 1000) },
       { token: "live", expiresAt: new Date(Date.now() + 60000) },
     ]);
-    for (const job of ["expire-reservations", "publish-scheduled"]) {
+    for (const job of ["expire-reservations", "publish-scheduled", "tab-statements"]) {
       const response = await call(job, `Bearer ${secret}`);
       expect(response.status).toBe(200);
     }

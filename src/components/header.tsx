@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowUpRight, ChevronDown, Heart, MapPin, School, UserRound } from "lucide-react";
+import { ArrowRight, Bell, ChevronDown, Heart, MapPin, School, UserRound } from "lucide-react";
 import { SmartSearch } from "./smart-search";
 import { MobileNav } from "./mobile-nav";
 import { LocaleToggle } from "./locale-toggle";
@@ -7,6 +7,7 @@ import { AccountMenu, type MenuLink } from "./account-menu";
 import { staffRoleOf, type Role } from "@/lib/auth/permissions";
 import { currentUser } from "@/lib/auth/session";
 import { Promotion, PromotionRedemption } from "@/lib/promotions/models";
+import { Notification } from "@/lib/engagement/models";
 import { deliveryRules } from "@/lib/commerce/service";
 import { CartBar } from "./cart-bar";
 import { ShopAssistant } from "./shop-assistant";
@@ -63,22 +64,26 @@ export async function Header({
   ]);
   // staff accounts aren't asked to rate: their test orders would skew the shop's scores
   const shopper = user && !staffRoleOf(user.roles) ? user : null;
-  // all three depend on who's signed in, not on each other: ask at the same time
-  const [usedWelcome, schoolMember, toRate] = user
+  // all four depend on who's signed in, not on each other: ask at the same time
+  const [usedWelcome, schoolMember, toRate, unread] = user
     ? await Promise.all([
         offer ? PromotionRedemption.exists({ promotionId: offer._id, customerId: user.id }) : null,
         // a paused school has nothing to open, so it doesn't count
         representsActiveSchool(user.id),
         // a delivered order waiting for "How did we do?"; never worth failing the page over
         shopper ? pendingFeedbackOrder(shopper.id).catch(() => null) : null,
+        Notification.countDocuments({ userId: user.id, readAt: null }),
       ])
-    : [null, null, null];
+    : [null, null, null, 0];
   // someone who already used it isn't told about it again
   const welcome = usedWelcome ? null : offer;
   const text = copy[locale];
   const workspace = workspaceLinks(user?.roles ?? [], text);
   // representatives of a school get a way into its quotation area
   const representsSchool = Boolean(schoolMember);
+  // the owner shops for any school, so it isn't "my" school
+  const schoolDoor =
+    staffRoleOf(user?.roles ?? []) === "super-admin" ? schoolCopy[locale].forSchools : schoolCopy[locale].forMySchool;
   const nav = NAV_SLUGS.map((slug) => categories.find((c) => c.slug === slug)).filter(
     (c): c is CategoryLink => Boolean(c),
   );
@@ -103,11 +108,11 @@ export async function Header({
             {representsSchool && (
               // phones only: the category row with the desktop button is hidden there
               <Link href="/school" className="school-door">
-                <School size={14} aria-hidden="true" /> {schoolCopy[locale].forMySchool}
+                <School size={14} aria-hidden="true" /> {schoolDoor}
               </Link>
             )}
             <Link href="/serviceability">
-              {text.sameDay(cutoff)} <ArrowUpRight size={14} aria-hidden="true" />
+              {text.sameDay(cutoff)} <ArrowRight size={14} aria-hidden="true" />
             </Link>
             <LocaleToggle locale={locale} />
           </div>
@@ -132,7 +137,7 @@ export async function Header({
             </Link>
             {representsSchool && (
               <Link href="/school" className="school-door-pill">
-                <School size={16} aria-hidden="true" /> {schoolCopy[locale].forMySchool}
+                <School size={16} aria-hidden="true" /> {schoolDoor}
               </Link>
             )}
           </nav>
@@ -148,6 +153,16 @@ export async function Header({
             <BackButton label={text.back} className="search-back" />
             <SmartSearch placeholder={text.searchPlaceholder} hints={[...text.searchHints]} />
             <div className="header-icons">
+              {user && (
+                <Link
+                  href="/account/notifications"
+                  className="header-action header-bell"
+                  aria-label={unread ? `${text.notifications}, ${unread}` : text.notifications}
+                >
+                  <Bell size={20} aria-hidden="true" />
+                  {unread > 0 && <b className="nav-count unread-count" aria-hidden="true">{unread > 99 ? "99+" : unread}</b>}
+                </Link>
+              )}
               {user ? (
                 <AccountMenu
                   label={text.account}
@@ -181,7 +196,7 @@ export async function Header({
           </div>
         </div>
       </header>
-      <MobileNav locale={locale} />
+      <MobileNav locale={locale} unread={unread} />
       <CartBar locale={locale} />
       {shopper && <FeedbackPrompt order={toRate} locale={locale} />}
       {/* hidden until the store introduces it: SHOP_ASSISTANT=on */}

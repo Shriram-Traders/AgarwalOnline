@@ -1,13 +1,9 @@
-const inr = new Intl.NumberFormat("en-IN", {
-  style: "currency",
-  currency: "INR",
-  minimumFractionDigits: 0,
-  maximumFractionDigits: 2,
-});
+const inr = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 });
+const inrPaise = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", minimumFractionDigits: 2 });
 
-/** Paise → "₹1,234.5" (no trailing zeros, Indian digit grouping). */
+/** Paise → "₹1,234" or "₹1,234.50" (whole rupees stay whole, Indian digit grouping). */
 export function formatPrice(paise: number) {
-  return inr.format(paise / 100);
+  return (paise % 100 ? inrPaise : inr).format(paise / 100);
 }
 
 /** A rupee amount typed into a staff form ("499" or "499.50") as whole paise; undefined when left blank. */
@@ -118,6 +114,10 @@ export function customerStage(order: OrderStatusFields, locale: "en" | "mr" = "e
 export function paymentLabel(order: OrderStatusFields, locale: "en" | "mr" = "en") {
   const mr = locale === "mr";
   const cancelled = order.orderStatus === "cancelled";
+  if (order.paymentMethod === "tab")
+    return cancelled
+      ? mr ? "काही देणे नाही – ऑर्डर रद्द झाली" : "Nothing to pay – this order was cancelled"
+      : mr ? "कुटुंब खात्यावर, दरमहा दुकानात भरा" : "On your family tab, settled with the store monthly";
   if (order.paymentMethod !== "razorpay") {
     if (cancelled) return mr ? "काही देणे नाही – ऑर्डर रद्द झाली" : "Nothing to pay – this order was cancelled";
     if (order.codStatus && order.codStatus !== "uncollected") return mr ? "रोख भरले" : "Paid in cash";
@@ -181,4 +181,9 @@ export function formatIst(
     timeZone: "Asia/Kolkata",
     ...options,
   });
+}
+
+/** How an order is paid, in words. Before the family tab, "not cash" could safely mean "paid online". */
+export function methodLabel(method: string) {
+  return method === "cod" ? "Cash on delivery" : method === "tab" ? "Family tab" : "Paid online";
 }

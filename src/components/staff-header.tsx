@@ -8,6 +8,7 @@ import { AccountMenu } from "./account-menu";
 import { BackButton } from "./back-button";
 import { LocaleToggle } from "./locale-toggle";
 import { highlightTarget } from "./hash-target";
+import { OrderAlerts } from "./order-alerts";
 import { useStaffCounts } from "./staff-counts";
 
 export type StaffUser = { name: string; phone?: string; email?: string };
@@ -32,7 +33,7 @@ export function StaffHeader({
 }) {
   const text = staffCopy[locale];
   const shop = copy[locale];
-  const { needsYou } = useStaffCounts();
+  const { needsYou, counts } = useStaffCounts();
   return (
     <header className="header staff-header">
       <div className="staff-header-inner">
@@ -46,6 +47,8 @@ export function StaffHeader({
             <Store size={18} aria-hidden="true" />
             <span>{text.viewShop}</span>
           </Link>
+          {/* the orders count only comes back for staff who manage orders */}
+          {bell && counts.orders !== undefined && <OrderAlerts locale={locale} />}
           {bell && (
             <Link
               href="/admin#needs-you"

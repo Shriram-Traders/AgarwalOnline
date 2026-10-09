@@ -11,9 +11,14 @@ const appEnv = {
   // fake credentials: the tests stop at Google's door, they never talk to Google
   GOOGLE_CLIENT_ID: "e2e-google-client.apps.googleusercontent.com",
   GOOGLE_CLIENT_SECRET: "e2e-google-secret",
-  // blank on purpose: a real Resend key in .env must never email the fake test addresses
-  RESEND_API_KEY: "",
+  // blank on purpose: a real mailbox in .env must never email the fake test addresses
+  SMTP_USER: "",
+  SMTP_PASS: "",
   EMAIL_FROM: "",
+  // push on, with a test-only key pair (never the real one in .env): the notifications card shows,
+  // and no browser in the tests subscribes, so nothing is ever sent
+  VAPID_PUBLIC_KEY: "BI1cqnabp8TQeZcNNuvRAoygMRSgktNBX0rYSqPaUXYClMRBwJLLikXrIu8YsE-bPLDF0JLu_0PIHQWyisebmiw",
+  VAPID_PRIVATE_KEY: "DruF1vOjAneXX8Y4esKuyv_zGa9n8nirvjxdnFF7cG0",
 };
 export default defineConfig({
   testDir: "./tests/e2e",

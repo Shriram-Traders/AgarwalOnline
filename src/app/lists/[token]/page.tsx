@@ -46,10 +46,10 @@ export default async function SharedListLink({ params }: { params: Promise<{ tok
             <h2>{mr ? `${ownerName} यांनी तुम्हाला या ${noun}मध्ये बोलावले आहे` : `${ownerName} invited you to this ${noun}`}</h2>
             <p className="muted">
               {mr
-                ? "सामील व्हा आणि वस्तू जोडा किंवा संख्या बदला. सर्वांना त्याच वस्तू दिसतात."
+                ? "सामील व्हा आणि वस्तू जोडा किंवा संख्या बदला. सर्वांना त्याच वस्तू दिसतात. सदस्यांना तुमचे पहिले नाव आणि तुम्ही जोडलेल्या वस्तू दिसतात."
                 : board
-                  ? "Join to add things and change amounts. Everyone on the board sees the same things."
-                  : "Join to fill it together. Everyone on it sees the same basket, and anyone can order it."}
+                  ? "Join to add things and change amounts. Everyone on the board sees the same things. Members see your first name and what you add."
+                  : "Join to fill it together. Everyone on it sees the same basket, and anyone can order it. Members see your first name and what you add."}
             </p>
           </div>
           {member ? (

@@ -3,8 +3,10 @@ import { useState } from "react";
 import Link from "next/link";
 import { MapPinPlus } from "lucide-react";
 import { ActionForm } from "./action-form";
+import { PhoneInput } from "./phone-input";
 import { Modal } from "./modal";
 import { addressAction } from "@/lib/commerce/actions";
+import { PolicyNotice } from "./policy-notice";
 
 type Area = { id: string; name: string; pincodes: string[] };
 
@@ -59,12 +61,7 @@ export function AddressPopup({
                 </label>
                 <label>
                   Mobile number
-                  <input
-                    name="phone"
-                    type="tel"
-                    inputMode="numeric"
-                    pattern="[6-9][0-9]{9}"
-                    maxLength={10}
+                  <PhoneInput
                     autoComplete="tel-national"
                     defaultValue={phone}
                     required
@@ -115,6 +112,7 @@ export function AddressPopup({
                   Delivery instructions <small className="muted">Optional: a landmark, gate or floor</small>
                   <textarea name="instructions" maxLength={300} rows={2} />
                 </label>
+                <PolicyNotice kind="address" />
               </ActionForm>
             </>
           ) : (

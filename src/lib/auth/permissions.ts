@@ -45,6 +45,8 @@ export const grants = {
     "refund:write",
     "promotion:write",
     "review:moderate",
+    // opening, limiting and closing family tabs, and voiding a tab payment
+    "tab:approve",
   ],
 } as const satisfies Record<Role, readonly string[]>;
 export type Permission = (typeof grants)[Role][number];
@@ -68,6 +70,10 @@ export function staffRoleOf(userRoles: readonly Role[]): StaffRole | null {
 export function staffHome(userRoles: readonly Role[]) {
   const role = staffRoleOf(userRoles);
   return role === "super-admin" || role === "admin" ? "/admin" : role === "delivery" ? "/delivery" : null;
+}
+/** Every role that grants this permission. */
+export function rolesWith(permission: Permission): Role[] {
+  return roles.filter((role) => (grants[role] as readonly string[]).includes(permission));
 }
 /** The full roles array for a person with this staff role (or none). */
 export function rolesFor(staffRole: StaffRole | null): Role[] {

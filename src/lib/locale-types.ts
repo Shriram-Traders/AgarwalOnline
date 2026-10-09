@@ -23,7 +23,7 @@ export const copy = {
     all: "Shop all",
     deals: "Offers",
     home: "Home",
-    explore: "Aisles",
+    explore: "Categories",
     you: "You",
     orders: "Orders",
     saved: "Wishlist",
@@ -62,7 +62,7 @@ export const copy = {
     explore: "विभाग",
     you: "तुम्ही",
     orders: "ऑर्डर",
-    saved: "आवडत्या वस्तू",
+    saved: "आवडते", // one word: it is a tab label
     notifications: "सूचना",
     support: "दुकानाशी बोला",
     school: "शाळा खाते",

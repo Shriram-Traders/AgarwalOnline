@@ -110,7 +110,7 @@ export function gstinStateProblem(gstin?: string, stateCode?: string) {
   return `The GSTIN starts with ${fromGstin} (${stateName(fromGstin)}) but the state is ${stateName(stateCode) ?? stateCode}.`;
 }
 
-/** The shop's own details, printed at the top of every quotation. */
+/** The shop's own details, printed at the top of every quotation and on the Contact & Grievance page. */
 export const taxProfileSchema = z
   .object({
     legalName: z.string().trim().min(2).max(120),
@@ -120,6 +120,9 @@ export const taxProfileSchema = z
     phone: optionalField(z.string().trim().regex(/^\d{10}$/, "Enter a 10-digit phone number.")),
     email: optionalField(z.email("Enter a valid email address.")),
     terms: optionalField(z.string().trim().max(1000)),
+    // the e-commerce rules want a named grievance officer on the site; shown on /contact only
+    grievanceName: optionalField(z.string().trim().min(2).max(80)),
+    grievanceDesignation: optionalField(z.string().trim().min(2).max(80)),
   })
   .superRefine((value, ctx) => {
     const problem = gstinStateProblem(value.gstin, value.stateCode);

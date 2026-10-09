@@ -10,6 +10,10 @@ import { Complaint } from "../aftercare/models";
 import { objectId } from "../commerce/service";
 import { UploadedEvidence } from "./models";
 import { getEnv } from "../env";
+import { MAX_PHOTOS, orderedPhotos } from "../catalog/photos";
+
+/** A photo chosen on Add product is kept this long unless the product is sent for approval. */
+export const DRAFT_PHOTO_DAYS = 7;
 
 const allowed = new Map([
   ["image/jpeg", "jpg"],
@@ -36,6 +40,7 @@ export async function storeEvidence(
         "delivery",
         "failed-delivery",
         "product",
+        "product-draft",
       ]),
       orderId: objectId.optional(),
       complaintId: objectId.optional(),
@@ -80,8 +85,13 @@ export async function storeEvidence(
   } else if (data.purpose === "product") {
     if (!hasPermission(actor.roles as Role[], "catalog:write") || !data.productId)
       throw Error("FORBIDDEN");
-    if (!(await Product.exists({ _id: data.productId })))
-      throw Error("Product not found.");
+    const product = await Product.findById(data.productId).select("image images");
+    if (!product) throw Error("Product not found.");
+    if (orderedPhotos(product).length >= MAX_PHOTOS)
+      throw Error(`Product already has ${MAX_PHOTOS} photos. Remove one before adding another.`);
+  } else if (data.purpose === "product-draft") {
+    // a photo for a product that doesn't exist yet: Add product
+    if (!hasPermission(actor.roles as Role[], "catalog:write")) throw Error("FORBIDDEN");
   }
 
   const bytes = Buffer.from(await input.file.arrayBuffer());
@@ -137,12 +147,14 @@ export async function storeEvidence(
     mime: input.file.type,
     size: input.file.size,
     sha256,
-    // product photos are catalogue content, not evidence: they must never expire
+    // product photos are catalogue content, not evidence: they must never expire; a draft one
+    // goes away unless the product it was chosen for is sent for approval
     ...(data.purpose === "product"
       ? {}
       : {
           expiresAt: new Date(
-            Date.now() + getEnv().EVIDENCE_RETENTION_DAYS * 86400 * 1000,
+            Date.now() +
+              (data.purpose === "product-draft" ? DRAFT_PHOTO_DAYS : getEnv().EVIDENCE_RETENTION_DAYS) * 86400 * 1000,
           ),
         }),
   });
@@ -150,11 +162,14 @@ export async function storeEvidence(
     evidence.url = `/api/evidence/${evidence._id}`;
     await evidence.save();
   }
-  if (data.purpose === "product" && data.productId)
+  if (data.purpose === "product" && data.productId) {
+    // a new photo goes at the end; it only becomes the cover when the product had none
+    await Product.updateOne({ _id: data.productId }, { $addToSet: { images: evidence.url } });
     await Product.updateOne(
-      { _id: data.productId },
-      { $set: { image: evidence.url }, $addToSet: { images: evidence.url } },
+      { _id: data.productId, $or: [{ image: { $exists: false } }, { image: null }, { image: "" }] },
+      { $set: { image: evidence.url } },
     );
+  }
   await AuditLog.create({
     actorId,
     action: `evidence.${data.purpose}.upload`,

@@ -77,7 +77,10 @@ test("a guest asks about delivery, finds a pen and adds it", async ({ page }) =>
   await expect(page.getByRole("button", { name: "Ask the shop assistant" })).toBeFocused();
 
   if (test.info().project.name === "mobile") {
-    // the button sits above the basket bar, which sits above the tab bar
+    // the button sits above the basket bar, which sits above the tab bar (both come back a moment
+    // after typing stops)
+    await expect(page.locator(".cart-bar")).toBeVisible();
+    await expect(page.getByRole("navigation", { name: "Mobile navigation" })).toBeVisible();
     const button = (await page.getByRole("button", { name: "Ask the shop assistant" }).boundingBox())!;
     const basketBar = (await page.locator(".cart-bar").boundingBox())!;
     const tabs = (await page.getByRole("navigation", { name: "Mobile navigation" }).boundingBox())!;
