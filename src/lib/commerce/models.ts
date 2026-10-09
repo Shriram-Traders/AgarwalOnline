@@ -187,6 +187,9 @@ const orderSchema = new Schema(
     },
     assignedTo: { type: Schema.Types.ObjectId, ref: "User" },
     expiresAt: Date,
+    // the Terms version ticked at checkout (src/lib/legal/version.ts); orders from before it was kept have none
+    termsVersion: String,
+    termsAcceptedAt: Date,
   },
   opts,
 );

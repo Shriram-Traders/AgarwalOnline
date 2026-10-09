@@ -79,6 +79,9 @@ export async function Header({
   const workspace = workspaceLinks(user?.roles ?? [], text);
   // representatives of a school get a way into its quotation area
   const representsSchool = Boolean(schoolMember);
+  // the owner shops for any school, so it isn't "my" school
+  const schoolDoor =
+    staffRoleOf(user?.roles ?? []) === "super-admin" ? schoolCopy[locale].forSchools : schoolCopy[locale].forMySchool;
   const nav = NAV_SLUGS.map((slug) => categories.find((c) => c.slug === slug)).filter(
     (c): c is CategoryLink => Boolean(c),
   );
@@ -103,7 +106,7 @@ export async function Header({
             {representsSchool && (
               // phones only: the category row with the desktop button is hidden there
               <Link href="/school" className="school-door">
-                <School size={14} aria-hidden="true" /> {schoolCopy[locale].forMySchool}
+                <School size={14} aria-hidden="true" /> {schoolDoor}
               </Link>
             )}
             <Link href="/serviceability">
@@ -132,7 +135,7 @@ export async function Header({
             </Link>
             {representsSchool && (
               <Link href="/school" className="school-door-pill">
-                <School size={16} aria-hidden="true" /> {schoolCopy[locale].forMySchool}
+                <School size={16} aria-hidden="true" /> {schoolDoor}
               </Link>
             )}
           </nav>

@@ -8,7 +8,8 @@ const evidenceSchema = new Schema(
     productId: { type: Schema.Types.ObjectId, ref: "Product" },
     purpose: {
       type: String,
-      enum: ["complaint", "packing", "delivery", "failed-delivery", "product"],
+      // "product-draft": chosen on Add product before the product exists; it becomes "product" once the product is made
+      enum: ["complaint", "packing", "delivery", "failed-delivery", "product", "product-draft"],
       required: true,
     },
     provider: { type: String, enum: ["local", "cloudinary"], required: true },

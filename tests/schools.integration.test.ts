@@ -16,7 +16,7 @@ import {
   updateSchool,
   withdrawAccessRequest,
 } from "../src/lib/schools/members";
-import { assertMember, memberships, representsActiveSchool, schoolContext } from "../src/lib/schools/membership";
+import { assertBuyer, assertMember, memberships, representsActiveSchool, schoolContext } from "../src/lib/schools/membership";
 
 const uri = process.env.TEST_MONGODB_URI;
 describe.skipIf(!uri)("Schools, their representatives and the join link", () => {
@@ -143,6 +143,25 @@ describe.skipIf(!uri)("Schools, their representatives and the join link", () => 
     await addRepresentative(owner, { schoolId: theirs, userId: rep });
     expect(await schoolContext(rep)).toMatchObject({ current: null, needsPick: true });
     expect((await schoolContext(rep, theirs)).current).toMatchObject({ id: theirs });
+  });
+
+  it("lets the owner shop for any open school, but leaves answering a quotation to the school", async () => {
+    const first = await school();
+    const second = await school({ name: "Second School" });
+    // the owner represents no school, yet may shop for every one of them
+    expect((await memberships(owner)).map((entry) => entry.id).sort()).toEqual([first, second].sort());
+    expect(await representsActiveSchool(owner)).toBe(true);
+    expect(String((await assertBuyer(owner, second))._id)).toBe(second);
+    expect(await schoolContext(owner)).toMatchObject({ current: null, needsPick: true });
+    expect((await schoolContext(owner, undefined, second)).current).toMatchObject({ id: second });
+    // accepting or asking for changes stays the school's own say
+    await expect(assertMember(owner, second)).rejects.toThrow("SCHOOL_UNAVAILABLE");
+    // a paused school is closed to the owner's shopping too, and other staff get nothing
+    await setSchoolActive(owner, { schoolId: second, active: false });
+    await expect(assertBuyer(owner, second)).rejects.toThrow("SCHOOL_UNAVAILABLE");
+    await expect(assertBuyer(admin, first)).rejects.toThrow("SCHOOL_UNAVAILABLE");
+    expect(await memberships(admin)).toEqual([]);
+    await expect(assertBuyer(rep, first)).rejects.toThrow("SCHOOL_UNAVAILABLE");
   });
 
   it("remembers the school someone in several chose, but never lets the choice reach another school", async () => {

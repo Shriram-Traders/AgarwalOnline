@@ -28,6 +28,20 @@ const schema = z
     GOOGLE_CLIENT_SECRET: z.string().optional(),
     SMS_API_URL: z.string().optional(),
     SMS_API_TOKEN: z.string().optional(),
+    // Web push (notifications on a phone or PC): a VAPID key pair from `npm run push:keys`. Both blank
+    // turns push off; the bell keeps working. The subject is how push services reach the shop.
+    VAPID_PUBLIC_KEY: z
+      .string()
+      .regex(/^[A-Za-z0-9_-]{87}$/, "VAPID_PUBLIC_KEY is the 87-character key from npm run push:keys")
+      .optional(),
+    VAPID_PRIVATE_KEY: z
+      .string()
+      .regex(/^[A-Za-z0-9_-]{43}$/, "VAPID_PRIVATE_KEY is the 43-character key from npm run push:keys")
+      .optional(),
+    VAPID_SUBJECT: z
+      .string()
+      .regex(/^(mailto:\S+@\S+|https:\/\/\S+)$/, "VAPID_SUBJECT is mailto:you@example.com or an https:// address")
+      .optional(),
     CLOUDINARY_CLOUD_NAME: z.string().optional(),
     CLOUDINARY_API_KEY: z.string().optional(),
     CLOUDINARY_API_SECRET: z.string().optional(),
@@ -74,6 +88,12 @@ const schema = z
         code: "custom",
         message: "Google client ID and secret must be configured together",
         path: ["GOOGLE_CLIENT_ID"],
+      });
+    if (Boolean(env.VAPID_PUBLIC_KEY) !== Boolean(env.VAPID_PRIVATE_KEY))
+      ctx.addIssue({
+        code: "custom",
+        message: "VAPID public and private keys must be configured together",
+        path: ["VAPID_PUBLIC_KEY"],
       });
     if (Boolean(env.SMS_API_URL) !== Boolean(env.SMS_API_TOKEN))
       ctx.addIssue({

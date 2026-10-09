@@ -3,6 +3,7 @@ import { MapPin } from "lucide-react";
 import { LocaleToggle } from "./locale-toggle";
 import type { CategoryLink } from "./header";
 import type { Locale } from "@/lib/locale-types";
+import { LEGAL_PAGES, POLICIES_HOME } from "@/lib/legal/pages";
 
 export function SiteFooter({
   locale,
@@ -70,6 +71,19 @@ export function SiteFooter({
               <Link href="/account/complaints">
                 {mr ? "तक्रारी आणि परतावा" : "Complaints & returns"}
               </Link>
+            </li>
+          </ul>
+        </nav>
+        <nav aria-label={mr ? "धोरणे" : "Policies"}>
+          <h2>{mr ? "धोरणे" : "Policies"}</h2>
+          <ul>
+            {LEGAL_PAGES.map((page) => (
+              <li key={page.key}>
+                <Link href={page.href}>{page.title[locale]}</Link>
+              </li>
+            ))}
+            <li>
+              <Link href={POLICIES_HOME.href}>{mr ? "सर्व धोरणे" : "All policies"}</Link>
             </li>
           </ul>
         </nav>

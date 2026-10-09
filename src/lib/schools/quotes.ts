@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { randomBytes } from "node:crypto";
 import { z } from "zod";
 import { connectDB } from "../db/connect";
 import { AuditLog, Product, ProductVariant, User } from "../db/models";
@@ -15,7 +16,8 @@ import { getEnv } from "../env";
 import { quoteMoney } from "./display";
 import { log } from "../logger";
 import { QuoteBasket, QuoteRequest, School, SchoolMember } from "./models";
-import { assertMember } from "./membership";
+import { SCHOOL_TOKEN, quotationShareHref } from "./links";
+import { assertBuyer, assertMember } from "./membership";
 import { notifyOwners, notifyRepresentatives } from "./notify";
 import {
   LIMITS,
@@ -35,6 +37,8 @@ import type { Sheet } from "./quote-form";
  */
 
 const OPEN = ["requested", "quoted", "changes-requested"];
+/** 144 random bits: nothing to do with the quotation's number, date or id, so it can't be guessed. */
+const newShareToken = () => randomBytes(18).toString("base64url");
 
 async function owner(actorId: string) {
   await connectDB();
@@ -107,7 +111,7 @@ export async function addToQuote(userId: string, input: unknown) {
       quantity: z.coerce.number().int().min(1).max(LIMITS.quantity),
     })
     .parse(input);
-  await assertMember(userId, data.schoolId);
+  await assertBuyer(userId, data.schoolId);
   const variant = await ProductVariant.findById(data.variantId);
   const product = variant ? await Product.findById(variant.productId) : null;
   if (!variant || variant.active === false || !isSchoolVisible(product))
@@ -150,7 +154,7 @@ export async function setQuoteLine(userId: string, input: unknown) {
       quantity: z.coerce.number().int().min(0).max(LIMITS.quantity),
     })
     .parse(input);
-  await assertMember(userId, data.schoolId);
+  await assertBuyer(userId, data.schoolId);
   if (!data.quantity) {
     await QuoteBasket.updateOne(
       { schoolId: data.schoolId },
@@ -175,7 +179,7 @@ export async function submitQuoteRequest(userId: string, input: unknown) {
       neededBy: optionalField(z.iso.date("Choose a needed-by date, or leave it blank.")),
     })
     .parse(input);
-  const school = await assertMember(userId, data.schoolId);
+  const school = await assertBuyer(userId, data.schoolId);
   if (data.neededBy && data.neededBy < istDate(new Date()))
     throw Error("Choose a needed-by date from today on, or leave it blank.");
   let id = "";
@@ -218,7 +222,17 @@ export async function submitQuoteRequest(userId: string, input: unknown) {
     );
     number = quoteNumber(day, sequence.value);
     const [request] = await QuoteRequest.create(
-      [{ number, schoolId: data.schoolId, requestedBy: userId, note: data.note, neededBy: data.neededBy, items }],
+      [
+        {
+          number,
+          schoolId: data.schoolId,
+          requestedBy: userId,
+          note: data.note,
+          neededBy: data.neededBy,
+          items,
+          shareToken: newShareToken(),
+        },
+      ],
       { session },
     );
     id = String(request._id);
@@ -332,6 +346,7 @@ export async function sendQuotation(actorId: string, input: unknown) {
   const seller = await taxProfile();
   let sent: {
     id: string;
+    shareToken: string;
     number: string;
     version: number;
     schoolId: string;
@@ -414,6 +429,8 @@ export async function sendQuotation(actorId: string, input: unknown) {
     request.currentVersion = version;
     request.status = "quoted";
     request.draft.sentAsVersion = version;
+    // the email links to the view-only page, so a request from before links gets its code now
+    if (!request.shareToken) request.shareToken = newShareToken();
     await request.save({ session });
     await AuditLog.create(
       [
@@ -428,6 +445,7 @@ export async function sendQuotation(actorId: string, input: unknown) {
     );
     sent = {
       id: String(request._id),
+      shareToken: request.shareToken,
       number: request.number,
       version,
       schoolId: String(school._id),
@@ -452,10 +470,14 @@ export async function sendQuotation(actorId: string, input: unknown) {
   return { version: quote.version, totalPaise: quote.totals.totalPaise, ...emailed };
 }
 
-/** Emails each representative with a real address; the quotation is already saved either way. */
+/**
+ * Emails each representative with a real address; the quotation is already saved either way. The
+ * email links to the view-only page, so it opens for whoever they forward it to, signed in or not.
+ */
 async function emailRepresentatives(
   quote: {
     id: string;
+    shareToken: string;
     number: string;
     version: number;
     schoolId: string;
@@ -471,7 +493,7 @@ async function emailRepresentatives(
   const counts = { sent: 0, noEmail: 0, failed: 0 };
   const members = await SchoolMember.find({ schoolId: quote.schoolId }).select("userId");
   const people = await User.find({ _id: { $in: members.map((m) => m.userId) }, active: true }).select("name email");
-  const url = `${getEnv().APP_ORIGIN}/school/quotations/${quote.id}`;
+  const url = `${getEnv().APP_ORIGIN}${quotationShareHref(quote.shareToken)}`;
   for (const person of people) {
     if (isPlaceholderEmail(person.email)) {
       counts.noEmail += 1;
@@ -602,4 +624,48 @@ export async function quotationForViewer(viewer: { id: string; roles: Role[] }, 
   } catch {
     return null;
   }
+}
+
+// ---------- the view-only link ----------
+
+/**
+ * The quotation behind a view-only link, for anyone who has it, signed in or not. A code that is
+ * wrong, badly shaped or was replaced by a newer link gives null, the same as no quotation.
+ */
+export async function quotationByShareToken(code: unknown) {
+  if (typeof code !== "string" || !SCHOOL_TOKEN.test(code)) return null;
+  await connectDB();
+  return QuoteRequest.findOne({ shareToken: code });
+}
+
+/**
+ * The code for a quotation's view-only link. Call only for someone allowed to see the quotation.
+ * A request from before links were added gets its code here, once, even if two pages ask at once.
+ */
+export async function quoteShareToken(request: { _id: unknown; shareToken?: string }) {
+  if (request.shareToken) return request.shareToken;
+  await connectDB();
+  await QuoteRequest.updateOne(
+    { _id: request._id, shareToken: { $exists: false } },
+    { $set: { shareToken: newShareToken() } },
+  );
+  const saved = await QuoteRequest.findById(request._id).select("shareToken").lean<{ shareToken?: string }>();
+  if (!saved?.shareToken) throw Error("This quotation request no longer exists.");
+  return saved.shareToken;
+}
+
+/** The owner replaces a quotation's view-only link; the old link stops working at once. */
+export async function resetQuoteLink(actorId: string, requestInput: unknown) {
+  await owner(actorId);
+  const requestId = objectId.parse(requestInput);
+  await mongoose.connection.transaction(async (session) => {
+    const updated = await QuoteRequest.updateOne(
+      { _id: requestId },
+      { $set: { shareToken: newShareToken() } },
+      { session },
+    );
+    if (!updated.matchedCount) throw Error("This quotation request no longer exists.");
+    // the code itself stays out of the history: it is the secret
+    await AuditLog.create([{ actorId, action: "quote.link.reset", target: requestId, details: {} }], { session });
+  });
 }

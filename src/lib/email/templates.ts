@@ -61,7 +61,7 @@ export function quotationEmail(input: {
     `Total: ${rupees(input.totals.totalPaise)}`,
     ...(input.gstinMissing ? ["", "The store's GSTIN will be added once registered."] : []),
     "",
-    `See it, print it, accept it or ask for changes: ${input.url}`,
+    `See it or print it here; anyone you forward the link to can too. To accept it or ask for changes, sign in from that page: ${input.url}`,
   ].join("\n");
   const row = (label: string, value: string, strong = false) =>
     `<tr><td style="padding:4px 0;color:#475569">${escape(label)}</td><td style="padding:4px 0;text-align:right;${strong ? "font-weight:700;font-size:16px" : ""}">${escape(value)}</td></tr>`;
@@ -81,7 +81,7 @@ ${taxLines.map(([label, paise]) => row(label, rupees(paise))).join("\n")}
 ${row("Total", rupees(input.totals.totalPaise), true)}
 </table>
 <p style="margin:0 0 22px"><a href="${escape(input.url)}" style="display:inline-block;padding:12px 22px;background:#1e3a8a;color:#ffffff;text-decoration:none;border-radius:8px;font-weight:600">View quotation</a></p>
-<p style="margin:0 0 6px;font-size:13px;color:#64748b">Open it to print, accept it or ask for changes. If the button doesn't work, open this address:</p>
+<p style="margin:0 0 6px;font-size:13px;color:#64748b">Anyone you forward this link to can see and print the quotation. To accept it or ask for changes, sign in from that page. If the button doesn't work, open this address:</p>
 <p style="margin:0 0 12px;font-size:12px;word-break:break-all"><a href="${escape(input.url)}" style="color:#1e3a8a">${escape(input.url)}</a></p>
 ${input.gstinMissing ? `<p style="margin:0;font-size:13px;color:#64748b">The store's GSTIN will be added once registered.</p>` : ""}
 </td></tr></table></body></html>`;

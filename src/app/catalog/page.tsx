@@ -5,6 +5,8 @@ import { ProductCard } from "@/components/product-card";
 import { currentLocale } from "@/lib/i18n";
 import { CatalogFilterPanel } from "@/components/catalog-filter-panel";
 export const dynamic = "force-dynamic";
+/** Products shown per "page"; Load more shows the next lot under them. */
+const PAGE_SIZE = 48;
 
 export async function generateMetadata({
   searchParams,
@@ -39,6 +41,14 @@ export default async function Catalog({
     catalogCategories(),
   ]);
   const active = categories.find((category) => category.slug === params.category);
+  // ?page=3 shows the first three pages' worth: a link that works without JavaScript, and can be shared
+  const page = Math.max(1, Math.min(100, Math.floor(Number(params.page)) || 1));
+  const shown = products.slice(0, page * PAGE_SIZE);
+  const more = products.length - shown.length;
+  const nextHref = `/catalog?${new URLSearchParams({
+    ...Object.fromEntries(Object.entries(params).filter((entry): entry is [string, string] => Boolean(entry[1]) && entry[0] !== "page")),
+    page: String(page + 1),
+  })}`;
   return (
     <section className="page-container">
       <div className="section-heading">
@@ -68,6 +78,7 @@ export default async function Catalog({
       <CatalogFilterPanel locale={locale} params={params} />
       <div className="results-line">
         <p>
+          {more > 0 && (locale === "mr" ? `${shown.length} दाखवत आहोत, एकूण ` : `Showing ${shown.length} of `)}
           <strong>{products.length}</strong>{" "}
           {locale === "mr" ? "उत्पादने" : products.length === 1 ? "product" : "products"}
           {params.q ? (locale === "mr" ? ` “${params.q}” साठी` : ` for “${params.q}”`) : ""}
@@ -77,16 +88,28 @@ export default async function Catalog({
         )}
       </div>
       {products.length ? (
-        <div className="product-grid">
-          {products.map((p, index) => (
-            <ProductCard
-              key={p.id}
-              product={p}
-              locale={locale}
-              eager={index === 0}
-            />
-          ))}
-        </div>
+        <>
+          <div className="product-grid">
+            {shown.map((p, index) => (
+              <ProductCard
+                key={p.id}
+                product={p}
+                locale={locale}
+                eager={index === 0}
+              />
+            ))}
+          </div>
+          {more > 0 && (
+            <div className="load-more">
+              {/* stays where it is: the next products appear under the ones already seen */}
+              <Link href={nextHref} scroll={false} className="secondary-button">
+                {locale === "mr"
+                  ? `आणखी ${Math.min(more, PAGE_SIZE)} दाखवा`
+                  : `Load ${Math.min(more, PAGE_SIZE)} more${more > PAGE_SIZE ? ` of ${more}` : ""}`}
+              </Link>
+            </div>
+          )}
+        </>
       ) : (
         <div className="panel empty-state">
           <SearchX size={40} strokeWidth={1.5} className="empty-icon" aria-hidden="true" />

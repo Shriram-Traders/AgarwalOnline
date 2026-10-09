@@ -17,6 +17,7 @@ export type StaffNavKey =
   | "analytics"
   | "schools"
   | "quotations"
+  | "marketplace"
   | "settings"
   | "staff"
   | "approvals"
@@ -82,6 +83,8 @@ export const STAFF_NAV: StaffNavGroup[] = [
     items: [
       { key: "schools", href: "/super-admin/schools", permission: "settings:write" },
       { key: "quotations", href: "/super-admin/quotations", permission: "settings:write" },
+      // the owner shops for any school in the school marketplace
+      { key: "marketplace", href: "/school", permission: "settings:write" },
     ],
   },
   {

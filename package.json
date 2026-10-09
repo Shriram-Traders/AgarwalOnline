@@ -22,10 +22,12 @@
     "migrate:roles": "tsx --env-file=.env scripts/migrate-roles.ts",
     "migrate:phone-index": "tsx --env-file=.env scripts/migrate-phone-index.ts",
     "migrate:product-photos": "tsx --env-file=.env scripts/migrate-product-photos.ts",
+    "migrate:photo-order": "tsx --env-file=.env scripts/migrate-photo-order.ts",
     "test:e2e": "playwright test",
     "reservations:expire": "tsx --env-file=.env scripts/expire-reservations.ts",
     "approvals:publish": "tsx --env-file=.env scripts/publish-scheduled.ts",
-    "retention:run": "tsx --env-file=.env scripts/retention.ts"
+    "retention:run": "tsx --env-file=.env scripts/retention.ts",
+    "push:keys": "tsx scripts/push-keys.ts"
   },
   "keywords": [],
   "author": "",

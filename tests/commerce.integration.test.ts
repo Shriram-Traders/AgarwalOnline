@@ -27,6 +27,7 @@ import {
   setCartLine,
 } from "../src/lib/commerce/service";
 import { Promotion, PromotionRedemption } from "../src/lib/promotions/models";
+import { POLICY_VERSION } from "../src/lib/legal/version";
 const uri = process.env.TEST_MONGODB_URI;
 describe.skipIf(!uri)("Transactional COD checkout", () => {
   let customer: string,
@@ -147,6 +148,7 @@ describe.skipIf(!uri)("Transactional COD checkout", () => {
     slotId: slot,
     idempotencyKey: randomUUID(),
     method: "cod",
+    termsVersion: POLICY_VERSION,
   });
   it("snapshots server prices, reserves stock and retries idempotently", async () => {
     const data = input();
@@ -156,10 +158,24 @@ describe.skipIf(!uri)("Transactional COD checkout", () => {
     expect(await Order.countDocuments()).toBe(1);
     const o = await Order.findById(id);
     expect(o.totalPaise).toBe(13000);
+    // the Terms the customer ticked at checkout stay with the order
+    expect(o.termsVersion).toBe(POLICY_VERSION);
+    expect(o.termsAcceptedAt).toBeInstanceOf(Date);
     expect((await InventoryItem.findOne({ variantId: variant })).reserved).toBe(
       1,
     );
     expect(await CartLine.countDocuments({ customerId: customer })).toBe(0);
+  });
+  it("refuses an order without the current Terms ticked, and holds no stock", async () => {
+    const unticked: Partial<ReturnType<typeof input>> = input();
+    delete unticked.termsVersion;
+    await expect(checkout(customer, unticked)).rejects.toThrow("Terms were updated");
+    // a checkout page left open from before the Terms changed
+    await expect(checkout(customer, { ...input(), termsVersion: "2000-01-01" })).rejects.toThrow(
+      "Terms were updated",
+    );
+    expect(await Order.countDocuments()).toBe(0);
+    expect((await InventoryItem.findOne({ variantId: variant })).reserved).toBe(0);
   });
   it("rejects client-supplied totals", async () => {
     await expect(

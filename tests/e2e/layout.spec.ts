@@ -17,6 +17,7 @@ import { QuoteBasket, QuoteRequest, School } from "../../src/lib/schools/models"
 import { istDatePlus, quoteTotals } from "../../src/lib/schools/quote-math";
 import { DEFAULT_TAX_PROFILE } from "../../src/lib/tax/gst";
 import { OrderFeedback } from "../../src/lib/feedback/models";
+import { LEGAL_PAGES, POLICIES_HOME } from "../../src/lib/legal/pages";
 
 const uri = "mongodb://127.0.0.1:27028/ags_test_e2e?replicaSet=ags-local";
 const out = process.env.SHOT_DIR;
@@ -82,6 +83,7 @@ test.beforeAll(async () => {
   samples["/admin/products/[id]"] = `/admin/products/${product._id}`;
   samples["/account/orders/[id]"] = `/account/orders/${order!._id}`;
   samples["/admin/orders/[id]"] = `/admin/orders/${order!._id}`;
+  samples["/admin/orders/[id]/slip"] = `/admin/orders/${order!._id}/slip`;
   samples["/delivery/orders/[id]"] = `/delivery/orders/${order!._id}`;
   samples["/account/support/[id]"] = `/account/support/${chat._id}`;
   const firstPack = (await ProductVariant.findOne())!._id;
@@ -145,6 +147,7 @@ test.beforeAll(async () => {
   const validUntil = istDatePlus(15);
   const quote = await QuoteRequest.create({
     number: "AGSQ-20261002-00001",
+    shareToken: "layout-quote-token-00000",
     schoolId: school._id,
     requestedBy: customer!._id,
     note: "Deliver to the school office, please",
@@ -192,6 +195,8 @@ test.beforeAll(async () => {
   // a school-only item's own page in the school marketplace
   samples["/school/products/[slug]"] = `/school/products/${schoolProducts.find((p) => p.showToCustomers === false)?.slug ?? schoolProducts[0].slug}`;
   samples["/super-admin/quotations/[id]"] = `/super-admin/quotations/${quote._id}`;
+  // the quotation's view-only link, opened signed out
+  samples["/q/[code]"] = `/q/${quote.shareToken}`;
   samples["/super-admin/schools/[id]"] = `/super-admin/schools/${school._id}`;
 });
 test.afterAll(async () => {
@@ -275,6 +280,20 @@ test("every page holds its layout", async ({ browser }, info) => {
     if (out)
       await page.screenshot({
         path: `${out}/${info.project.name}${route.replace(/[/[\]]+/g, "_") || "_home"}.png`,
+        fullPage: true,
+      });
+  }
+  // the policies come in full Marathi too: longer words, same layout rules
+  const marathi = await signedIn(browser, "guest", info.project.use);
+  await marathi.context().addCookies([{ name: "ags_locale", value: "mr", url: info.project.use.baseURL! }]);
+  for (const policy of [POLICIES_HOME, ...LEGAL_PAGES]) {
+    await marathi.goto(policy.href);
+    await marathi.waitForLoadState("networkidle", { timeout: 5000 }).catch(() => {});
+    const problems = await marathi.evaluate(layoutProblems);
+    if (problems.length) report[`${policy.href} (mr)`] = problems;
+    if (out)
+      await marathi.screenshot({
+        path: `${out}/${info.project.name}${policy.href.replace(/\//g, "_")}_mr.png`,
         fullPage: true,
       });
   }

@@ -32,6 +32,8 @@ export async function governanceAction(
         ...data,
         showToCustomers: form.get("showToCustomers") === "on",
         showToSchools: form.get("showToSchools") === "on",
+        // one entry per photo, in the order chosen
+        images: form.getAll("images").map(String),
       });
       success = live ? "Product added. It is in the shop now." : "Request sent. The product goes live once an owner approves it.";
     } else if (operation === "variant") {
@@ -63,7 +65,7 @@ export async function governanceAction(
     if (e instanceof ZodError) return { error: plainMessage(e) };
     const message = e instanceof Error ? e.message : "";
     if (
-      /^(You cannot|A rejection|This request|Prices changed|Stock changed|This adjustment|A (price|stock) change|That (web address|SKU)|Only the person|Only an owner|Product not found|Select a category|Price must|Tick)/.test(
+      /^(You cannot|A rejection|This request|Prices changed|Stock changed|This adjustment|A (price|stock) change|That (web address|SKU)|Only the person|Only an owner|Product not found|Select a category|Price must|Tick|Use an uploaded photo|A product can have)/.test(
         message,
       )
     )

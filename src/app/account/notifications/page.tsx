@@ -4,6 +4,10 @@ import { requirePage } from "@/lib/auth/session";
 import { Notification } from "@/lib/engagement/models";
 import { ActionForm } from "@/components/action-form";
 import { notificationAction } from "@/lib/engagement/actions";
+import { hasPermission } from "@/lib/auth/permissions";
+import { currentLocale } from "@/lib/i18n";
+import { pushPublicKey } from "@/lib/push/service";
+import { PushSettings } from "@/components/push-settings";
 export const metadata = { title: "Notifications", robots: { index: false } };
 
 export default async function NotificationsPage() {
@@ -22,6 +26,13 @@ export default async function NotificationsPage() {
         </div>
         <span className="live-chip">{unread} unread</span>
       </div>
+      <PushSettings
+        id="push"
+        publicKey={pushPublicKey()}
+        account={user.id}
+        mr={(await currentLocale()) === "mr"}
+        staff={hasPermission(user.roles, "order:manage")}
+      />
       {unread > 0 && (
         <ActionForm action={notificationAction} submit="Mark all as read">
           <CheckCheck size={18} />

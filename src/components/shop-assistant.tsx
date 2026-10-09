@@ -11,6 +11,7 @@ import { formatPrice } from "@/lib/display";
 import type { Locale } from "@/lib/locale-types";
 import { ActionForm } from "./action-form";
 import { AisleIcon } from "./aisle-icon";
+import { PolicyNotice } from "./policy-notice";
 import { QuickAdd } from "./quick-add";
 
 type Message = { id: string; who: "me"; text: string } | { id: string; who: "bot"; bubble: Bubble };
@@ -160,6 +161,7 @@ export function ShopAssistant({ locale, signedIn }: { locale: Locale; signedIn: 
                     key={message.id}
                     bubble={message.bubble}
                     t={t}
+                    locale={locale}
                     signedIn={signedIn}
                     pathname={pathname}
                     pending={pending}
@@ -207,6 +209,7 @@ export function ShopAssistant({ locale, signedIn }: { locale: Locale; signedIn: 
 function BotBubble({
   bubble,
   t,
+  locale,
   signedIn,
   pathname,
   pending,
@@ -215,6 +218,7 @@ function BotBubble({
 }: {
   bubble: Bubble;
   t: AssistantCopy;
+  locale: Locale;
   signedIn: boolean;
   pathname: string;
   pending: boolean;
@@ -315,6 +319,7 @@ function BotBubble({
             buttonClassName="primary-button compact-button"
           >
             {bubble.question && <input type="hidden" name="question" value={bubble.question} />}
+            <PolicyNotice kind="handoff" locale={locale} />
           </ActionForm>
         </div>
       );

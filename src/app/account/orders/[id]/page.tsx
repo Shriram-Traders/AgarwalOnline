@@ -343,6 +343,17 @@ export default async function OrderDetail({
                   {o.address.instructions && <small>“{o.address.instructions}”</small>}
                 </dd>
               </div>
+              {o.termsVersion && (
+                <div>
+                  <dt>Terms agreed</dt>
+                  <dd>
+                    Version {o.termsVersion}
+                    <small>
+                      <Link href="/p/terms-and-conditions">Read the Terms</Link>
+                    </small>
+                  </dd>
+                </div>
+              )}
             </dl>
           </section>
         </div>

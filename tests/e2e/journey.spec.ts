@@ -149,7 +149,9 @@ test("whole journey: sign up, shop, pay, pack, deliver, reconcile", async ({ bro
   await page.getByRole("link", { name: /Everyday Basmati Rice/ }).first().click();
   await expect(page).toHaveURL(/\/products\/everyday-basmati-rice/);
   await page.getByRole("button", { name: "Add to basket" }).click();
-  await expect(page.locator(".success-message")).toContainText("Basket updated");
+  await expect(page.locator("main").getByText("1 in basket")).toBeVisible();
+  // shown at once, saved just after: wait for the save before leaving the page
+  await expect(page.locator("main .product-quantity").first()).toHaveAttribute("aria-busy", "false");
 
   // --- basket: stepper, free-delivery meter, promo code ------------------
   await page.goto("/cart");
@@ -180,7 +182,7 @@ test("whole journey: sign up, shop, pay, pack, deliver, reconcile", async ({ bro
   await shot(page, "addresses-populated");
 
   await page.goto("/checkout");
-  await page.getByLabel("Delivery slot").selectOption({ label: "Thu, 1 Jan · 4:00 PM – 7:00 PM" });
+  await page.getByRole("radio", { name: "Thu, 1 Jan · 4:00 PM – 7:00 PM" }).check();
   await shot(page, "checkout-populated");
   await page.getByRole("checkbox").check();
   await page.getByRole("button", { name: "Confirm Cash on Delivery order" }).click();
@@ -231,7 +233,10 @@ test("whole journey: sign up, shop, pay, pack, deliver, reconcile", async ({ bro
   await staffSignIn(rider, "delivery@e2e.test");
   await expect(rider.locator(".stop-row")).toHaveCount(1);
   await shot(rider, "delivery-queue-populated");
-  await rider.locator(".stop-row").first().click();
+  // each stop has Call and Map buttons beside its link to the order
+  await expect(rider.locator(".stop-row").first().getByRole("link", { name: /^Call / })).toHaveAttribute("href", /^tel:\+91\d{10}$/);
+  await expect(rider.locator(".stop-row").first().getByRole("link", { name: /^Map to / })).toHaveAttribute("href", /google\.com\/maps/);
+  await rider.locator(".stop-row .stop-main").first().click();
   await rider.getByRole("button", { name: "Start delivery", exact: true }).click();
   await expect(rider.getByLabel("Customer delivery code")).toBeVisible();
   await shot(rider, "delivery-order-detail");

@@ -11,6 +11,7 @@ import {
 } from "../db/models";
 import { objectId } from "../commerce/service";
 import { gstRateField, hsnField, optionalField } from "../tax/gst";
+import { orderedPhotos, photoFields, photoList } from "./photos";
 
 async function authorize(actorId: string, permission: Permission = "catalog:write") {
   await connectDB();
@@ -95,7 +96,6 @@ export async function updateProductMetadata(actorId: string, input: unknown) {
       brand: z.string().trim().max(60),
       categoryId: objectId,
       aliases: z.string().max(1000),
-      images: z.string().max(5000).default(""),
       highlightsEn: z.string().max(2000).default(""),
       highlightsMr: z.string().max(2000).default(""),
       dietaryTags: z.string().max(1000).default(""),
@@ -136,7 +136,6 @@ export async function updateProductMetadata(actorId: string, input: unknown) {
             .filter(Boolean),
         ),
       ],
-      images: data.images.split("\n").map((item) => item.trim()).filter(Boolean).slice(0, 8),
       highlights: Array.from({ length: Math.max(enHighlights.length, mrHighlights.length) }, (_, index) => ({
         en: enHighlights[index] ?? mrHighlights[index] ?? "",
         mr: mrHighlights[index] ?? enHighlights[index] ?? "",
@@ -159,6 +158,28 @@ export async function updateProductMetadata(actorId: string, input: unknown) {
           details: { before, after },
         },
       ],
+      { session },
+    );
+  });
+}
+
+/**
+ * A product's photos in a new order, with some removed or links added: the list as it now
+ * stands, the first being the cover. Uploads join the list as they happen (storeEvidence).
+ */
+export async function saveProductPhotos(actorId: string, input: unknown) {
+  await authorize(actorId);
+  const data = z.object({ productId: objectId, images: photoList }).parse(input);
+  await mongoose.connection.transaction(async (session) => {
+    const product = await Product.findById(data.productId).session(session);
+    if (!product) throw Error("Product not found.");
+    const before = orderedPhotos(product);
+    const fields = photoFields(data.images);
+    product.images = fields.images;
+    product.image = fields.image;
+    await product.save({ session });
+    await AuditLog.create(
+      [{ actorId, action: "product.photos.update", target: data.productId, details: { before, after: fields.images } }],
       { session },
     );
   });

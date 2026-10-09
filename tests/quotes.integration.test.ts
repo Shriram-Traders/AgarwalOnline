@@ -13,8 +13,11 @@ import type { Sheet } from "../src/lib/schools/quote-form";
 import {
   addToQuote,
   closeQuoteRequest,
+  quotationByShareToken,
   quotationForViewer,
   quoteBasketView,
+  quoteShareToken,
+  resetQuoteLink,
   respondToQuotation,
   saveQuoteDraft,
   sendQuotation,
@@ -237,6 +240,10 @@ describe.skipIf(!uri)("School quote baskets and quotations", () => {
 
     // 500 × ₹42.50 + 40 × ₹112.38 = ₹25,745.20; 10% off = ₹2,574.52 → taxable ₹23,170.68
     const request = await QuoteRequest.findById(id);
+    // the email links to the view-only page, never to the database id
+    expect(body.text).toContain(`http://127.0.0.1:3000/q/${request.shareToken}`);
+    expect(body.html).toContain(`http://127.0.0.1:3000/q/${request.shareToken}`);
+    expect(body.text).not.toContain(id);
     const version = request.versions[0];
     expect(request).toMatchObject({ status: "quoted", currentVersion: 1 });
     expect(version).toMatchObject({
@@ -314,6 +321,58 @@ describe.skipIf(!uri)("School quote baskets and quotations", () => {
     await QuoteRequest.updateOne({ _id: id }, { $set: { "versions.0.validUntil": istDatePlus(-1) } });
     await expect(respondToQuotation(repA, { requestId: id, version: 1, decision: "accept" })).rejects.toThrow("expired");
     await respondToQuotation(repA, { requestId: id, version: 1, decision: "changes", note: "Please send a fresh one" });
+  });
+
+  it("gives every quotation its own view-only link that can't be guessed, and replaces it on request", async () => {
+    const first = await ask([["register", 5]]);
+    const second = await ask([["register", 6]]);
+    const a = await QuoteRequest.findById(first.id);
+    const b = await QuoteRequest.findById(second.id);
+    expect(a.shareToken).toMatch(/^[A-Za-z0-9_-]{24}$/);
+    expect(b.shareToken).toMatch(/^[A-Za-z0-9_-]{24}$/);
+    expect(a.shareToken).not.toBe(b.shareToken);
+    // nothing of the number, date or id is in it
+    for (const part of [first.number, first.id, istDate(new Date()).replaceAll("-", "")]) expect(a.shareToken).not.toContain(part);
+
+    // anyone with the code gets that quotation and no other; anything else gets nothing
+    expect(String((await quotationByShareToken(a.shareToken))?._id)).toBe(first.id);
+    expect(String((await quotationByShareToken(b.shareToken))?._id)).toBe(second.id);
+    expect(await quotationByShareToken(`${a.shareToken.slice(0, 23)}${a.shareToken[23] === "A" ? "B" : "A"}`)).toBeNull();
+    for (const bad of ["", "short", `${a.shareToken}x`, first.id, first.number, { $ne: null }, null, undefined])
+      expect(await quotationByShareToken(bad)).toBeNull();
+    expect(await quoteShareToken(a)).toBe(a.shareToken);
+
+    // only the owner makes a new link, and the old one stops at once
+    await expect(resetQuoteLink(admin, first.id)).rejects.toThrow("FORBIDDEN");
+    await expect(resetQuoteLink(repA, first.id)).rejects.toThrow("FORBIDDEN");
+    await resetQuoteLink(owner, first.id);
+    const fresh = (await QuoteRequest.findById(first.id)).shareToken;
+    expect(fresh).toMatch(/^[A-Za-z0-9_-]{24}$/);
+    expect(fresh).not.toBe(a.shareToken);
+    expect(await quotationByShareToken(a.shareToken)).toBeNull();
+    expect(String((await quotationByShareToken(fresh))?._id)).toBe(first.id);
+    expect((await QuoteRequest.findById(second.id)).shareToken).toBe(b.shareToken);
+    const audit = await AuditLog.findOne({ action: "quote.link.reset", target: first.id }).lean<{ details?: object }>();
+    expect(JSON.stringify(audit)).not.toContain(fresh);
+
+    // a request from before links gets its code the first time it's needed, and keeps it
+    await QuoteRequest.updateOne({ _id: second.id }, { $unset: { shareToken: "" } });
+    const old = await QuoteRequest.findById(second.id);
+    expect(old.shareToken).toBeUndefined();
+    const made = await quoteShareToken(old);
+    expect(made).toMatch(/^[A-Za-z0-9_-]{24}$/);
+    expect(await quoteShareToken(old)).toBe(made);
+    expect(String((await quotationByShareToken(made))?._id)).toBe(second.id);
+
+    // ...or when it's sent, so the email can link to it
+    await QuoteRequest.updateOne({ _id: second.id }, { $unset: { shareToken: "" } });
+    const { stamp } = await saveQuoteDraft(
+      owner,
+      second.id,
+      sheet([{ variantId: v.register, quantity: 6, unitPricePaise: 4250, gstRatePercent: 18 }]),
+    );
+    await sendQuotation(owner, { requestId: second.id, stamp });
+    expect((await QuoteRequest.findById(second.id)).shareToken).toMatch(/^[A-Za-z0-9_-]{24}$/);
   });
 
   it("closes a request with a reason the school sees", async () => {

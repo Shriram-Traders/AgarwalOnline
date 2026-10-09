@@ -12,6 +12,8 @@ import { staffRoleOf } from "@/lib/auth/permissions";
 import { cartFor } from "@/lib/commerce/service";
 import { BasketProvider } from "@/components/basket";
 import { KeyboardAware } from "@/components/keyboard-aware";
+import { ServiceWorker } from "@/components/service-worker";
+import { pushPublicKey } from "@/lib/push/service";
 
 const body = localFont({
   src: "../../node_modules/@fontsource-variable/manrope/files/manrope-latin-wght-normal.woff2",
@@ -55,6 +57,8 @@ export const metadata: Metadata = {
   },
   description:
     "Stationery, school supplies, gifts and party essentials from Agarwal General Stores, delivered same day in and around Nagothane.",
+  // the app's name and look once it is added to an iPhone's home screen (Chrome reads app/manifest.ts)
+  appleWebApp: { capable: true, title: "Agarwal", statusBarStyle: "default" },
 };
 export const viewport: Viewport = {
   themeColor: "#0f172a",
@@ -87,6 +91,7 @@ export default async function RootLayout({
           Skip to content
         </a>
         <KeyboardAware />
+        <ServiceWorker account={user && pushPublicKey() ? user.id : null} />
         <BasketProvider
           lines={Object.fromEntries(
             basket.map((line) => [

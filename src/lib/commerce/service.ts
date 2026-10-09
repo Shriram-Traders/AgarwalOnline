@@ -2,6 +2,7 @@ import { paymentsEnabled, paymentConfig } from "../payments/provider";
 import mongoose from "mongoose";
 import { z } from "zod";
 import { connectDB } from "../db/connect";
+import { POLICY_VERSION } from "../legal/version";
 import {
   InventoryItem,
   Product,
@@ -28,7 +29,7 @@ import {
   rulesSchema,
   stillBookable,
 } from "./delivery";
-import { notify } from "../engagement/service";
+import { notify, notifyNewOrder } from "../engagement/service";
 import { bestPromotion, returnOffer } from "../promotions/service";
 import { Promotion, PromotionRedemption } from "../promotions/models";
 import { isShopperVisible, shopperVisible } from "../catalog/visibility";
@@ -90,6 +91,10 @@ export async function checkout(customerId: string, input: unknown) {
       idempotencyKey: z.string().uuid(),
       method: z.enum(["cod", "razorpay"]),
       promotionCode: z.string().max(24).optional(),
+      // the checkout box: agreeing to the Terms as they are now, not as an old open tab showed them
+      termsVersion: z.literal(POLICY_VERSION, {
+        error: "Our Terms were updated. Reload the page, then tick the box again.",
+      }),
     })
     .strict()
     .parse(input);
@@ -274,6 +279,8 @@ export async function checkout(customerId: string, input: unknown) {
           ...(data.method === "razorpay"
             ? { expiresAt: new Date(Date.now() + 15 * 60 * 1000) }
             : {}),
+          termsVersion: data.termsVersion,
+          termsAcceptedAt: new Date(),
         },
       ],
       { session },
@@ -354,6 +361,7 @@ export async function checkout(customerId: string, input: unknown) {
       },
       session,
     );
+    await notifyNewOrder(order, session);
     await CartLine.deleteMany({ customerId }, { session });
     resultId = String(order._id);
   });

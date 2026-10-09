@@ -77,8 +77,10 @@ export async function catalog(
 export async function catalogForSchools(input: { q?: string; category?: string } = {}) {
   return catalogFor("schools", { q: input.q, category: input.category });
 }
-/** Far more than the shop lists today; a list shows at most 100 of them. */
+/** Far more than the shop lists today. */
 const SHELF_LIMIT = 2000;
+/** A search returns its best matches, up to this many. */
+const SEARCH_LIMIT = 500;
 
 type Doc = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 type Shelf = {
@@ -192,7 +194,7 @@ async function searchMatches(query: string, match: Record<string, unknown>, orde
     $and: words.map((alternatives) => clause(wordPattern(alternatives))),
   })
     .sort(order)
-    .limit(100);
+    .limit(SEARCH_LIMIT);
   // nothing at all: allow one wrong, missing or extra letter per word ("notbook", "pencel")
   const fuzzy = found.length
     ? null
@@ -200,7 +202,7 @@ async function searchMatches(query: string, match: Record<string, unknown>, orde
   if (fuzzy)
     found = await Product.find({ ...match, $and: fuzzy.map(clause) })
       .sort(order)
-      .limit(100);
+      .limit(SEARCH_LIMIT);
   type Scored = Parameters<typeof relevance>[0];
   const scored = new Map(
     found.map((product) => [
@@ -236,7 +238,6 @@ async function catalogFor(
     );
     if (filters.sort === "new")
       products = [...products].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-    products = products.slice(0, 100);
   }
   let result: CatalogItem[] = products
     .map((p) => {

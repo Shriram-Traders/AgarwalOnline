@@ -5,8 +5,8 @@ const LABELS: Record<string, string> = {
   "auth.customer.password_login": "Signed in with mobile number and password",
   "auth.google.login": "Signed in with Google",
   "auth.google.merge": "Linked a Google account",
-  "category.create": "Added an aisle",
-  "category.update": "Changed an aisle",
+  "category.create": "Added a category",
+  "category.update": "Changed a category",
   "cod.discrepancy.resolve": "Resolved a cash difference",
   "cod.reconcile": "Recorded a cash handover",
   "complaint.create": "Raised a complaint",
@@ -64,6 +64,7 @@ const LABELS: Record<string, string> = {
   "quote.accept": "Accepted a quotation",
   "quote.changes": "Asked for changes to a quotation",
   "quote.close": "Closed a quotation request",
+  "quote.link.reset": "Made a new quotation link",
 };
 const PATTERNS: [RegExp, (match: RegExpMatchArray) => string][] = [
   [/^approval\.publish\.(.+)$/, (m) => `Published an approved ${m[1]} change`],
