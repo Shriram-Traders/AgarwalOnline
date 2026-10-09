@@ -32,11 +32,14 @@ All seeded brands, products, people, addresses, orders and analytics are fiction
 - Save a wishlist, addresses and preferences.
 - Save things to boards (Diwali gifts, school ideas), invite people to them, and buy a whole board in one tap.
 - Keep more than one basket: fill a shared one (School list, Family monthly) with family or colleagues, and anyone on it can order it. Sharing is one link, sent on WhatsApp or copied, with one switch for whether it lets people edit.
-- Review verified purchases, chat with support, raise complaints and request returns or refunds with photo evidence.
+- Review verified purchases, chat with support, raise complaints and request returns or refunds with photo evidence. A delivered order asks for a one-tap star rating, and the header bell counts unread updates.
+- Shop as a family (`/account/family`): adults join with a one-time invite link, each order says who it was for, and the family sees what it spent here each month with invoices. Children are kept by school and class, so their school kit is one tap away once the store publishes it.
+- Put orders on a family tab (khata) the store has opened, and settle it with the store once a month.
 
 **Admins**
 
-- Manage categories, products, variants, photos and stock.
+- Manage categories, products, variants, photos and stock, and school kits (a class list per school and year, copied from a board; publishing tells the parents of every matching child).
+- Record family tab payments in cash or UPI. The owner opens each tab, sets its limit, pauses or closes it, and voids a wrong payment.
 - Pack orders with substitutions, assign deliveries, reconcile cash on delivery and handle discrepancies.
 - Moderate reviews, answer support chats with internal notes, and handle complaints and returns.
 - View date-filtered operational analytics.
@@ -220,7 +223,7 @@ The app validates these on startup and refuses to run with an invalid combinatio
 | `AUTH_SECRET` | Yes | 32 or more random characters. Also hashes delivery handover codes, so don't rotate it casually. |
 | `BETTER_AUTH_SECRET` | Production | 32 or more random characters. It signs session cookies. It falls back to `AUTH_SECRET` when blank. |
 | `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` | With more than one server | Base64 AES key, 16, 24 or 32 bytes. It must be identical on every instance and at build time. |
-| `RESEND_API_KEY`, `EMAIL_FROM` | For email confirmation | Set both. `EMAIL_FROM` looks like `Agarwal General Stores <orders@yourdomain.in>` and must use a domain verified in Resend. Blank in development prints each email, with its link, in the dev-server log. |
+| `SMTP_USER`, `SMTP_PASS`, `EMAIL_FROM` | For email confirmation and quotations | Set all three. `SMTP_USER` is the Hostinger mailbox (`orders@yourdomain.in`), `SMTP_PASS` its password, and `EMAIL_FROM` looks like `Agarwal General Stores <orders@yourdomain.in>` with the same address. Blank in development prints each email, with its link, in the dev-server log. |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | For Google sign-in | Set both, or leave both blank to hide the Google buttons. |
 | `MOCK_OTP` | No | `true` accepts `MOCK_OTP_CODE` instead of sending SMS. Forbidden in production. |
 | `MOCK_OTP_CODE` | No | Six-digit code used when mock OTP is on. Defaults to `246810`. |
@@ -258,6 +261,7 @@ Tests use `TEST_MONGODB_URI`, passed on the command line. Vitest does not read `
 | `npm run reservations:expire` | Releases stock held by abandoned checkouts. |
 | `npm run approvals:publish` | Publishes approved changes whose scheduled time has passed. |
 | `npm run retention:run` | Deletes expired notifications, evidence photos and old audit entries. |
+| `npm run tabs:statements` | Tells each family with a tab what went on it last month and what it owes. Run on the 1st. |
 
 The seed and job scripts load `.env` from the project folder. Node stops with a "not found" error if that file is missing.
 
@@ -339,7 +343,7 @@ Put HTTPS in front of it, and set the same environment variables.
 
 ### Third-party services
 
-- **Resend (email confirmation).** Create an account at [resend.com](https://resend.com), add your domain under **Domains**, and add the DNS records it shows at your domain provider until the domain reads **Verified**. Then create an API key under **API Keys** with sending access. Put the key in `RESEND_API_KEY` and the sender in `EMAIL_FROM`, both locally and in Vercel's Production variables. New accounts get a confirmation link after sign-up, and the account page has a **Send confirmation link** button. The link works for 24 hours and only confirms the address; it never signs anyone in. Once an email is confirmed, Google sign-in with that address opens the existing account directly.
+- **Hostinger mailbox (email confirmation and quotations).** The site sends from a Hostinger Business Email mailbox over SMTP (`smtp.hostinger.com`, port 465), so sent mail shows in that mailbox's Sent folder and replies land in its inbox. In hPanel → **Emails**, create the mailbox (for example `orders@yourdomain.in`) and set its password. While the domain's DNS is managed at Hostinger, its MX, SPF, DKIM and DMARC records are added for you; if the nameservers move elsewhere, copy those records across or mail will land in spam. Put the mailbox in `SMTP_USER`, its password in `SMTP_PASS` and the sender in `EMAIL_FROM`, both locally and in Vercel's Production variables. New accounts get a confirmation link after sign-up, and the account page has a **Send confirmation link** button. The link works for 24 hours and only confirms the address; it never signs anyone in. Once an email is confirmed, Google sign-in with that address opens the existing account directly.
 - **Google sign-in.** In the Google Cloud Console, open **APIs & Services**, set up the **OAuth consent screen**, then under **Credentials** create an **OAuth client ID** of type **Web application**. Add one **Authorised redirect URI** per address the site runs on: `http://localhost:3000/api/auth/callback/google` for local work and `https://YOUR_DOMAIN/api/auth/callback/google` for each live address. Copy the client ID and secret into `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`. The redirect address is built from `APP_ORIGIN`, so the two must match exactly. Google signs a person in to an existing account only when that account's email is verified. Anyone else sees a message asking them to sign in another way first and connect Google from the account page. People who join with Google have no mobile number on their account; delivery addresses still carry their own number.
 - **Cloudinary.** Copy the cloud name, API key and API secret from **Settings**, then **API Keys**. There's nothing else to configure, because the server signs each upload.
 - **Razorpay.** Add the key ID and secret from the dashboard. Create a webhook pointing at `https://YOUR_DOMAIN/api/payments/razorpay/webhook` with a secret of your choice. Subscribe to `payment.authorized`, `payment.captured`, `payment.failed`, `refund.processed` and `refund.failed`.
@@ -355,6 +359,7 @@ These must run in production:
 | Expire abandoned Razorpay checkouts and release their stock | Every minute | Daily, 02:30 IST | `/api/cron/expire-reservations` | `npm run reservations:expire` |
 | Delete expired data | Daily | Daily, 03:00 IST | `/api/cron/retention` | `npm run retention:run` |
 | Publish approved scheduled changes | Every minute | Daily, 06:00 IST | `/api/cron/publish-scheduled` | `npm run approvals:publish` |
+| Send family tab statements | Monthly, on the 1st | 1st of the month, 06:00 IST | `/api/cron/tab-statements` | `npm run tabs:statements` |
 
 On Vercel, `vercel.json` schedules these automatically on production deployments, using `CRON_SECRET`. Previews don't run crons. Hobby may run each job up to 59 minutes after its scheduled time.
 
@@ -380,7 +385,7 @@ On other hosts, run the npm scripts from cron instead.
 ## Security
 
 - **Never commit secrets.** Git ignores `.env` and every other `.env.*` file except `.env.example`. Keep production values in your host's secret settings.
-- **Sessions.** better-auth stores sessions in the database and sets signed, HTTP-only, SameSite=Lax cookies. Every session, staff included, lasts 7 days. Deactivating a user or revoking their sessions takes effect on the next request.
+- **Sessions.** better-auth stores sessions in the database and sets signed, HTTP-only, SameSite=Lax cookies. Every session, staff included, lasts 30 days and renews itself once a day while in use. Deactivating a user or revoking their sessions takes effect on the next request.
 - **One sign-in for everyone.** Every account holds the customer role. Staff hold one extra role, sign in on `/login` like any customer, and open their workspace from the top-right account menu. Staff pages have their own header, with a search that finds settings, actions and pages (Ctrl K) instead of products. Mock OTP therefore also opens staff workspaces, which is one more reason to remove it before launch.
 - **Every protected page, action, API route and chat poll checks the session and permissions on the server.** Form posts and chat posts from other sites are rejected.
 - **Rate limits.** Sign-in, OTP, chat and search endpoints are rate limited.
@@ -391,7 +396,7 @@ On other hosts, run the npm scripts from cron instead.
 These still need work before a full launch:
 
 - **Evidence photos are public.** Cloudinary stores them as public images, and the app only guards the link. Complaint and delivery photos should use private assets with short-lived signed links.
-- **Deferred features.** GPS tracking, route optimisation, push notifications, advanced reporting, loyalty, subscriptions, custom roles and two-factor sign-in for super admins aren't built.
+- **Deferred features.** GPS tracking, route optimisation, push notifications (updates are in-app only), advanced reporting, loyalty points, paying a family tab online, subscriptions, custom roles and two-factor sign-in for super admins aren't built.
 
 ## Troubleshooting
 

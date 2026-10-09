@@ -3,7 +3,7 @@
 import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { ArrowUpRight, Clock, Mic, Search, TrendingUp, X } from "lucide-react";
+import { ArrowRight, Clock, Mic, Search, TrendingUp, X } from "lucide-react";
 import { formatPrice } from "@/lib/display";
 
 type Suggestion = {
@@ -321,7 +321,7 @@ export function SmartSearch({
               setOpen(false);
             }}
           >
-            {words.all} <ArrowUpRight size={16} aria-hidden="true" />
+            {words.all} <ArrowRight size={16} aria-hidden="true" />
           </Link>
         </div>
       )}

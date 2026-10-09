@@ -16,6 +16,7 @@ import { ChatConversation } from "../../src/lib/chat/models";
 import { QuoteBasket, QuoteRequest, School } from "../../src/lib/schools/models";
 import { istDatePlus, quoteTotals } from "../../src/lib/schools/quote-math";
 import { DEFAULT_TAX_PROFILE } from "../../src/lib/tax/gst";
+import { Family, SchoolKit, TabPayment } from "../../src/lib/family/models";
 import { OrderFeedback } from "../../src/lib/feedback/models";
 import { LEGAL_PAGES, POLICIES_HOME } from "../../src/lib/legal/pages";
 
@@ -198,6 +199,33 @@ test.beforeAll(async () => {
   // the quotation's view-only link, opened signed out
   samples["/q/[code]"] = `/q/${quote.shareToken}`;
   samples["/super-admin/schools/[id]"] = `/super-admin/schools/${school._id}`;
+  // a family with a child, and the demo orders in its spend, so /account/family has every part
+  const home = await Family.create({
+    name: "Sharma family",
+    ownerId: customer!._id,
+    adults: [customer!._id],
+    inviteToken: "layout-family-invite-000",
+    children: [{ name: "Aarav", school: "Demo School", className: "5", year: "2026-27" }],
+    // an open tab with a payment, so the tab card and /admin/tabs have something in them
+    tab: { status: "active", limitPaise: 500000, requestedAt: new Date(), decidedAt: new Date() },
+  });
+  await Order.updateMany({}, { familyId: home._id });
+  // Aarav's kit this year, and next year's out already, so the card shows the kit and the class question
+  const staff = (await User.findOne({ email: EMAILS.owner }))!;
+  await TabPayment.create({ familyId: home._id, amountPaise: 20000, method: "upi", reference: "412345678901", idempotencyKey: "layout-tab-payment", recordedBy: staff._id });
+  const kitPacks = await ProductVariant.find().limit(4);
+  for (const [className, year] of [["5", "2026-27"], ["6", "2027-28"]])
+    await SchoolKit.create({
+      school: "Demo School",
+      className,
+      year,
+      status: "published",
+      publishedAt: new Date(),
+      updatedBy: staff._id,
+      items: kitPacks.map((pack) => ({ variantId: pack._id, quantity: 2 })),
+    });
+  // a signed-out visitor on the family invite link
+  samples["/family/[token]"] = `/family/${home.inviteToken}`;
 });
 test.afterAll(async () => {
   await mongoose.connection.dropDatabase();
@@ -296,6 +324,28 @@ test("every page holds its layout", async ({ browser }, info) => {
         path: `${out}/${info.project.name}${policy.href.replace(/\//g, "_")}_mr.png`,
         fullPage: true,
       });
+  }
+  expect(report).toEqual({});
+});
+
+// People who enlarge text (Android font scale, browser text size) still get a page that fits:
+// the shopping path at double-size text, checked the same way.
+test("the shopping path holds at 200% text", async ({ browser }, info) => {
+  test.setTimeout(5 * 60_000);
+  const report: Record<string, string[]> = {};
+  for (const [who, paths] of [
+    ["guest", ["/", "/catalog", samples["/products/[slug]"], "/cart"]],
+    ["customer", ["/checkout", "/account", "/account/orders"]],
+  ] as const) {
+    const page = await signedIn(browser, who, info.project.use);
+    for (const path of paths) {
+      await page.goto(path);
+      await page.addStyleTag({ content: "html { font-size: 200%; }" });
+      await page.waitForLoadState("networkidle", { timeout: 5000 }).catch(() => {});
+      const problems = await page.evaluate(layoutProblems);
+      if (problems.length) report[path] = problems;
+      if (out) await page.screenshot({ path: `${out}/${info.project.name}-200${path.replace(/[/[\]]+/g, "_")}.png` });
+    }
   }
   expect(report).toEqual({});
 });

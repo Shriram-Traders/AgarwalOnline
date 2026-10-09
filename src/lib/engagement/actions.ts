@@ -31,7 +31,8 @@ export async function notificationAction(
     await markNotification(user.id, {
       notificationId: form.get("notificationId") || undefined,
     });
-    revalidatePath("/account/notifications");
+    // the header bell and the You tab carry the unread count on every page
+    revalidatePath("/", "layout");
     return { success: "Notifications updated." };
   } catch {
     return { error: "Unable to update notifications." };

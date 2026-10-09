@@ -1,6 +1,6 @@
 import Link from "next/link";
 import {
-  ArrowUpRight,
+  ChevronRight,
   Headphones,
   MapPinned,
   PackageCheck,
@@ -10,6 +10,7 @@ import {
   Bell,
   School,
   ShieldCheck,
+  UsersRound,
 } from "lucide-react";
 import { requirePage } from "@/lib/auth/session";
 import { hasPermission, staffHome } from "@/lib/auth/permissions";
@@ -115,7 +116,7 @@ export default async function Account({
                 {customerStage(customerOverview[0], locale).label} ·{" "}
                 {customerOverview[0].deliveryDate ? dayLabel(customerOverview[0].deliveryDate) : ""}
               </span>
-              <ArrowUpRight size={20} />
+              <ChevronRight size={20} />
             </Link>
           )}
           <section className="account-history" aria-labelledby="history-title">
@@ -147,6 +148,12 @@ export default async function Account({
                 mr ? "मागोवा, रद्द करणे किंवा मदत" : "Track, cancel or get help",
                 "/account/orders",
                 PackageCheck,
+              ],
+              [
+                mr ? "कुटुंब" : "Family",
+                mr ? "लोक, मुलांची शाळा आणि इथला खर्च" : "People, kids’ schools and what you spend here",
+                "/account/family",
+                UsersRound,
               ],
               [
                 mr ? "जतन केलेले पत्ते" : "Saved addresses",
@@ -220,7 +227,7 @@ export default async function Account({
               <strong>{String(label)}</strong>
               <small>{String(description)}</small>
             </span>
-            <ArrowUpRight size={18} />
+            <ChevronRight size={18} />
           </Link>
         ))}
       </div>

@@ -45,6 +45,8 @@ export const grants = {
     "refund:write",
     "promotion:write",
     "review:moderate",
+    // opening, limiting and closing family tabs, and voiding a tab payment
+    "tab:approve",
   ],
 } as const satisfies Record<Role, readonly string[]>;
 export type Permission = (typeof grants)[Role][number];

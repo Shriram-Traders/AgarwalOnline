@@ -1,13 +1,12 @@
 import Link from "next/link";
-import { Bell, CheckCheck, BellOff} from "lucide-react";
+import { Bell, BellOff } from "lucide-react";
 import { requirePage } from "@/lib/auth/session";
 import { Notification } from "@/lib/engagement/models";
-import { ActionForm } from "@/components/action-form";
-import { notificationAction } from "@/lib/engagement/actions";
 import { hasPermission } from "@/lib/auth/permissions";
 import { currentLocale } from "@/lib/i18n";
 import { pushPublicKey } from "@/lib/push/service";
 import { PushSettings } from "@/components/push-settings";
+import { MarkRead } from "@/components/mark-read";
 export const metadata = { title: "Notifications", robots: { index: false } };
 
 export default async function NotificationsPage() {
@@ -22,7 +21,7 @@ export default async function NotificationsPage() {
         <div>
           <span className="eyebrow">UPDATES</span>
           <h1>Notifications</h1>
-          <p>Orders, payments, delivery and support updates in one place.</p>
+          <p>Orders, family, payments, delivery and support updates in one place.</p>
         </div>
         <span className="live-chip">{unread} unread</span>
       </div>
@@ -33,11 +32,7 @@ export default async function NotificationsPage() {
         mr={(await currentLocale()) === "mr"}
         staff={hasPermission(user.roles, "order:manage")}
       />
-      {unread > 0 && (
-        <ActionForm action={notificationAction} submit="Mark all as read">
-          <CheckCheck size={18} />
-        </ActionForm>
-      )}
+      <MarkRead unread={unread} />
       <div className="notification-list">
         {notifications.map((item) => (
           <article

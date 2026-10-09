@@ -1,4 +1,5 @@
 import { GST_STATES } from "@/lib/tax/gst";
+import { PhoneInput } from "./phone-input";
 
 type SchoolDetails = {
   name?: string;
@@ -26,7 +27,7 @@ export function SchoolFields({ school = {} }: { school?: SchoolDetails }) {
       </label>
       <label>
         Phone <small>Optional</small>
-        <input name="phone" defaultValue={school.phone} inputMode="numeric" pattern="[0-9]{10}" maxLength={10} />
+        <PhoneInput defaultValue={school.phone} pattern="[0-9]{10}" />
       </label>
       <label>
         Email <small>Optional; the school office</small>

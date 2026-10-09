@@ -8,6 +8,7 @@ import { PromotionRedemption } from "../promotions/models";
 import { Notification, WishlistItem } from "../engagement/models";
 import { ProductReview } from "../reviews/models";
 import { UploadedEvidence } from "../evidence/models";
+import { Family } from "../family/models";
 
 /** Everything a customer can own. A Google account that owns any of it is never folded away. */
 const OWNED: [mongoose.Model<unknown>, string][] = [
@@ -20,6 +21,7 @@ const OWNED: [mongoose.Model<unknown>, string][] = [
   [ProductReview, "customerId"],
   [PromotionRedemption, "customerId"],
   [UploadedEvidence, "ownerId"],
+  [Family, "adults"],
 ];
 
 const accounts = () => mongoose.connection.collection("authAccounts");

@@ -1,6 +1,6 @@
 import { Fragment } from "react";
 import { notFound } from "next/navigation";
-import { formatPrice } from "@/lib/display";
+import { formatPrice, methodLabel } from "@/lib/display";
 import { StatusStrip } from "@/components/status-pill";
 import { PageHeading } from "@/components/page-heading";
 import Link from "next/link";
@@ -403,7 +403,7 @@ export default async function ManageOrder({
                   <td>{o.deliveryPaise ? formatPrice(o.deliveryPaise) : "Free"}</td>
                 </tr>
                 <tr className="order-total">
-                  <th scope="row" colSpan={2}>Total · {o.paymentMethod === "cod" ? "cash on delivery" : "paid online"}</th>
+                  <th scope="row" colSpan={2}>Total · {methodLabel(o.paymentMethod).toLowerCase()}</th>
                   <td>{formatPrice(o.totalPaise)}</td>
                 </tr>
                 {o.originalTotalPaise != null && (

@@ -26,6 +26,9 @@ export function CheckoutForm({
   idempotencyKey,
   onlineEnabled = false,
   coupons,
+  people,
+  defaultFor,
+  tab,
 }: {
   addresses: Option[];
   /** In time order; `label` is the whole "Today · 4:00 PM – 7:00 PM", `day` and `time` its parts. */
@@ -40,6 +43,11 @@ export function CheckoutForm({
   onlineEnabled?: boolean;
   /** The coupon preview, rendered on the server. */
   coupons?: React.ReactNode;
+  /** The buyer's family, adults then children; absent when they have none. */
+  people?: { id: string; label: string }[];
+  defaultFor?: string;
+  /** The family tab: what is left on it, or why it can't be used right now. */
+  tab?: { availablePaise: number; blocked?: string };
 }) {
   const [method, setMethod] = useState(
     defaultMethod === "razorpay" && onlineEnabled ? "razorpay" : "cod",
@@ -56,6 +64,8 @@ export function CheckoutForm({
   }));
   const fee = subtotal >= threshold ? 0 : (a?.fee ?? 0);
   const codBlocked = method === "cod" && a && (!a.codEnabled || subtotal + fee > a.codLimit);
+  const total = subtotal - promotionDiscount + fee;
+  const overTab = method === "tab" && tab && total > tab.availablePaise;
   return (
     <ActionForm
       action={checkoutAction}
@@ -67,7 +77,9 @@ export function CheckoutForm({
       submit={
         method === "cod"
           ? "Confirm Cash on Delivery order"
-          : "Reserve order & continue to payment"
+          : method === "tab"
+            ? "Put this order on the family tab"
+            : "Reserve order & continue to payment"
       }
     >
       <div className="checkout-fields">
@@ -120,21 +132,58 @@ export function CheckoutForm({
               <Link href="/account/support">ask the store</Link>.
             </p>
           )}
+          {people && (
+            <label>
+              Who is it for?
+              <select name="forId" defaultValue={defaultFor}>
+                {people.map((person) => (
+                  <option key={person.id} value={person.id}>
+                    {person.label}
+                  </option>
+                ))}
+                <option value="">Whole family</option>
+                <option value="private">Private (keep out of family spend)</option>
+              </select>
+              <small className="muted">Shows under this person in Family spend.</small>
+            </label>
+          )}
         </div>
         <div className="panel">
           <h2>Payment</h2>
-          <label>
-            Payment method
-            <select name="method" value={method} onChange={(e) => setMethod(e.target.value)}>
-              <option value="cod">Cash on Delivery</option>
-              {onlineEnabled && <option value="razorpay">Pay online with Razorpay</option>}
-            </select>
-          </label>
-          <p className="muted">
-            {method === "cod"
-              ? "Pay the delivery partner in cash when your order arrives."
-              : "Your items are held for 15 minutes while you complete payment."}
-          </p>
+          {/* every way to pay is visible at once, each with what it means */}
+          <fieldset className="day-picker pay-choices">
+            <legend>Payment method</legend>
+            {[
+              { value: "cod", label: "Cash on Delivery", note: "Pay the delivery partner in cash when your order arrives.", show: true },
+              { value: "razorpay", label: "Pay online with Razorpay", note: "Your items are held for 15 minutes while you complete payment.", show: onlineEnabled },
+              {
+                value: "tab",
+                label: `Add to family tab (${formatPrice(tab?.availablePaise ?? 0)} left)`,
+                note: "Nothing to pay now. It goes on the family tab, settled with the store once a month.",
+                show: Boolean(tab && !tab.blocked),
+              },
+            ]
+              .filter((choice) => choice.show)
+              .map((choice) => (
+                <label key={choice.value} className="checkbox-label">
+                  <input
+                    type="radio"
+                    name="method"
+                    value={choice.value}
+                    checked={method === choice.value}
+                    onChange={() => setMethod(choice.value)}
+                  />
+                  {choice.label}
+                  <small>{choice.note}</small>
+                </label>
+              ))}
+          </fieldset>
+          {tab?.blocked && <p className="muted">{tab.blocked}</p>}
+          {overTab && (
+            <p className="error-message">
+              This basket is over what is left on your family tab ({formatPrice(tab.availablePaise)}).
+            </p>
+          )}
           {codBlocked && (
             <p className="error-message">Cash on Delivery is unavailable for this order.</p>
           )}
@@ -155,8 +204,8 @@ export function CheckoutForm({
           Delivery <strong>{fee ? formatPrice(fee) : "FREE"}</strong>
         </p>
         <h3 className="summary-total">
-          {method === "cod" ? "Total to collect" : "Total to pay"}:{" "}
-          {formatPrice(subtotal - promotionDiscount + fee)}
+          {method === "cod" ? "Total to collect" : method === "tab" ? "Total on the tab" : "Total to pay"}:{" "}
+          {formatPrice(total)}
         </h3>
         <label className="checkbox-label">
           {/* ticking it agrees to this Terms version, which the order keeps */}
@@ -164,7 +213,9 @@ export function CheckoutForm({
           <span>
             {method === "cod"
               ? "I confirm this order, will pay cash on delivery, and agree to the "
-              : "I confirm this order, will complete payment online, and agree to the "}
+              : method === "tab"
+                ? "I confirm this order on the family tab and agree to the "
+                : "I confirm this order, will complete payment online, and agree to the "}
             <LegalText newTab text="[Terms & Conditions](/p/terms-and-conditions) and [Refunds & Cancellations](/p/refunds-and-cancellations) policy." />
           </span>
         </label>

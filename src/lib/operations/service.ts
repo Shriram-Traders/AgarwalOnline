@@ -53,7 +53,7 @@ type OrderDoc = InstanceType<typeof Order>;
 type OrderLine = PackedLine & { variantId: unknown };
 /** The roles that can refund an online payment (the owner's); only they are told one is owed. */
 const REFUNDERS = roles.filter((role) => hasPermission([role], "refund:write"));
-async function actor(id: string, permission: Permission) {
+export async function actor(id: string, permission: Permission) {
   await connectDB();
   const user = await User.findOne({ _id: objectId.parse(id), active: true });
   if (!user) throw Error("UNAUTHENTICATED");
@@ -1292,6 +1292,11 @@ export async function completeDelivery(actorId: string, input: unknown) {
         session,
       );
     }
+    if (current.paymentMethod === "tab") {
+      // "paid" here means charged to the family's tab; the family settles the tab with the store
+      current.paymentStatus = "paid";
+      await timeline(current._id, actorId, "payment", "pending", "paid", session);
+    }
     current.deliveryStatus = "delivered";
     await current.save({ session });
     await timeline(
@@ -1307,8 +1312,8 @@ export async function completeDelivery(actorId: string, input: unknown) {
         userId: current.customerId,
         type: "delivery",
         title: "Order delivered",
-        body: `${current.number} was delivered successfully.`,
-        href: `/account/orders/${current._id}`,
+        body: `${current.number} was delivered. How was it? Rate your items in one tap.`,
+        href: `/account/orders/${current._id}#rate`,
       },
       session,
     );

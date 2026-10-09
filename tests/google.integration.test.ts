@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import mongoose from "mongoose";
+import nodemailer from "nodemailer";
 import { makeSignature } from "better-auth/crypto";
 import { connectDB } from "../src/lib/db/connect";
 import { User } from "../src/lib/db/models";
@@ -18,8 +19,8 @@ const CLIENT_ID = "test-google-client.apps.googleusercontent.com";
 let googleIdentity = { sub: "", email: "", name: "" };
 const b64 = (value: object) => Buffer.from(JSON.stringify(value)).toString("base64url");
 const realFetch = globalThis.fetch;
-/** Emails handed to Resend during the test (only Resend's server is faked). */
-const sentMail: { from: string; to: string[]; subject: string; text: string; html: string }[] = [];
+/** Emails handed to the shop mailbox during the test (only the SMTP server is faked). */
+const sentMail: { from: string; to: string; subject: string; text: string; html: string }[] = [];
 
 describe.skipIf(!uri)("Google sign-in keeps a customer's data", () => {
   beforeAll(async () => {
@@ -32,15 +33,15 @@ describe.skipIf(!uri)("Google sign-in keeps a customer's data", () => {
       MOCK_OTP_CODE: "246810",
       GOOGLE_CLIENT_ID: CLIENT_ID,
       GOOGLE_CLIENT_SECRET: "test-google-secret",
-      RESEND_API_KEY: "re_test_key",
+      SMTP_USER: "orders@example.test",
+      SMTP_PASS: "test-mailbox-password",
       EMAIL_FROM: "Agarwal General Stores <orders@example.test>",
     });
+    vi.spyOn(nodemailer, "createTransport").mockReturnValue({
+      sendMail: async (mail: (typeof sentMail)[number]) => sentMail.push(mail),
+    } as never);
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
       const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
-      if (url === "https://api.resend.com/emails") {
-        sentMail.push(JSON.parse(String(init?.body)));
-        return Response.json({ id: "email-test" });
-      }
       if (!url.startsWith("https://oauth2.googleapis.com/token")) return realFetch(input, init);
       const now = Math.floor(Date.now() / 1000);
       const idToken = `${b64({ alg: "RS256", typ: "JWT" })}.${b64({
@@ -184,7 +185,7 @@ describe.skipIf(!uri)("Google sign-in keeps a customer's data", () => {
     expect(await User.countDocuments()).toBe(1);
   });
 
-  it("sends the confirmation email through Resend, and its link confirms the address", async () => {
+  it("sends the confirmation email from the shop mailbox, and its link confirms the address", async () => {
     sentMail.length = 0;
     const shopper = await normalSignUp("9000000055", "confirm.me@gmail.test");
     await getAuth().api.sendVerificationEmail({
@@ -193,7 +194,7 @@ describe.skipIf(!uri)("Google sign-in keeps a customer's data", () => {
     });
     expect(sentMail).toHaveLength(1);
     const [mail] = sentMail;
-    expect(mail.to).toEqual(["confirm.me@gmail.test"]);
+    expect(mail.to).toBe("confirm.me@gmail.test");
     expect(mail.from).toBe("Agarwal General Stores <orders@example.test>");
     expect(mail.subject).toBe("Confirm your email for Agarwal General Stores");
     const link = mail.text.match(/https?:\/\/\S+/)![0];

@@ -3,6 +3,7 @@ import { MapPinPlus } from "lucide-react";
 import { Address } from "@/lib/commerce/models";
 import { ServiceArea } from "@/lib/db/models";
 import { addressAction } from "@/lib/commerce/actions";
+import { PhoneInput } from "@/components/phone-input";
 import { ActionForm } from "@/components/action-form";
 import Link from "next/link";
 import { User } from "@/lib/db/models";
@@ -56,12 +57,7 @@ export default async function Addresses({
                 </label>
                 <label>
                   Mobile number
-                  <input
-                    name="phone"
-                    defaultValue={a.phone}
-                    pattern="[6-9][0-9]{9}"
-                    required
-                  />
+                  <PhoneInput defaultValue={a.phone} required />
                 </label>
                 <label>
                   House, building, street
@@ -126,12 +122,7 @@ export default async function Addresses({
               </label>
               <label>
                 Mobile number
-                <input
-                  name="phone"
-                  type="tel"
-                  inputMode="numeric"
-                  pattern="[6-9][0-9]{9}"
-                  maxLength={10}
+                <PhoneInput
                   autoComplete="tel-national"
                   defaultValue={user.phone}
                   required

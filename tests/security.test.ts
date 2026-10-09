@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { parseEnv } from "../src/lib/env";
 import { hasPermission, assertPermission } from "../src/lib/auth/permissions";
 import { digest, otpDigest, equalHash, token } from "../src/lib/auth/crypto";
+import { tenDigitMobile } from "../src/lib/auth/otp";
 const env = {
   MONGODB_URI: "mongodb://localhost/test",
   APP_ORIGIN: "https://example.test",
@@ -17,6 +18,12 @@ describe("security boundaries", () => {
     const prod = { ...env, NODE_ENV: "production", MOCK_OTP: "true", MOCK_OTP_CODE: "000000" };
     expect(() => parseEnv(prod)).toThrow();
     expect(parseEnv({ ...prod, ALLOW_MOCK_OTP_IN_PRODUCTION: "true" }).MOCK_OTP_CODE).toBe("000000");
+  });
+  it("needs the whole mailbox to send email, but a leftover sender alone still starts", () => {
+    const from = { EMAIL_FROM: "Agarwal <orders@example.test>" };
+    expect(() => parseEnv({ ...env, ...from, SMTP_USER: "orders@example.test" })).toThrow("configured together");
+    expect(parseEnv({ ...env, ...from }).EMAIL_FROM).toBe(from.EMAIL_FROM);
+    expect(parseEnv({ ...env, ...from, SMTP_USER: "orders@example.test", SMTP_PASS: "x" }).SMTP_PASS).toBe("x");
   });
   it("treats blank optional values, as .env.example ships them, as not set", () => {
     const blank = Object.fromEntries(
@@ -77,5 +84,17 @@ describe("security boundaries", () => {
     expect(a.length).toBeGreaterThan(40);
     expect(a).not.toBe(token());
     expect(digest(a)).not.toBe(a);
+  });
+  it("reads a typed or pasted mobile number as ten digits", () => {
+    expect(tenDigitMobile("98765abc43210")).toBe("9876543210");
+    expect(tenDigitMobile("+91 98765 43210")).toBe("9876543210");
+    expect(tenDigitMobile("09876543210")).toBe("9876543210");
+    expect(tenDigitMobile("9876543210 1")).toBe("9876543210");
+    // typed one key at a time, "+91 " plus the number still ends as the ten digits
+    let typed = "";
+    for (const key of "+91 98765 43210") typed = tenDigitMobile(typed + key);
+    expect(typed).toBe("9876543210");
+    // a number that starts with 91 keeps it
+    expect(tenDigitMobile("9123456789")).toBe("9123456789");
   });
 });

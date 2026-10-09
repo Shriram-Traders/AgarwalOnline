@@ -167,7 +167,7 @@ test("a new shopper signs up and adds an address from checkout popups, then uses
   // a code that goes on closes the popup, and the line shows the saving
   await expect(coupons).toBeHidden();
   const applied = offers.getByRole("button", { name: /LOCAL10 applied/ });
-  await expect(applied).toContainText("You save ₹54.5");
+  await expect(applied).toContainText("You save ₹54.50");
   await expect(page.locator(".savings-line", { hasText: "Neighbourhood welcome" })).toBeVisible();
   await offers.scrollIntoViewIfNeeded();
   await shot(page, "basket-coupon-applied");

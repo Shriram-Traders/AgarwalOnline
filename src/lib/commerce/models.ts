@@ -179,7 +179,8 @@ const orderSchema = new Schema(
       ],
       default: "unassigned",
     },
-    paymentMethod: { type: String, enum: ["cod", "razorpay"], required: true },
+    // "tab": on the family's monthly khata, settled with the store later
+    paymentMethod: { type: String, enum: ["cod", "razorpay", "tab"], required: true },
     codStatus: {
       type: String,
       enum: ["uncollected", "collected", "reconciled"],
@@ -190,10 +191,22 @@ const orderSchema = new Schema(
     // the Terms version ticked at checkout (src/lib/legal/version.ts); orders from before it was kept have none
     termsVersion: String,
     termsAcceptedAt: Date,
+    // set when the buyer is in a family and did not keep the order private
+    familyId: { type: Schema.Types.ObjectId, ref: "Family" },
+    // who in the family it was for, as named when ordered; missing means everyone
+    forPerson: {
+      personId: Schema.Types.ObjectId,
+      name: String,
+      child: Boolean,
+    },
   },
   opts,
 );
 orderSchema.index({ customerId: 1, idempotencyKey: 1 }, { unique: true });
+orderSchema.index(
+  { familyId: 1, createdAt: -1 },
+  { partialFilterExpression: { familyId: { $exists: true } } },
+);
 orderSchema.index({ customerId: 1, createdAt: -1 });
 orderSchema.index({ assignedTo: 1, deliveryStatus: 1 });
 const reservationSchema = new Schema(

@@ -20,8 +20,10 @@ const schema = z
       .regex(/^\d{6}$/)
       .default("246810"),
     CRON_SECRET: z.string().min(16).optional(),
-    // Resend for email verification; both blank sends nothing in production and logs emails in development
-    RESEND_API_KEY: z.string().optional(),
+    // the shop's Hostinger mailbox, for email confirmation and quotations; all blank sends nothing in
+    // production and logs emails in development
+    SMTP_USER: z.string().optional(),
+    SMTP_PASS: z.string().optional(),
     EMAIL_FROM: z.string().optional(),
     // Google sign-in; both blank hides the button
     GOOGLE_CLIENT_ID: z.string().optional(),
@@ -77,11 +79,12 @@ const schema = z
         message: "Production requires HTTPS",
         path: ["APP_ORIGIN"],
       });
-    if (Boolean(env.RESEND_API_KEY) !== Boolean(env.EMAIL_FROM))
+    // EMAIL_FROM on its own is fine: it is left over from Resend on existing deployments
+    if ((env.SMTP_USER || env.SMTP_PASS) && !(env.SMTP_USER && env.SMTP_PASS && env.EMAIL_FROM))
       ctx.addIssue({
         code: "custom",
-        message: "Resend API key and sender address must be configured together",
-        path: ["RESEND_API_KEY"],
+        message: "Mailbox address, mailbox password and sender must be configured together",
+        path: ["SMTP_USER"],
       });
     if (Boolean(env.GOOGLE_CLIENT_ID) !== Boolean(env.GOOGLE_CLIENT_SECRET))
       ctx.addIssue({

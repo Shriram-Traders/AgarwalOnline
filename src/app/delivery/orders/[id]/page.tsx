@@ -78,7 +78,9 @@ export default async function DeliveryOrder({
           <h2>
             {o.paymentMethod === "cod"
               ? `Collect ₹${o.totalPaise / 100}`
-              : "Prepaid order"}
+              : o.paymentMethod === "tab"
+                ? "Family tab · collect nothing"
+                : "Prepaid order"}
           </h2>
           {o.paymentMethod === "cod" && o.originalTotalPaise != null && (
             <p className="muted">

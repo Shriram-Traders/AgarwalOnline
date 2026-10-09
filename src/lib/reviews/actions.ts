@@ -20,10 +20,17 @@ export async function reviewAction(
     const rating = z.coerce.number().int().min(1).max(5).parse(form.get("rating"));
     const title = z.string().trim().max(80).parse(form.get("title") ?? "");
     const body = z.string().trim().max(1000).parse(form.get("body") ?? "");
-    const status = await saveReview(user.id, { productId, rating, title, body });
+    // a one-tap star rating sends no title or body, so it must not wipe words written earlier
+    const status = await saveReview(user.id, {
+      productId,
+      rating,
+      ...(form.has("title") && { title }),
+      ...(form.has("body") && { body }),
+    });
     if (!status)
       return { error: "Reviews are available after this product is delivered." };
     revalidatePath(`/products/${form.get("slug")}`);
+    revalidatePath("/account/orders/[id]", "page");
     // a review the shop hid stays hidden when its writer edits it
     return {
       success:

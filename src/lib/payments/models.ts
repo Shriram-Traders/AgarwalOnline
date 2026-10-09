@@ -62,7 +62,8 @@ const refundSchema = new Schema(
     externalReference: String,
     amountPaise: { type: Number, required: true, min: 1 },
     reason: { type: String, required: true },
-    mode: { type: String, enum: ["razorpay", "manual"], required: true },
+    // "tab": taken off what the family owes on its tab, never paid out as well
+    mode: { type: String, enum: ["razorpay", "manual", "tab"], required: true },
     status: {
       type: String,
       enum: ["requested", "processing", "processed", "failed"],

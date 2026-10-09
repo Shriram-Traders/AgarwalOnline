@@ -41,6 +41,7 @@ import { taxProfile } from "@/lib/tax/profile";
 import { settingsHub } from "@/lib/admin/settings-summary";
 import { SettingsHub } from "./_settings/settings-hub";
 import { GST_STATES } from "@/lib/tax/gst";
+import { PhoneInput } from "@/components/phone-input";
 export const metadata = { title: "Store settings", robots: { index: false } };
 
 function TimeSelect({ name, label, defaultValue }: { name: string; label: string; defaultValue: number }) {
@@ -646,12 +647,9 @@ export default async function StoreSettings({
               <div className="staff-form-grid">
                 <label>
                   Phone <small>Shown on quotations and the Contact page</small>
-                  <input
-                    name="phone"
+                  <PhoneInput
                     defaultValue={business.phone ?? ""}
-                    inputMode="numeric"
                     pattern="[0-9]{10}"
-                    maxLength={10}
                     autoComplete="off"
                   />
                 </label>
