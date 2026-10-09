@@ -2,18 +2,10 @@ import Image from "next/image";
 import Link from "next/link";
 import {
   ArrowRight,
-  BadgePercent,
   Clock3,
-  Compass,
-  Flame,
-  Heart,
-  LayoutGrid,
-  RotateCcw,
-  Sparkles,
   Store,
   Truck,
   Wallet,
-  type LucideIcon,
 } from "lucide-react";
 import { AisleIcon } from "@/components/aisle-icon";
 import { deliveryRules } from "@/lib/commerce/service";
@@ -183,18 +175,19 @@ function AisleTile({
 
 function Section({
   id,
-  icon: Icon,
   title,
   subtitle,
+  subtitleLang,
   link,
   linkLabel,
   count,
   children,
 }: {
   id: string;
-  icon: LucideIcon;
   title: string;
   subtitle: string;
+  /** the subtitle is usually the other language's name for the section */
+  subtitleLang?: string;
   link: string;
   linkLabel: string;
   count?: number;
@@ -204,13 +197,10 @@ function Section({
     <section className="section" aria-labelledby={id}>
       <div className="section-heading">
         <div>
-          <h2 id={id}>
-            <span className="section-icon">
-              <Icon aria-hidden="true" />
-            </span>
-            {title}
-          </h2>
-          <span className="muted">{subtitle}</span>
+          <h2 id={id}>{title}</h2>
+          <span className="muted" lang={subtitleLang}>
+            {subtitle}
+          </span>
         </div>
         <Link href={link}>
           {linkLabel}
@@ -407,7 +397,6 @@ export default async function Home() {
         {buyAgainRow.length > 0 && (
           <Section
             id="again-title"
-            icon={RotateCcw}
             title={t.usualsTitle}
             subtitle={t.usuals}
             link="/account/orders"
@@ -427,9 +416,9 @@ export default async function Home() {
         )}
         <Section
           id="aisles-title"
-          icon={LayoutGrid}
           title={t.aisles}
           subtitle={t.aislesMr}
+          subtitleLang={other}
           link="/catalog"
           linkLabel={t.seeAll}
           count={categories.length}
@@ -456,9 +445,9 @@ export default async function Home() {
         {popular.length > 0 && (
           <Section
             id="popular-title"
-            icon={Flame}
             title={t.popular}
             subtitle={t.popularMr}
+            subtitleLang={other}
             link="/catalog"
             linkLabel={t.seeAll}
             count={products.length}
@@ -504,9 +493,9 @@ export default async function Home() {
         {savingsRow.length > 0 && (
           <Section
             id="savings-title"
-            icon={BadgePercent}
             title={t.savings}
             subtitle={t.savingsMr}
+            subtitleLang={other}
             link="/catalog?sort=discount"
             linkLabel={t.seeAll}
             count={savings.length}
@@ -565,9 +554,9 @@ export default async function Home() {
         {newRow.length > 0 && (
           <Section
             id="new-title"
-            icon={Sparkles}
             title={t.newIn}
             subtitle={t.newInMr}
+            subtitleLang={other}
             link="/catalog?sort=new"
             linkLabel={t.seeAll}
           >
@@ -581,9 +570,9 @@ export default async function Home() {
         {user && pickedRow.length > 0 && (
           <Section
             id="picked-title"
-            icon={Heart}
             title={t.picked}
             subtitle={t.pickedMr}
+            subtitleLang={other}
             link="/catalog"
             linkLabel={t.seeAll}
           >
@@ -598,13 +587,10 @@ export default async function Home() {
           <section className="section" aria-labelledby="hubs-title">
             <div className="section-heading">
               <div>
-                <h2 id="hubs-title">
-                  <span className="section-icon">
-                    <Compass aria-hidden="true" />
-                  </span>
-                  {t.hubs}
-                </h2>
-                <span className="muted">{t.hubsMr}</span>
+                <h2 id="hubs-title">{t.hubs}</h2>
+                <span className="muted" lang={other}>
+                  {t.hubsMr}
+                </span>
               </div>
             </div>
             <div className="hubs">

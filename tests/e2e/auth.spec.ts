@@ -69,7 +69,9 @@ test("signs up by OTP with a password and lands on the account", async ({ page }
 
 test("mobile number and password: rejects a wrong password, accepts the right one", async ({ page }) => {
   await page.goto("/login");
-  await page.getByLabel("Mobile number").fill(CUSTOMER.phone);
+  // letters never get in, and a "+91 " typed in front comes off
+  await page.getByLabel("Mobile number").pressSequentially(`+91 ${CUSTOMER.phone.slice(0, 5)}abc${CUSTOMER.phone.slice(5)}`);
+  await expect(page.getByLabel("Mobile number")).toHaveValue(CUSTOMER.phone);
   await page.getByLabel("Password", { exact: true }).fill("not-the-password-1");
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(page.locator(".error-message")).toContainText("Invalid mobile number or password.");
@@ -84,6 +86,12 @@ test("mobile number and password: rejects a wrong password, accepts the right on
 test("email and password signs a customer in", async ({ page }) => {
   await page.goto("/login");
   await page.getByRole("button", { name: "Email", exact: true }).click();
+  // the browser stops a malformed address before it is sent, and marks the box
+  await page.getByLabel("Email address").fill("not-an-email");
+  await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
+  await page.getByRole("button", { name: "Sign in with email" }).click();
+  await expect(page).toHaveURL("/login");
+  expect(await page.getByLabel("Email address").evaluate((box) => box.matches(":user-invalid"))).toBe(true);
   await page.getByLabel("Email address").fill(CUSTOMER.email);
   await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
   await page.getByRole("button", { name: "Sign in with email" }).click();
@@ -137,7 +145,7 @@ test("staff can also sign in by OTP, and /staff/login now redirects", async ({ p
   await page.getByLabel("Verification code").fill(OTP);
   await page.getByRole("button", { name: "Verify & continue" }).click();
   await expect(page).toHaveURL("/admin");
-  // staff keep the ordinary 7-day session: a sign-in from 13 hours ago still opens the workspace
+  // staff keep the ordinary 30-day session: a sign-in from 13 hours ago still opens the workspace
   const staffId = (await User.findOne({ phone: STAFF.phone }))!._id;
   await mongoose.connection
     .collection("authSessions")
@@ -186,6 +194,12 @@ test("Google errors come back as plain messages, and the landing route needs a s
 test("a signed-in customer can connect Google from the account page", async ({ page }) => {
   await page.goto("/login");
   await page.getByRole("button", { name: "Email", exact: true }).click();
+  // the browser stops a malformed address before it is sent, and marks the box
+  await page.getByLabel("Email address").fill("not-an-email");
+  await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
+  await page.getByRole("button", { name: "Sign in with email" }).click();
+  await expect(page).toHaveURL("/login");
+  expect(await page.getByLabel("Email address").evaluate((box) => box.matches(":user-invalid"))).toBe(true);
   await page.getByLabel("Email address").fill(CUSTOMER.email);
   await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
   await page.getByRole("button", { name: "Sign in with email" }).click();
@@ -274,6 +288,12 @@ test("the address form pre-fills the account number, and a Google-only account c
   // a customer with a sign-in number sees it pre-filled, and no extra box
   await page.goto("/login");
   await page.getByRole("button", { name: "Email", exact: true }).click();
+  // the browser stops a malformed address before it is sent, and marks the box
+  await page.getByLabel("Email address").fill("not-an-email");
+  await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
+  await page.getByRole("button", { name: "Sign in with email" }).click();
+  await expect(page).toHaveURL("/login");
+  expect(await page.getByLabel("Email address").evaluate((box) => box.matches(":user-invalid"))).toBe(true);
   await page.getByLabel("Email address").fill(CUSTOMER.email);
   await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
   await page.getByRole("button", { name: "Sign in with email" }).click();
@@ -327,6 +347,12 @@ test("the account page shows whether the email is confirmed and sends a confirma
   await User.updateOne({ phone: CUSTOMER.phone }, { $set: { emailVerified: false } });
   await page.goto("/login");
   await page.getByRole("button", { name: "Email", exact: true }).click();
+  // the browser stops a malformed address before it is sent, and marks the box
+  await page.getByLabel("Email address").fill("not-an-email");
+  await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
+  await page.getByRole("button", { name: "Sign in with email" }).click();
+  await expect(page).toHaveURL("/login");
+  expect(await page.getByLabel("Email address").evaluate((box) => box.matches(":user-invalid"))).toBe(true);
   await page.getByLabel("Email address").fill(CUSTOMER.email);
   await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
   await page.getByRole("button", { name: "Sign in with email" }).click();

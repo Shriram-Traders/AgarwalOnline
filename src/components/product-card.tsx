@@ -29,7 +29,7 @@ export function ProductCard({
           {image ? (
             <Image
               src={image}
-              alt={`Representative ${p.name.en.toLowerCase()} photography`}
+              alt="" /* the name is the next line of the link; the product page carries the photo note */
               fill
               sizes="(max-width: 760px) 45vw, 220px"
               loading={eager ? "eager" : "lazy"}
@@ -43,7 +43,8 @@ export function ProductCard({
         </div>
         {/* the shopper's chosen language only; the product page shows both names */}
         <h3 lang={locale}>{p.name[locale]}</h3>
-        {p.reviewCount > 0 && (
+        {/* one or two reviews say little; the card shows a rating from three */}
+        {p.reviewCount >= 3 && (
           <span
             className="product-rating"
             aria-label={`${p.rating.toFixed(1)} out of 5 from ${p.reviewCount} reviews`}

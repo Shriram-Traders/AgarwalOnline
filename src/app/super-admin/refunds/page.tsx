@@ -4,7 +4,7 @@ import { Order } from "@/lib/commerce/models";
 import { Refund } from "@/lib/payments/models";
 import { ActionForm } from "@/components/action-form";
 import { refundAction } from "@/lib/payments/refund-actions";
-import { displayStatus, formatPrice} from "@/lib/display";
+import { displayStatus, formatPrice, methodLabel } from "@/lib/display";
 import { MoneyInput } from "@/components/money-input";
 import { PageHeading } from "@/components/page-heading";
 export const metadata = { title: "Refunds", robots: { index: false } };
@@ -50,7 +50,7 @@ export default async function RefundsPage({
                 {orders.map((order) => (
                   <option key={String(order._id)} value={String(order._id)}>
                     {order.number} · {formatPrice(order.totalPaise)} ·{" "}
-                    {order.paymentMethod}
+                    {methodLabel(order.paymentMethod)}
                   </option>
                 ))}
               </select>
@@ -88,12 +88,16 @@ export default async function RefundsPage({
                   confirmMessage={
                     refund.mode === "manual"
                       ? "This marks the refund as paid to the customer. It cannot be undone."
-                      : "This sends the refund to Razorpay, which pays the customer. It cannot be undone."
+                      : refund.mode === "tab"
+                        ? "This takes the amount off what the family owes on its tab. It cannot be undone."
+                        : "This sends the refund to Razorpay, which pays the customer. It cannot be undone."
                   }
                   submit={
                     refund.mode === "manual"
                       ? "Mark refund paid"
-                      : "Send to Razorpay"
+                      : refund.mode === "tab"
+                        ? "Credit the family tab"
+                        : "Send to Razorpay"
                   }
                 >
                   <input type="hidden" name="operation" value="process" />

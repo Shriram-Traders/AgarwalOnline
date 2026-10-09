@@ -11,6 +11,7 @@ import * as lists from "../src/lib/lists/service";
 describe("return path after signing in from a list link", () => {
   it("accepts only a shared-list path on this site", () => {
     expect(listPath("/lists/abcdefghijklmnopqrstuvwx")).toBe("/lists/abcdefghijklmnopqrstuvwx");
+    expect(listPath("/family/abcdefghijklmnopqrstuvwx")).toBe("/family/abcdefghijklmnopqrstuvwx");
     for (const bad of [
       "https://evil.test/lists/abcdefghijklmnopqrstuvwx",
       "//evil.test/lists/abcdefghijklmnopqrstuvwx",
@@ -18,6 +19,8 @@ describe("return path after signing in from a list link", () => {
       "/lists/short",
       "/account",
       "/groups/abcdefghijklmnopqrstuvwx",
+      "/family/short",
+      "/account/family",
       "/admin/abcdefghijklmnopqrstuvwx",
       null,
     ])

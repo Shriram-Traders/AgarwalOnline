@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowUpRight, ChevronDown, Heart, MapPin, UserRound } from "lucide-react";
+import { ArrowRight, Bell, ChevronDown, Heart, MapPin, UserRound } from "lucide-react";
 import { SmartSearch } from "./smart-search";
 import { MobileNav } from "./mobile-nav";
 import { LocaleToggle } from "./locale-toggle";
@@ -7,6 +7,7 @@ import { AccountMenu, type MenuLink } from "./account-menu";
 import { staffRoleOf, type Role } from "@/lib/auth/permissions";
 import { currentUser } from "@/lib/auth/session";
 import { Promotion, PromotionRedemption } from "@/lib/promotions/models";
+import { Notification } from "@/lib/engagement/models";
 import { deliveryRules } from "@/lib/commerce/service";
 import { CartBar } from "./cart-bar";
 import { ShopAssistant } from "./shop-assistant";
@@ -59,12 +60,13 @@ export async function Header({
     }).select("code minimumSubtotalPaise"),
   ]);
   // both depend on who's signed in, not on each other: ask at the same time
-  const [usedWelcome, schoolMember] = user
+  const [usedWelcome, schoolMember, unread] = user
     ? await Promise.all([
         offer ? PromotionRedemption.exists({ promotionId: offer._id, customerId: user.id }) : null,
         SchoolMember.exists({ userId: user.id }),
+        Notification.countDocuments({ userId: user.id, readAt: null }),
       ])
-    : [null, null];
+    : [null, null, 0];
   // someone who already used it isn't told about it again
   const welcome = usedWelcome ? null : offer;
   const text = copy[locale];
@@ -93,7 +95,7 @@ export async function Header({
           </p>
           <div className="top-strip-links">
             <Link href="/serviceability">
-              {text.sameDay(cutoff)} <ArrowUpRight size={14} aria-hidden="true" />
+              {text.sameDay(cutoff)} <ArrowRight size={14} aria-hidden="true" />
             </Link>
             <LocaleToggle locale={locale} />
           </div>
@@ -129,6 +131,16 @@ export async function Header({
             <BackButton label={text.back} className="search-back" />
             <SmartSearch placeholder={text.searchPlaceholder} hints={[...text.searchHints]} />
             <div className="header-icons">
+              {user && (
+                <Link
+                  href="/account/notifications"
+                  className="header-action header-bell"
+                  aria-label={unread ? `${text.notifications}, ${unread}` : text.notifications}
+                >
+                  <Bell size={20} aria-hidden="true" />
+                  {unread > 0 && <b className="nav-count unread-count" aria-hidden="true">{unread > 99 ? "99+" : unread}</b>}
+                </Link>
+              )}
               {user ? (
                 <AccountMenu
                   label={text.account}
@@ -162,7 +174,7 @@ export async function Header({
           </div>
         </div>
       </header>
-      <MobileNav locale={locale} />
+      <MobileNav locale={locale} unread={unread} />
       <CartBar locale={locale} />
       {/* hidden until the store introduces it: SHOP_ASSISTANT=on */}
       {shopAssistantEnabled() && <ShopAssistant locale={locale} signedIn={Boolean(user)} />}

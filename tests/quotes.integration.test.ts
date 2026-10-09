@@ -1,4 +1,5 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import nodemailer from "nodemailer";
 import mongoose from "mongoose";
 import { connectDB } from "../src/lib/db/connect";
 import { AuditLog, Category, Product, ProductVariant, User } from "../src/lib/db/models";
@@ -88,7 +89,8 @@ describe.skipIf(!uri)("School quote baskets and quotations", () => {
   });
   afterEach(() => {
     vi.restoreAllMocks();
-    delete process.env.RESEND_API_KEY;
+    delete process.env.SMTP_USER;
+    delete process.env.SMTP_PASS;
     delete process.env.EMAIL_FROM;
   });
   afterAll(async () => {
@@ -220,20 +222,18 @@ describe.skipIf(!uri)("School quote baskets and quotations", () => {
     const { stamp } = await saveQuoteDraft(owner, id, sheet(lines, { discount: { type: "percent", percent: 10 }, note: "Two lots" }));
     await expect(sendQuotation(owner, { requestId: id, stamp: new Date(0).toISOString() })).rejects.toThrow("The draft changed");
 
-    // Resend answers the first email and fails the second; the placeholder address is never tried
-    process.env.RESEND_API_KEY = "re_test";
+    // the mailbox takes the first email and refuses the second; the placeholder address is never tried
+    process.env.SMTP_USER = "quotes@example.com";
+    process.env.SMTP_PASS = "test-mailbox-password";
     process.env.EMAIL_FROM = "Agarwal <quotes@example.com>";
-    const fetch = vi
-      .spyOn(globalThis, "fetch")
-      .mockResolvedValueOnce(new Response("{}", { status: 200 }))
-      .mockResolvedValueOnce(new Response("{}", { status: 500 }));
+    const sendMail = vi.fn().mockResolvedValueOnce({}).mockRejectedValueOnce(new Error("550 sending limit reached"));
+    vi.spyOn(nodemailer, "createTransport").mockReturnValue({ sendMail } as never);
     await addRepresentative(owner, { schoolId: schoolA, userId: outsider });
     await User.updateOne({ _id: outsider }, { $set: { email: "shopper@example.com" } });
     const sent = await sendQuotation(owner, { requestId: id, stamp });
     expect(sent).toMatchObject({ version: 1, sent: 1, noEmail: 1, failed: 1 });
-    expect(fetch).toHaveBeenCalledTimes(2);
-    const body = JSON.parse(String(fetch.mock.calls[0][1]?.body));
-    expect(body.subject).toMatch(/Quotation AGSQ-/);
+    expect(sendMail).toHaveBeenCalledTimes(2);
+    expect(sendMail.mock.calls[0][0].subject).toMatch(/Quotation AGSQ-/);
 
     // 500 × ₹42.50 + 40 × ₹112.38 = ₹25,745.20; 10% off = ₹2,574.52 → taxable ₹23,170.68
     const request = await QuoteRequest.findById(id);

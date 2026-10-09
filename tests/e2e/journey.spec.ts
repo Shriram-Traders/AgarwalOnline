@@ -261,6 +261,15 @@ test("whole journey: sign up, shop, pay, pack, deliver, reconcile", async ({ bro
   await expect(page.getByText(/^Status: Delivered$/i)).toBeVisible();
   await shot(page, "order-detail-delivered");
 
+  // --- the delivered notice waits behind the bell; one tap rates ------------
+  // the header bell on a desktop, the You tab on a phone
+  await expect(page.locator(".unread-count:visible")).toHaveCount(1);
+  await page.getByRole("button", { name: "Rate 5 out of 5" }).first().click();
+  await expect(page.getByText("Your verified review is live.")).toBeVisible();
+  await page.goto("/account/notifications");
+  await expect(page.getByText("How was it?")).toBeVisible();
+  await expect(page.locator(".unread-count")).toHaveCount(0);
+
   expect(problems, `browser reported:\n${problems.join("\n")}`).toEqual([]);
   await shopper.close();
   await office.close();

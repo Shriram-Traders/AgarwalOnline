@@ -166,12 +166,13 @@ export async function listToBasket(userId: string, input: { listId?: unknown; to
 }
 
 /** Current product, price and stock for each line; lines whose product was withdrawn drop out. */
-export async function describeItems(items: { variantId: unknown; quantity: number; addedBy: unknown }[]) {
+/** Items with product, price and stock; `addedBy` is absent for lines no one person added (a school kit). */
+export async function describeItems(items: { variantId: unknown; quantity: number; addedBy?: unknown }[]) {
   const variantIds = items.map((item) => item.variantId);
   const [variants, stock, people] = await Promise.all([
     ProductVariant.find({ _id: { $in: variantIds }, active: { $ne: false } }),
     InventoryItem.find({ variantId: { $in: variantIds } }),
-    User.find({ _id: { $in: items.map((item) => item.addedBy) } }).select("name"),
+    User.find({ _id: { $in: items.flatMap((item) => (item.addedBy ? [item.addedBy] : [])) } }).select("name"),
   ]);
   const products = await Product.find({
     _id: { $in: variants.map((variant) => variant.productId) },

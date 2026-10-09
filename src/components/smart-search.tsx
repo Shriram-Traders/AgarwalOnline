@@ -3,7 +3,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ArrowUpRight, Search, X } from "lucide-react";
+import { ArrowRight, Search, X } from "lucide-react";
 import { formatPrice } from "@/lib/display";
 
 type Suggestion = {
@@ -139,7 +139,7 @@ export function SmartSearch({
             href={`/catalog?q=${encodeURIComponent(query)}`}
             onClick={() => setOpen(false)}
           >
-            See all results <ArrowUpRight size={16} aria-hidden="true" />
+            See all results <ArrowRight size={16} aria-hidden="true" />
           </Link>
         </div>
       )}

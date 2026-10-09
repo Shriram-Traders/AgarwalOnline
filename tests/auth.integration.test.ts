@@ -85,7 +85,7 @@ describe.skipIf(!uri)("Better Auth MongoDB integration", () => {
     ).toHaveLength(1);
   });
 
-  it("signs staff in through the same phone flow with the same 7-day session", async () => {
+  it("signs staff in through the same phone flow with the same 30-day session", async () => {
     await User.create({
       name: "Fictional Admin",
       email: "admin@example.test",
@@ -101,8 +101,8 @@ describe.skipIf(!uri)("Better Auth MongoDB integration", () => {
       .collection("authSessions")
       .findOne({ userId: (await User.findOne({ phone: "9000000091" }))!._id });
     const days = (session!.expiresAt.getTime() - Date.now()) / 86400000;
-    expect(days).toBeGreaterThan(6.9);
-    expect(days).toBeLessThan(7.1);
+    expect(days).toBeGreaterThan(29.9);
+    expect(days).toBeLessThan(30.1);
   });
 
   it("keeps a staff session past 12 hours: there is no separate staff limit", async () => {

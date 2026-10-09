@@ -79,7 +79,7 @@ export default async function Delivery() {
               </span>
               <StatusPill value={o.deliveryStatus} />
               <strong className="stop-collect">
-                {o.paymentMethod === "cod" ? `Collect ${formatPrice(o.totalPaise)}` : "Already paid"} →
+                {o.paymentMethod === "cod" ? `Collect ${formatPrice(o.totalPaise)}` : o.paymentMethod === "tab" ? "Family tab · collect nothing" : "Already paid"} →
               </strong>
             </Link>
           ))}

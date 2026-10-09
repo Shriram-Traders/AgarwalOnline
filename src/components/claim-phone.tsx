@@ -3,6 +3,7 @@ import { useActionState, useState } from "react";
 import { claimPhoneSendAction, claimPhoneVerifyAction } from "@/lib/auth/actions";
 import { keepTyped } from "@/components/action-form";
 import { safeAction } from "@/components/safe-action";
+import { PhoneInput, codeDigits } from "@/components/phone-input";
 
 const sendClaimCode = safeAction(claimPhoneSendAction);
 const verifyClaimCode = safeAction(claimPhoneVerifyAction);
@@ -73,12 +74,7 @@ function ClaimPhoneSteps({
             {mr ? "मोबाईल क्रमांक" : "Mobile number"}
             <div className="phone-input">
               <span>+91</span>
-              <input
-                name="phone"
-                type="tel"
-                inputMode="numeric"
-                pattern="[6-9][0-9]{9}"
-                maxLength={10}
+              <PhoneInput
                 autoComplete="tel-national"
                 defaultValue={sent.phone}
                 placeholder={mr ? "१० अंकी मोबाईल क्रमांक" : "10-digit mobile number"}
@@ -110,8 +106,8 @@ function ClaimPhoneSteps({
               type="text"
               inputMode="numeric"
               pattern="[0-9]{6}"
-              maxLength={6}
               autoComplete="one-time-code"
+              onInput={codeDigits}
               className="otp-input"
               required
             />

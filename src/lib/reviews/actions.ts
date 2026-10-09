@@ -31,20 +31,18 @@ export async function reviewAction(
     }).sort({ createdAt: -1 });
     if (!verifiedOrder)
       return { error: "Reviews are available after this product is delivered." };
+    // a one-tap star rating sends no title or body, so it must not wipe words written earlier;
+    // and re-rating never republishes a review the store hid
+    const set: Record<string, unknown> = { verifiedOrderId: verifiedOrder._id, rating };
+    if (form.has("title")) set.title = title;
+    if (form.has("body")) set.body = body;
     await ProductReview.updateOne(
       { customerId: user.id, productId },
-      {
-        $set: {
-          verifiedOrderId: verifiedOrder._id,
-          rating,
-          title,
-          body,
-          status: "published",
-        },
-      },
+      { $set: set, $setOnInsert: { status: "published" } },
       { upsert: true, runValidators: true },
     );
     revalidatePath(`/products/${form.get("slug")}`);
+    revalidatePath("/account/orders/[id]", "page");
     return { success: "Your verified review is live." };
   } catch (error) {
     return {

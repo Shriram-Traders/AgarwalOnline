@@ -8,6 +8,7 @@ import { ChatConversation } from "@/lib/chat/models";
 import { Complaint } from "@/lib/aftercare/models";
 import { ApprovalRequest } from "@/lib/governance/models";
 import { Refund } from "@/lib/payments/models";
+import { Family } from "@/lib/family/models";
 import { FILTERS } from "./order-filters";
 import type { CountKey, StaffCountsResponse } from "@/lib/staff/types";
 
@@ -22,6 +23,7 @@ export type QueueKey =
   | "approvals"
   | "refundOwed"
   | "refunds"
+  | "familyTabs"
   | "soldOut";
 
 type QueueDef = {
@@ -179,6 +181,18 @@ export const QUEUES: QueueDef[] = [
     lateAfterMinutes: 48 * 60,
   },
   {
+    key: "familyTabs",
+    label: "Family tabs to open",
+    note: "Families asked to buy on a monthly tab.",
+    action: "Review",
+    permission: "tab:approve",
+    model: asModel(Family),
+    filter: { "tab.status": "requested" },
+    sortField: "tab.requestedAt",
+    listHref: "/admin/tabs?status=requested",
+    lateAfterMinutes: 48 * 60,
+  },
+  {
     key: "soldOut",
     label: "Packs sold out",
     note: "Shoppers can’t buy these until stock is added.",
@@ -218,10 +232,12 @@ export async function loadQueues(roles: readonly Role[], now = new Date()): Prom
               .findOne(def.filter)
               .sort({ [def.sortField]: 1 })
               .select(def.sortField)
-              .lean() as Promise<(Record<string, Date> & { _id: unknown }) | null>)
+              .lean() as Promise<(Record<string, unknown> & { _id: unknown }) | null>)
           : null,
       ]);
-      const since = def.sortField ? (oldest?.[def.sortField] ?? null) : null;
+      // a dotted field ("tab.requestedAt") comes back nested
+      const at = def.sortField?.split(".").reduce<unknown>((value, key) => (value as Record<string, unknown> | null)?.[key], oldest);
+      const since = at instanceof Date ? at : null;
       const late = Boolean(since && now.getTime() - since.getTime() > def.lateAfterMinutes * 60000);
       return {
         key: def.key,

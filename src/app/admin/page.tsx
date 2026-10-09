@@ -7,7 +7,7 @@ import { CODCollection } from "@/lib/operations/models";
 import { RefreshOnFocus } from "@/components/refresh-on-focus";
 import { ensureSlots, slotGaps } from "@/lib/commerce/slots";
 import { CalendarClock, ChevronDown, CircleCheck, Inbox, Plus } from "lucide-react";
-import { formatIst, formatPrice } from "@/lib/display";
+import { formatIst, formatPrice, methodLabel } from "@/lib/display";
 import { PageHeading } from "@/components/page-heading";
 import { Popover } from "@/components/popover";
 import { StatTiles } from "@/components/stat-tiles";
@@ -278,7 +278,7 @@ export default async function Admin({
                 header: "Payment",
                 cell: (order) => (
                   <>
-                    {order.paymentMethod.toUpperCase()} <StatusPill value={order.paymentStatus} />
+                    {methodLabel(order.paymentMethod)} <StatusPill value={order.paymentStatus} />
                   </>
                 ),
               },

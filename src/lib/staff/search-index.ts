@@ -385,6 +385,7 @@ const pageWords: Record<StaffNavKey, { keywords: string[]; keywordsMr: string[] 
   customers: { keywords: ["customer", "buyer", "phone"], keywordsMr: ["ग्राहक"] },
   reviews: { keywords: ["rating", "review", "stars", "reported"], keywordsMr: ["परीक्षण", "रेटिंग"] },
   cod: { keywords: ["cash", "cod", "reconcile", "collection", "rider"], keywordsMr: ["रोख", "कॅश"] },
+  tabs: { keywords: ["tab", "khata", "credit", "monthly bill", "family"], keywordsMr: ["खाते", "उधार", "कुटुंब"] },
   refunds: { keywords: ["refund", "money back"], keywordsMr: ["रिफंड"] },
   offers: { keywords: ["coupon", "discount", "promo", "offer", "sale"], keywordsMr: ["सवलत", "कूपन"] },
   analytics: { keywords: ["sales", "report", "numbers", "chart", "revenue", "best sellers"], keywordsMr: ["विक्री", "आकडे"] },

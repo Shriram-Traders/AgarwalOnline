@@ -1,11 +1,12 @@
 import bcrypt from "bcryptjs";
-import { ObjectId, MongoClient } from "mongodb";
+import { ObjectId } from "mongodb";
 import { betterAuth } from "better-auth";
 import { APIError, createAuthMiddleware } from "better-auth/api";
 import { nextCookies } from "better-auth/next-js";
 import { phoneNumber } from "better-auth/plugins";
 import { mongodbAdapter } from "@better-auth/mongo-adapter";
 import { getEnv } from "../env";
+import { mongoClient } from "../db/connect";
 import { originVariants } from "./origin";
 import { sendLoginCode } from "./sms";
 import { sendEmail } from "../email/send";
@@ -24,7 +25,8 @@ function objectId(value: string): ObjectId {
 
 function buildAuth() {
   const env = getEnv();
-  const client = new MongoClient(env.MONGODB_URI);
+  // the same pool Mongoose uses: one set of Atlas connections per server, not two
+  const client = mongoClient(env.MONGODB_URI);
   const db = client.db();
 
   return betterAuth({
@@ -106,7 +108,7 @@ function buildAuth() {
     },
     session: {
       modelName: "authSessions",
-      expiresIn: 7 * 24 * 60 * 60,
+      expiresIn: 30 * 24 * 60 * 60,
       updateAge: 24 * 60 * 60,
       freshAge: 12 * 60 * 60,
     },
@@ -237,7 +239,7 @@ function buildAuth() {
   });
 }
 
-/** Everyone, staff included, stays signed in for the 7-day session; deactivating a user still ends it on the next request. */
+/** Everyone, staff included, stays signed in for the 30-day session; deactivating a user still ends it on the next request. */
 export async function sessionUserId(headers: Headers): Promise<string | null> {
   const found = await getAuth().api.getSession({ headers });
   return found?.user.id ?? null;

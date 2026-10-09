@@ -1,4 +1,5 @@
 "use client";
+import { useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { House, Grid2X2, Heart, ShoppingBag, UserRound } from "lucide-react";
@@ -6,16 +7,38 @@ import { copy, type Locale } from "@/lib/locale-types";
 import { useBasket } from "./basket";
 
 /**
- * The phone's floating tab bar. Tabs are icons; the one you're on grows into a pill with its
- * name, and the basket sits in the middle as the one solid button. Every tab keeps its name for
- * screen readers, so "Basket" or "You" can always be found by name.
+ * The phone's floating tab bar. Every tab shows its icon and its name and keeps its place; the
+ * one you're on gets a tinted pill. The basket is a tab like the others: the sticky basket bar
+ * above it is the action.
  */
-export function MobileNav({ locale }: { locale: Locale }) {
+export function MobileNav({ locale, unread = 0 }: { locale: Locale; unread?: number }) {
   const { count } = useBasket();
   const pathname = usePathname();
   const text = copy[locale];
+  // With the basket bar showing, the tab bar steps aside while you scroll down and comes back
+  // when you scroll up, like a tab bar with an accessory in iOS. Keyboard focus brings it back.
+  useEffect(() => {
+    const root = document.documentElement;
+    let last = window.scrollY;
+    const onScroll = () => {
+      const y = window.scrollY;
+      if (Math.abs(y - last) < 8) return;
+      const barShowing = Boolean(document.querySelector(".cart-bar")?.getClientRects().length);
+      root.toggleAttribute("data-tabs-away", y > last && y > 120 && barShowing);
+      last = y;
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      root.removeAttribute("data-tabs-away");
+    };
+  }, [pathname]);
   return (
-    <nav className="mobile-nav" aria-label="Mobile navigation">
+    <nav
+      className="mobile-nav"
+      aria-label="Mobile navigation"
+      onFocus={() => document.documentElement.removeAttribute("data-tabs-away")}
+    >
       {[
         { href: "/", label: text.home, Icon: House },
         { href: "/catalog", label: text.explore, Icon: Grid2X2 },
@@ -36,8 +59,8 @@ export function MobileNav({ locale }: { locale: Locale }) {
           <Link
             key={href}
             href={href}
-            className={basket ? "nav-basket" : undefined}
             aria-current={active ? "page" : undefined}
+            aria-label={href === "/account" && unread > 0 ? `${label}, ${unread} ${text.notifications.toLowerCase()}` : undefined}
           >
             <span className="nav-icon">
               <Icon size={21} aria-hidden="true" />
@@ -46,8 +69,11 @@ export function MobileNav({ locale }: { locale: Locale }) {
                   {count}
                 </b>
               )}
-              <span className="nav-label">{label}</span>
+              {href === "/account" && unread > 0 && (
+                <b className="nav-count unread-count" aria-hidden="true">{unread > 99 ? "99+" : unread}</b>
+              )}
             </span>
+            <span className="nav-label">{label}</span>
             {basket && count > 0 && <span className="sr-only">, {count}</span>}
           </Link>
         );

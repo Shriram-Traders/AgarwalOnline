@@ -12,19 +12,13 @@ import { staffRoleOf } from "@/lib/auth/permissions";
 import { cartFor } from "@/lib/commerce/service";
 import { BasketProvider } from "@/components/basket";
 
-const body = localFont({
-  src: "../../node_modules/@fontsource-variable/manrope/files/manrope-latin-wght-normal.woff2",
-  weight: "200 800",
-  variable: "--font-manrope",
-  display: "swap",
-});
 const display = localFont({
   src: "../../node_modules/@fontsource-variable/plus-jakarta-sans/files/plus-jakarta-sans-latin-wght-normal.woff2",
   weight: "200 800",
   variable: "--font-jakarta",
   display: "swap",
 });
-/** Devanagari for Marathi. Latin never reaches it: it sits behind Manrope in the stack. */
+/** Devanagari for Marathi. Latin never reaches it: it sits behind Jakarta in the stack. */
 const devanagari = localFont({
   src: [
     {
@@ -76,7 +70,7 @@ export default async function RootLayout({
   return (
     <html
       lang={locale}
-      className={`${body.variable} ${display.variable} ${devanagari.variable}`}
+      className={`${display.variable} ${devanagari.variable}`}
       data-scroll-behavior="smooth"
     >
       <body>

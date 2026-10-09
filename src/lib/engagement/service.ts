@@ -64,7 +64,7 @@ export async function markNotification(customerId: string, input: unknown) {
 export async function notify(
   input: {
     userId: unknown;
-    type: "order" | "payment" | "delivery" | "support" | "refund" | "system";
+    type: "order" | "payment" | "delivery" | "support" | "refund" | "system" | "family";
     title: string;
     body: string;
     href?: string;

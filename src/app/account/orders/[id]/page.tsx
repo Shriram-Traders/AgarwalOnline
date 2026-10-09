@@ -24,7 +24,9 @@ import { objectId } from "@/lib/commerce/service";
 import { dayLabel } from "@/lib/commerce/slots";
 import { cancelAction, reorderAction } from "@/lib/commerce/actions";
 import { ActionForm } from "@/components/action-form";
-import { customerStage, formatIst, formatPrice, paymentLabel } from "@/lib/display";
+import { customerStage, formatIst, formatPrice, methodLabel, paymentLabel } from "@/lib/display";
+import { ProductReview } from "@/lib/reviews/models";
+import { RateStars } from "@/components/rate-stars";
 import { productImages } from "@/lib/catalog/images";
 import { cancellation, orderHistory, orderTracker } from "@/lib/order-progress";
 import { lineNotes, shortfallRefund, type PackedLine } from "@/lib/operations/packing";
@@ -119,6 +121,24 @@ export default async function OrderDetail({
     "out-for-delivery": `On its way to you now · ${o.deliveryWindow}`,
     "awaiting-payment": "Complete your online payment to confirm this order.",
   };
+  // a delivered order asks for a one-tap rating of each product still in the catalogue
+  const rateable = [];
+  if (o.deliveryStatus === "delivered") {
+    const variants = await ProductVariant.find({
+      _id: { $in: o.items.map((i: { variantId: unknown }) => i.variantId) },
+    }).select("productId");
+    const [products, reviews] = await Promise.all([
+      Product.find({ _id: { $in: variants.map((v) => v.productId) }, status: "published" }).select("slug name"),
+      ProductReview.find({ customerId: user.id, productId: { $in: variants.map((v) => v.productId) } }).select("productId rating"),
+    ]);
+    for (const product of products)
+      rateable.push({
+        id: String(product._id),
+        slug: product.slug as string,
+        name: product.name.en as string,
+        rating: reviews.find((r) => String(r.productId) === String(product._id))?.rating as number | undefined,
+      });
+  }
   return (
     <section className="page-container order-page">
       <PageHeading eyebrow="Order summary" title={o.number} />
@@ -135,6 +155,18 @@ export default async function OrderDetail({
           <p>{headline[stage.key] ?? arriving}</p>
         </div>
       </div>
+      {rateable.length > 0 && (
+        <section id="rate" className="panel rate-panel" aria-labelledby="rate-title">
+          <h2 id="rate-title">Rate what you got</h2>
+          <p className="muted">One tap is enough. It helps the next family choose.</p>
+          {rateable.map((product) => (
+            <div className="rate-row" key={product.id}>
+              <Link href={`/products/${product.slug}`}>{product.name}</Link>
+              <RateStars productId={product.id} slug={product.slug} name={product.name} rating={product.rating} />
+            </div>
+          ))}
+        </section>
+      )}
       {tracker && (
         <ol className="order-tracker" aria-label="Order progress">
           {tracker.map((step) => (
@@ -308,7 +340,7 @@ export default async function OrderDetail({
               </div>
               <div>
                 <dt>Payment</dt>
-                <dd>{o.paymentMethod === "cod" ? "Cash on delivery" : "Online payment"}</dd>
+                <dd>{methodLabel(o.paymentMethod)}</dd>
               </div>
               <div>
                 <dt>Delivery slot</dt>
@@ -346,7 +378,7 @@ export default async function OrderDetail({
             </ActionForm>
           </section>
 
-          {o.orderStatus === "placed" && o.paymentMethod === "cod" && (
+          {o.orderStatus === "placed" && o.paymentMethod !== "razorpay" && (
             <section className="panel order-card order-cancel" aria-labelledby="cancel-title">
               <h2 id="cancel-title">Changed your mind?</h2>
               <p className="muted">You can cancel until the shop confirms your order.</p>
