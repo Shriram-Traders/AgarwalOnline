@@ -1,4 +1,5 @@
 import { hasPermission, type Permission, type Role } from "@/lib/auth/permissions";
+import { FEEDBACK_PERMISSION } from "@/lib/feedback/access";
 import { STAFF_ROOTS } from "./paths";
 import type { CountKey } from "./types";
 
@@ -8,6 +9,7 @@ export type StaffNavKey =
   | "complaints"
   | "catalog"
   | "customers"
+  | "feedback"
   | "reviews"
   | "cod"
   | "tabs"
@@ -63,6 +65,7 @@ export const STAFF_NAV: StaffNavGroup[] = [
     key: "customers",
     items: [
       { key: "customers", href: "/admin/customers", permission: "order:manage" },
+      { key: "feedback", href: "/super-admin/feedback", permission: FEEDBACK_PERMISSION, count: "feedback" },
       { key: "reviews", href: "/admin/reviews", permission: "review:moderate" },
     ],
   },

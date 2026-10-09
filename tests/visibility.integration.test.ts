@@ -5,7 +5,7 @@ import { AuditLog, Category, InventoryItem, Product, ProductVariant, User } from
 import { CartLine } from "../src/lib/commerce/models";
 import { WishlistItem } from "../src/lib/engagement/models";
 import { ShoppingList } from "../src/lib/lists/models";
-import { catalog, catalogForSchools } from "../src/lib/catalog/queries";
+import { catalog, catalogForSchools, schoolProductBySlug } from "../src/lib/catalog/queries";
 import { basketFor, setCartLine } from "../src/lib/commerce/service";
 import { createList, describeItems, saveListItem } from "../src/lib/lists/service";
 import { ensureSaved, toggleWishlist } from "../src/lib/engagement/service";
@@ -79,6 +79,13 @@ describe.skipIf(!uri)("Products for customers, schools or both", () => {
     expect(schools.map((item) => item.slug).sort()).toEqual(["both-notebook", "school-register"]);
     const register = schools.find((item) => item.slug === "school-register")!;
     expect(register.variants[0].schoolPricePaise).toBe(4200);
+  });
+
+  it("opens a product page in the school marketplace only for items ticked for schools", async () => {
+    expect((await schoolProductBySlug("school-register"))?.variants[0].schoolPricePaise).toBe(4200);
+    expect((await schoolProductBySlug("both-notebook"))?.variants[0].schoolPricePaise).toBe(2500);
+    expect(await schoolProductBySlug("shop-pen")).toBeNull();
+    expect(await schoolProductBySlug("no-such-thing")).toBeNull();
   });
 
   it("refuses school-only items in baskets, lists and wishlists", async () => {

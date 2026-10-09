@@ -1,4 +1,5 @@
 import type { Permission } from "@/lib/auth/permissions";
+import { FEEDBACK_PERMISSION } from "@/lib/feedback/access";
 import { staffCopy } from "./copy";
 import { STAFF_NAV, type StaffNavKey } from "./nav";
 
@@ -383,6 +384,10 @@ const pageWords: Record<StaffNavKey, { keywords: string[]; keywordsMr: string[] 
   complaints: { keywords: ["complaint", "return", "damaged", "wrong item", "aftercare"], keywordsMr: ["तक्रार", "परत"] },
   catalog: { keywords: ["products", "catalog", "items", "price", "stock"], keywordsMr: ["उत्पादने", "किंमत", "स्टॉक"] },
   customers: { keywords: ["customer", "buyer", "phone"], keywordsMr: ["ग्राहक"] },
+  feedback: {
+    keywords: ["feedback", "rating", "stars", "comments", "reply", "delivery partner rating", "order rating"],
+    keywordsMr: ["अभिप्राय", "रेटिंग", "तारे"],
+  },
   reviews: { keywords: ["rating", "review", "stars", "reported"], keywordsMr: ["परीक्षण", "रेटिंग"] },
   cod: { keywords: ["cash", "cod", "reconcile", "collection", "rider"], keywordsMr: ["रोख", "कॅश"] },
   tabs: { keywords: ["tab", "khata", "credit", "monthly bill", "family"], keywordsMr: ["खाते", "उधार", "कुटुंब"] },
@@ -431,6 +436,26 @@ const otherPages: FinderEntry[] = [
   step("delivered", "Delivered orders", "पोहोचलेल्या ऑर्डर", "delivered", ["delivered", "done", "completed"]),
   step("cancelled", "Cancelled orders", "रद्द ऑर्डर", "cancelled", ["cancelled", "canceled"]),
   step("refund-owed", "Orders owed a refund", "रिफंड देणे बाकी असलेल्या ऑर्डर", "refund-owed", ["refund owed", "shortfall", "missing items"]),
+  {
+    id: "page.feedback-attention",
+    kind: "page",
+    title: { en: "Low ratings to read", mr: "वाचायची कमी रेटिंग" },
+    hint: { en: "Ratings & feedback", mr: "रेटिंग व अभिप्राय" },
+    href: "/super-admin/feedback?tab=attention",
+    permission: FEEDBACK_PERMISSION,
+    keywords: ["low rating", "bad rating", "unhappy customer", "1 star", "2 stars", "needs attention"],
+    keywordsMr: ["कमी रेटिंग", "नाराज ग्राहक"],
+  },
+  {
+    id: "page.feedback-reviews",
+    kind: "page",
+    title: { en: "All product reviews", mr: "सर्व उत्पादन परीक्षणे" },
+    hint: { en: "Ratings & feedback", mr: "रेटिंग व अभिप्राय" },
+    href: "/super-admin/feedback?tab=reviews",
+    permission: FEEDBACK_PERMISSION,
+    keywords: ["product reviews", "hide review", "show review", "hidden reviews"],
+    keywordsMr: ["परीक्षण", "लपवा"],
+  },
   {
     id: "page.stock",
     kind: "page",

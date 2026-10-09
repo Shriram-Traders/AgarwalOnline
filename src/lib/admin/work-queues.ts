@@ -9,6 +9,9 @@ import { Complaint } from "@/lib/aftercare/models";
 import { ApprovalRequest } from "@/lib/governance/models";
 import { Refund } from "@/lib/payments/models";
 import { Family } from "@/lib/family/models";
+import { OrderFeedback } from "@/lib/feedback/models";
+import { FEEDBACK_PERMISSION } from "@/lib/feedback/access";
+import { NEEDS_ATTENTION } from "@/lib/feedback/rules";
 import { FILTERS } from "./order-filters";
 import type { CountKey, StaffCountsResponse } from "@/lib/staff/types";
 
@@ -20,6 +23,7 @@ export type QueueKey =
   | "cash"
   | "chats"
   | "complaints"
+  | "lowRatings"
   | "approvals"
   | "refundOwed"
   | "refunds"
@@ -139,6 +143,20 @@ export const QUEUES: QueueDef[] = [
     sortField: "createdAt",
     listHref: "/admin/complaints",
     itemHref: (id) => `/admin/complaints?view=${id}#complaint`,
+    lateAfterMinutes: 24 * 60,
+  },
+  {
+    // one or two stars: a customer worth getting back to while the order is fresh
+    key: "lowRatings",
+    label: "Low ratings to read",
+    note: "A customer gave an order 1 or 2 stars.",
+    action: "Read",
+    permission: FEEDBACK_PERMISSION,
+    model: asModel(OrderFeedback),
+    filter: NEEDS_ATTENTION,
+    sortField: "submittedAt",
+    listHref: "/super-admin/feedback?tab=attention",
+    itemHref: (id) => `/super-admin/feedback?tab=attention&reply=${id}#reply`,
     lateAfterMinutes: 24 * 60,
   },
   {
@@ -267,6 +285,7 @@ export async function staffCounts(user: { id: string; roles: readonly Role[] }):
     ["complaints", "complaint:manage", () => Complaint.countDocuments({ status: "open" })],
     ["lowStock", "inventory:adjust", () => InventoryItem.countDocuments(LOW_STOCK)],
     ["approvals", "approval:review", () => ApprovalRequest.countDocuments({ state: "pending" })],
+    ["feedback", FEEDBACK_PERMISSION, () => OrderFeedback.countDocuments(NEEDS_ATTENTION)],
     [
       "deliveries",
       "delivery:assigned",

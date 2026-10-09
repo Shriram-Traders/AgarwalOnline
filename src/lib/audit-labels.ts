@@ -12,6 +12,7 @@ const LABELS: Record<string, string> = {
   "complaint.create": "Raised a complaint",
   "complaint.update": "Updated a complaint",
   "delivery-rules.update": "Changed the delivery rules",
+  "feedback.reply": "Replied to a customer’s rating",
   "delivery-slot.create": "Added a delivery slot",
   "delivery.reassign": "Changed the rider",
   "delivery.retry": "Put a failed delivery back for another try",
@@ -94,7 +95,7 @@ export function auditLabel(action: string) {
 /** Groups for the audit filter, by code prefix. */
 export const AUDIT_GROUPS = {
   "sign-ins": { label: "Sign-ins", prefixes: ["auth."] },
-  orders: { label: "Orders & delivery", prefixes: ["order.", "delivery.", "packing.", "cod.", "evidence.", "complaint.", "return."] },
+  orders: { label: "Orders & delivery", prefixes: ["order.", "delivery.", "packing.", "cod.", "evidence.", "complaint.", "return.", "feedback."] },
   catalog: { label: "Catalog & stock", prefixes: ["product.", "variant.", "category.", "inventory.", "approval.", "review.", "kit."] },
   money: { label: "Offers & refunds", prefixes: ["promotion.", "refund.", "payment.", "tab."] },
   schools: { label: "Schools & quotations", prefixes: ["school.", "quote."] },

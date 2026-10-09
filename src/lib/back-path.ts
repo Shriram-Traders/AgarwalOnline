@@ -1,5 +1,5 @@
 /** Starting points: nothing inside the app sits "behind" these, so they get no Back button. */
-export const HOME_PATHS = new Set(["/", "/admin", "/super-admin", "/delivery"]);
+export const HOME_PATHS = new Set(["/", "/admin", "/super-admin", "/delivery", "/school"]);
 
 /** Pages whose natural parent isn't simply the path one level up. */
 const PARENTS: [RegExp, string][] = [
@@ -12,6 +12,8 @@ const PARENTS: [RegExp, string][] = [
   [/^\/lists\/[^/]+$/, "/"],
   [/^\/family\/[^/]+$/, "/"],
   [/^\/school\/join\/[^/]+$/, "/"],
+  [/^\/school\/products\/[^/]+$/, "/school/catalog"],
+  [/^\/school\/checkout$/, "/school/basket"],
   [/^\/staff\/login$/, "/"],
 ];
 

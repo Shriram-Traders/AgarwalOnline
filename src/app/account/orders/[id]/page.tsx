@@ -31,6 +31,9 @@ import { productImages } from "@/lib/catalog/images";
 import { cancellation, orderHistory, orderTracker } from "@/lib/order-progress";
 import { lineNotes, shortfallRefund, type PackedLine } from "@/lib/operations/packing";
 import { isShopperVisible } from "@/lib/catalog/visibility";
+import { canStillRate, feedbackForOrder } from "@/lib/feedback/service";
+import { OrderFeedbackCard } from "@/components/order-feedback-card";
+import { currentLocale } from "@/lib/i18n";
 export const metadata = { title: "Order details", robots: { index: false } };
 
 const STAGE_ICONS: Record<string, LucideIcon> = {
@@ -107,6 +110,10 @@ export default async function OrderDetail({
   const slot = day ? `${day} · ${o.deliveryWindow}` : o.deliveryWindow;
   const arriving = `Arriving ${day === "Today" || day === "Tomorrow" ? day.toLowerCase() : `on ${day}`}, ${o.deliveryWindow}`;
   const deliveredAt = tracker?.[3].at;
+  // a delivered order can be rated here for a month; once rated, the rating and the shop's reply show instead
+  const delivered = o.deliveryStatus === "delivered" && o.orderStatus !== "cancelled";
+  const [feedback, locale] = delivered ? await Promise.all([feedbackForOrder(o._id), currentLocale()]) : [null, "en" as const];
+  const showFeedback = delivered && (feedback !== null || canStillRate(deliveredAt ?? o.updatedAt));
   const headline: Record<string, string> = {
     delivered: deliveredAt ? `Delivered on ${formatIst(deliveredAt, SHORT)}` : "Delivered to you",
     completed: deliveredAt ? `Delivered on ${formatIst(deliveredAt, SHORT)}` : "Delivered to you",
@@ -183,6 +190,17 @@ export default async function OrderDetail({
 
       <div className="order-layout">
         <div className="order-main">
+          {showFeedback && (
+            <OrderFeedbackCard
+              order={{
+                orderId: id,
+                number: o.number,
+                hasRider: Boolean(o.assignedTo) && String(o.assignedTo) !== user.id,
+              }}
+              locale={locale}
+              feedback={feedback}
+            />
+          )}
           {o.deliveryStatus === "out-for-delivery" && (
             <section className="panel order-card handover-card" aria-labelledby="handover-title">
               <h2 id="handover-title">Your order is on the way</h2>

@@ -12,8 +12,15 @@ import { evidenceAction } from "@/lib/evidence/actions";
 import { displayStatus } from "@/lib/display";
 import { PhotoInput } from "@/components/photo-input";
 export const metadata = { title: "Complaints & returns", robots: { index: false } };
-export default async function Complaints() {
+const TYPES = ["missing-item", "damaged-item", "wrong-item", "other"];
+
+export default async function Complaints({
+  searchParams,
+}: {
+  searchParams: Promise<{ order?: string; type?: string }>;
+}) {
   const user = await requirePage("complaint:own");
+  const params = await searchParams;
   const orders = await Order.find({ customerId: user.id })
     .select("number deliveryStatus")
     .sort({ createdAt: -1 })
@@ -26,6 +33,9 @@ export default async function Complaints() {
     ownerId: user.id,
     complaintId: { $in: complaints.map((complaint) => complaint._id) },
   }).sort({ createdAt: -1 });
+  // a low rating's "Report a problem with an item" arrives with the order and the problem chosen
+  const chosenOrder = orders.find((order) => String(order._id) === params.order);
+  const chosenType = TYPES.includes(params.type ?? "") ? params.type : undefined;
   return (
     <section className="page-container">
       <PageHeading
@@ -99,14 +109,14 @@ export default async function Complaints() {
             <EmptyState icon={ShieldCheck} title="Nothing reported" body="If an order arrives damaged or incomplete, tell us here." />
           )}
         </div>
-        <div className="panel">
+        <div className="panel" id="report">
           <h2>Report an issue</h2>
           {orders.length ? (
             <ActionForm action={aftercareAction} submit="Send to the store">
               <input type="hidden" name="operation" value="create" />
               <label>
                 Order
-                <select name="orderId" required>
+                <select name="orderId" required defaultValue={chosenOrder ? String(chosenOrder._id) : ""}>
                   <option value="">Choose your order</option>
                   {orders.map((o) => (
                     <option key={String(o._id)} value={String(o._id)}>
@@ -117,7 +127,7 @@ export default async function Complaints() {
               </label>
               <label>
                 Issue
-                <select name="type">
+                <select name="type" defaultValue={chosenType ?? "missing-item"}>
                   <option value="missing-item">Missing item</option>
                   <option value="damaged-item">Damaged item</option>
                   <option value="wrong-item">Wrong item</option>

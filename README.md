@@ -210,6 +210,8 @@ npm run dev
 
 Open [http://127.0.0.1:3000](http://127.0.0.1:3000). `APP_ORIGIN` must match the address in your browser exactly. The app also accepts `localhost` for `127.0.0.1` during local development.
 
+**On a phone on the same Wi-Fi:** `npm run phone` serves a production build at `https://<this PC's Wi-Fi address>:3443`, and prints the exact address. Production compiles every page up front and minifies the scripts, so pages open quickly on a phone; the dev server compiles each page on first visit. The certificate is made on this PC (in `.local/phone-cert`), so the first visit shows "Your connection is not private": tap **Advanced**, then **Proceed**. The build is redone only when the code changed (`npm run phone -- --build` forces it). Production mode refuses `MOCK_OTP=true` unless `.env` also has `ALLOW_MOCK_OTP_IN_PRODUCTION=true`. If the phone can't open the address, the router may keep Wi-Fi devices apart: connect the PC to the phone's hotspot and run it again.
+
 ## Environment variables
 
 The app validates these on startup and refuses to run with an invalid combination. `.env.example` is the template.
@@ -242,6 +244,9 @@ Tests use `TEST_MONGODB_URI`, passed on the command line. Vitest does not read `
 | Command | What it does |
 |---|---|
 | `npm run dev` | Starts the development server on `127.0.0.1:3000`. |
+| `npm run dev:warm` | The development server, plus a first visit to the main pages so they are compiled before anyone clicks. |
+| `npm run dev:lan` | The development server, open to phones on the same Wi-Fi over `http`. |
+| `npm run phone` | A production build for a phone on the same Wi-Fi, over `https` on port 3443. Fast on the phone; rebuilds only when the code changed. |
 | `npm run build` | Creates a production build. |
 | `npm start` | Serves the production build. |
 | `npm run lint` | Runs ESLint. |

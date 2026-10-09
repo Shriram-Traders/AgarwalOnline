@@ -1,6 +1,7 @@
 "use client";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import type { MutationState } from "@/lib/commerce/actions";
+import Link from "next/link";
 import { ActionForm } from "./action-form";
 
 /*
@@ -55,5 +56,40 @@ export function SendWhenSaved({
       )}
       <ActionForm {...props} disabled={props.disabled || count > 0} />
     </>
+  );
+}
+
+/** A link onward (e.g. to checkout) that waits, like SendWhenSaved, until every edit is saved. */
+export function ProceedWhenSaved({
+  href,
+  className,
+  waiting,
+  disabled = false,
+  children,
+}: {
+  href: string;
+  className: string;
+  waiting: string;
+  disabled?: boolean;
+  children: React.ReactNode;
+}) {
+  const { count } = useContext(UnsavedContext);
+  if (disabled || count > 0)
+    return (
+      <>
+        {count > 0 && (
+          <p className="notice unsaved-note" role="status">
+            {waiting}
+          </p>
+        )}
+        <span className={`${className} is-waiting`} aria-disabled="true">
+          {children}
+        </span>
+      </>
+    );
+  return (
+    <Link href={href} className={className}>
+      {children}
+    </Link>
   );
 }

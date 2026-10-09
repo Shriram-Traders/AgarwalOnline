@@ -1,22 +1,38 @@
+import Image from "next/image";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { PauseCircle, School as SchoolIcon, SearchX } from "lucide-react";
+import {
+  ArrowRight,
+  ClipboardCheck,
+  FileText,
+  LayoutGrid,
+  PauseCircle,
+  School as SchoolIcon,
+  ShoppingBag,
+  Sparkles,
+  type LucideIcon,
+} from "lucide-react";
 import { currentUser } from "@/lib/auth/session";
+import { categoryImages, heroImage } from "@/lib/catalog/images";
+import { chosenSchool } from "@/lib/schools/current";
 import { schoolContext } from "@/lib/schools/membership";
-import { School, SchoolAccessRequest } from "@/lib/schools/models";
+import { QuoteRequest, School, SchoolAccessRequest } from "@/lib/schools/models";
 import { schoolAisles, schoolCatalog } from "@/lib/schools/catalog";
 import { quoteBasketView } from "@/lib/schools/quotes";
 import { schoolRepAction } from "@/lib/schools/actions";
-import { schoolHref } from "@/lib/schools/display";
+import { switchHref } from "@/lib/schools/access";
+import { quoteMoney, repStatus } from "@/lib/schools/display";
+import { estimateQuote } from "@/lib/schools/estimate";
+import { withQuery } from "@/lib/schools/paths";
 import { ActionForm } from "@/components/action-form";
+import { AisleIcon } from "@/components/aisle-icon";
 import { DataTable } from "@/components/data-table";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeading } from "@/components/page-heading";
 import { StatusPill } from "@/components/status-pill";
 import { When } from "@/components/when";
-import { SchoolNav, QuoteBar } from "@/components/school-nav";
 import { SchoolProductCard } from "@/components/school-product-card";
-export const metadata = { title: "School account", robots: { index: false, follow: false } };
+export const metadata = { title: "For schools", robots: { index: false, follow: false } };
 export const dynamic = "force-dynamic";
 
 const REQUEST_STATE: Record<string, { label: string; tone: "warn" | "ok" | "bad" | "neutral" }> = {
@@ -26,9 +42,50 @@ const REQUEST_STATE: Record<string, { label: string; tone: "warn" | "ok" | "bad"
   withdrawn: { label: "Withdrawn", tone: "neutral" },
 };
 
+function Section({
+  id,
+  icon: Icon,
+  title,
+  subtitle,
+  link,
+  linkLabel,
+  children,
+}: {
+  id: string;
+  icon: LucideIcon;
+  title: string;
+  subtitle: string;
+  link?: string;
+  linkLabel?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="section" aria-labelledby={id}>
+      <div className="section-heading">
+        <div>
+          <h2 id={id}>
+            <span className="section-icon">
+              <Icon aria-hidden="true" />
+            </span>
+            {title}
+          </h2>
+          <span className="muted">{subtitle}</span>
+        </div>
+        {link && linkLabel && (
+          <Link href={link}>
+            {linkLabel} <ArrowRight size={16} aria-hidden="true" />
+          </Link>
+        )}
+      </div>
+      {children}
+    </section>
+  );
+}
+
 /**
- * The school area's front door. Someone who represents a school sees its catalogue; someone in
- * several picks one; anyone else gets what the area is for and where their own requests stand.
+ * The school marketplace's front door. A representative sees it like the shop's home: a
+ * welcome band, the school aisles, popular items and where their quotations stand. Someone in
+ * several schools picks one; anyone else learns what it's for and where their requests are.
  */
 export default async function SchoolHome({
   searchParams,
@@ -38,8 +95,14 @@ export default async function SchoolHome({
   const user = await currentUser();
   if (!user) redirect(`/login?then=${encodeURIComponent("/school")}`);
   const params = await searchParams;
-  const context = await schoolContext(user.id, params.pick ? undefined : params.s);
+  // the catalogue used to live here: old links with a search or an aisle go to it
+  if (params.q || params.category)
+    redirect(withQuery("/school/catalog", { q: params.q, category: params.category, s: params.s }));
+  const preferred = await chosenSchool();
+  const context = await schoolContext(user.id, params.pick ? undefined : params.s, params.pick ? undefined : preferred);
   if (context.foreign) notFound();
+  // a link naming one of their schools: switch to it so the header agrees
+  if (params.s && context.current && params.s !== preferred) redirect(switchHref(params.s, "/school"));
 
   if (!context.schools.length) {
     const requests = await SchoolAccessRequest.find({ userId: user.id }).sort({ createdAt: -1 }).limit(20);
@@ -48,9 +111,9 @@ export default async function SchoolHome({
     return (
       <section className="page-container">
         <PageHeading
-          eyebrow="School quotations"
-          title="School account"
-          lead="Schools that buy from the store in bulk ask for quotations here. Their representatives see a school catalogue, fill one shared basket and get the store’s prices with GST."
+          eyebrow="For schools"
+          title="Agarwal for schools"
+          lead="Schools that buy from the store in bulk shop here at school prices. At checkout they ask for a quotation instead of paying."
         />
         <EmptyState
           icon={SchoolIcon}
@@ -115,7 +178,7 @@ export default async function SchoolHome({
     const usable = context.schools.filter((school) => school.active);
     return (
       <section className="page-container">
-        <PageHeading eyebrow="School quotations" title="School account" lead="Choose the school you’re working for." />
+        <PageHeading eyebrow="For schools" title="Choose your school" lead="Which school are you buying for today?" />
         {current && !current.active && (
           <p className="notice school-paused" role="status">
             <PauseCircle size={18} aria-hidden="true" /> {current.name} is paused by the store for now. Its basket and
@@ -126,10 +189,11 @@ export default async function SchoolHome({
           <ul className="school-picker">
             {usable.map((school) => (
               <li key={school.id}>
-                <Link href={schoolHref("/school", school.id)} className="panel">
+                {/* a full page load: the header changes school too */}
+                <a href={switchHref(school.id, "/school")} className="panel">
                   <SchoolIcon size={22} aria-hidden="true" />
                   <strong>{school.name}</strong>
-                </Link>
+                </a>
               </li>
             ))}
           </ul>
@@ -149,82 +213,202 @@ export default async function SchoolHome({
     );
   }
 
-  const [products, aisles, basket] = await Promise.all([
-    schoolCatalog({ q: params.q?.slice(0, 100), category: params.category?.slice(0, 60) }),
+  const [products, aisles, basket, quotations] = await Promise.all([
+    schoolCatalog(),
     schoolAisles(),
     quoteBasketView(current.id),
+    QuoteRequest.find({ schoolId: current.id })
+      .sort({ updatedAt: -1 })
+      .limit(3)
+      .select("number status items currentVersion versions.version versions.totalPaise versions.validUntil updatedAt"),
   ]);
   const inBasket = Object.fromEntries(basket.lines.map((line) => [line.variantId, line.quantity]));
-  const filtered = Boolean(params.q || params.category);
+  const estimate = estimateQuote(basket.lines);
+  const counts = new Map<string, number>();
+  for (const product of products) counts.set(product.categorySlug, (counts.get(product.categorySlug) ?? 0) + 1);
+  const latest = (request: (typeof quotations)[number]) =>
+    request.versions.find((v: { version: number }) => v.version === request.currentVersion) as
+      | { totalPaise: number; validUntil: string }
+      | undefined;
+  const ready = quotations.find((request) => repStatus(request.status, latest(request)?.validUntil).label === "Quotation ready");
   return (
-    <section className="page-container school-area">
-      <SchoolNav
-        school={current}
-        current="catalogue"
-        basketLines={basket.lines.length + basket.unavailable.length}
-        otherSchools={context.schools.length > 1}
-      />
-      <PageHeading
-        title="School catalogue"
-        lead="Prices are before GST and are what to expect; the store confirms them on the quotation. Add what you need, then ask for a quotation from the basket."
-      />
-      <form className="order-search school-search" role="search" aria-label="Search the school catalogue" action="/school">
-        <input type="hidden" name="s" value={current.id} />
-        {params.category && <input type="hidden" name="category" value={params.category} />}
-        <label className="sr-only" htmlFor="school-q">
-          Search
-        </label>
-        <input id="school-q" name="q" defaultValue={params.q} placeholder="Search notebooks, pens, chalk…" maxLength={100} />
-        <button className="secondary-button compact-button">Search</button>
-      </form>
-      {aisles.length > 1 && (
-        <nav className="catalog-chips" aria-label="School catalogue aisles">
-          <Link href={schoolHref("/school", current.id, { q: params.q })} aria-current={!params.category ? "page" : undefined}>
-            All
-          </Link>
-          {aisles.map((aisle) => (
-            <Link
-              key={aisle.slug}
-              href={schoolHref("/school", current.id, { q: params.q, category: aisle.slug })}
-              aria-current={params.category === aisle.slug ? "page" : undefined}
-            >
-              {aisle.en}
+    <>
+      <section className="hero school-hero" aria-labelledby="school-welcome">
+        <div className="hero-card">
+          <Image src={categoryImages.school ?? heroImage} alt="" fill sizes="60vw" priority />
+          <span className="hero-badge">School prices · {current.name}</span>
+          <h1 id="school-welcome">
+            Everything your school needs,
+            <em> priced for schools</em>
+          </h1>
+          <p>Fill the basket like any order. At checkout you ask for a quotation instead of paying; the store sends its prices with GST.</p>
+          <div className="hero-actions">
+            <Link href="/school/catalog" className="primary-button">
+              Browse school items
             </Link>
-          ))}
-        </nav>
-      )}
-      <div className="results-line">
-        <p>
-          <strong>{products.length}</strong> {products.length === 1 ? "product" : "products"}
-          {params.q ? ` for “${params.q}”` : ""}
-        </p>
-        {filtered && <Link href={schoolHref("/school", current.id)}>Clear search</Link>}
-      </div>
-      {products.length ? (
-        <div className="product-grid school-grid">
-          {products.map((product, index) => (
-            <SchoolProductCard key={product.id} product={product} schoolId={current.id} inBasket={inBasket} eager={index === 0} />
-          ))}
+            <Link href="/school/quotations" className="secondary-button">
+              Your quotations
+            </Link>
+          </div>
         </div>
-      ) : (
-        <EmptyState
-          icon={SearchX}
-          title={filtered ? "Nothing matches" : "The school catalogue is being set up"}
-          body={
-            filtered
-              ? "Try another word, or clear the search. Ask the store if you need something that isn’t listed."
-              : "The store hasn’t listed school items yet. You’ll see them here once it does."
-          }
-          action={
-            filtered ? (
-              <Link href={schoolHref("/school", current.id)} className="primary-button">
-                Show everything
+        <aside className="deal-card school-glance" aria-labelledby="glance-title">
+          {ready ? (
+            <>
+              <span className="eyebrow">Quotation ready</span>
+              <h2 id="glance-title">{ready.number}</h2>
+              <p>
+                {latest(ready) ? `${quoteMoney(latest(ready)!.totalPaise)} with GST. ` : ""}Accept it or ask for changes.
+              </p>
+              <Link href={`/school/quotations/${ready._id}`} className="primary-button">
+                Review quotation
               </Link>
-            ) : undefined
-          }
-        />
-      )}
-      <QuoteBar schoolId={current.id} lines={basket.lines.length + basket.unavailable.length} />
-    </section>
+            </>
+          ) : (
+            <>
+              <span className="eyebrow">Your school’s basket</span>
+              <h2 id="glance-title">
+                {basket.lines.length
+                  ? `${basket.lines.length} ${basket.lines.length === 1 ? "item" : "items"} · ${estimate.units.toLocaleString("en-IN")} units`
+                  : "Nothing in it yet"}
+              </h2>
+              <p>
+                {basket.lines.length
+                  ? `Expected ${quoteMoney(estimate.totalPaise)} with GST.`
+                  : "Anyone at your school can add to it."}
+              </p>
+              <Link href={basket.lines.length ? "/school/basket" : "/school/catalog"} className="primary-button">
+                {basket.lines.length ? "View basket" : "Start adding"}
+              </Link>
+            </>
+          )}
+        </aside>
+      </section>
+      <div className="page-container home school-home">
+        {quotations.length > 0 && (
+          <Section
+            id="quotes-title"
+            icon={FileText}
+            title="Your quotations"
+            subtitle="The latest from the store"
+            link="/school/quotations"
+            linkLabel="All quotations"
+          >
+            <ul className="school-quote-strip">
+              {quotations.map((request) => {
+                const version = latest(request);
+                const status = repStatus(request.status, version?.validUntil);
+                return (
+                  <li key={String(request._id)}>
+                    <Link href={`/school/quotations/${request._id}`} className="panel">
+                      <StatusPill tone={status.tone}>{status.label}</StatusPill>
+                      <strong>{request.number}</strong>
+                      <small>
+                        {request.items.length} {request.items.length === 1 ? "item" : "items"}
+                        {version ? ` · ${quoteMoney(version.totalPaise)} with GST` : ""} · <When at={request.updatedAt} />
+                      </small>
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </Section>
+        )}
+        {aisles.length > 0 && (
+          <Section
+            id="school-aisles-title"
+            icon={LayoutGrid}
+            title="Shop by aisle"
+            subtitle="School items, at school prices"
+            link="/school/catalog"
+            linkLabel="See all"
+          >
+            <div className="aisles">
+              {aisles.map((aisle) => (
+                <Link
+                  key={aisle.slug}
+                  href={`/school/catalog?category=${aisle.slug}`}
+                  className={`aisle-tile ${categoryImages[aisle.slug] ? "photo" : "quiet"}`}
+                >
+                  <span className="aisle-art">
+                    {categoryImages[aisle.slug] ? (
+                      <Image src={categoryImages[aisle.slug]} alt="" fill sizes="(max-width: 760px) 25vw, 200px" />
+                    ) : (
+                      <AisleIcon slug={aisle.slug} />
+                    )}
+                  </span>
+                  <span className="aisle-label">
+                    <strong>{aisle.en}</strong>
+                    <small>
+                      {counts.get(aisle.slug) ?? 0} {counts.get(aisle.slug) === 1 ? "item" : "items"}
+                    </small>
+                  </span>
+                </Link>
+              ))}
+              <Link href="/school/catalog" className="aisle-tile quiet">
+                <span className="aisle-art">
+                  <AisleIcon slug="all" />
+                </span>
+                <span className="aisle-label">
+                  <strong>All school items</strong>
+                  <small>{products.length} items</small>
+                </span>
+              </Link>
+            </div>
+          </Section>
+        )}
+        {products.length > 0 ? (
+          <Section
+            id="school-popular-title"
+            icon={Sparkles}
+            title="Popular with schools"
+            subtitle="Prices before GST"
+            link="/school/catalog"
+            linkLabel="See all"
+          >
+            <div className="product-grid">
+              {products.slice(0, 10).map((product, index) => (
+                <SchoolProductCard
+                  key={product.id}
+                  product={product}
+                  schoolId={current.id}
+                  inBasket={inBasket}
+                  eager={index < 5}
+                />
+              ))}
+            </div>
+          </Section>
+        ) : (
+          <EmptyState
+            icon={ShoppingBag}
+            title="The school catalogue is being set up"
+            body="The store hasn’t listed school items yet. You’ll see them here once it does."
+          />
+        )}
+        <section className="delivery-steps school-steps" aria-labelledby="school-how-title">
+          <div>
+            <span className="eyebrow">How it works</span>
+            <h2 id="school-how-title">Shop like any order. Pay nothing here.</h2>
+            <p>Everyone at {current.name} shares one basket. The store prices it and you decide.</p>
+          </div>
+          <ol>
+            <li>
+              <ShoppingBag size={22} aria-hidden="true" />
+              <strong>Fill the basket</strong>
+              <small>Add what your school needs, with how many</small>
+            </li>
+            <li>
+              <FileText size={22} aria-hidden="true" />
+              <strong>Create a quotation</strong>
+              <small>At checkout, instead of paying</small>
+            </li>
+            <li>
+              <ClipboardCheck size={22} aria-hidden="true" />
+              <strong>Accept or ask for changes</strong>
+              <small>The store arranges delivery and billing</small>
+            </li>
+          </ol>
+        </section>
+      </div>
+    </>
   );
 }

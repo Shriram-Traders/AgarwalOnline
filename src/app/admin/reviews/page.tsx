@@ -11,17 +11,8 @@ import { FilterBar } from "@/components/filter-bar";
 import { DataTable } from "@/components/data-table";
 import { EmptyState } from "@/components/empty-state";
 import { When } from "@/components/when";
+import { Stars } from "@/components/stars";
 export const metadata = { title: "Reviews", robots: { index: false } };
-
-/** Five stars as text, with the number for screen readers. */
-function Stars({ rating }: { rating: number }) {
-  return (
-    <span className="review-stars">
-      <span aria-hidden="true">{"★".repeat(rating)}{"☆".repeat(5 - rating)}</span>
-      <span className="sr-only">{rating} of 5</span>
-    </span>
-  );
-}
 
 export default async function ReviewModerationPage({
   searchParams,

@@ -5,8 +5,8 @@ import { z } from "zod";
 import type { MutationState } from "../commerce/actions";
 import { requirePermission } from "../auth/session";
 import { objectId } from "../commerce/service";
-import { Order } from "../commerce/models";
 import { ProductReview, ReviewReport } from "./models";
+import { saveReview } from "./service";
 import { AuditLog } from "../db/models";
 import { plainMessage } from "../form-errors";
 
@@ -20,30 +20,24 @@ export async function reviewAction(
     const rating = z.coerce.number().int().min(1).max(5).parse(form.get("rating"));
     const title = z.string().trim().max(80).parse(form.get("title") ?? "");
     const body = z.string().trim().max(1000).parse(form.get("body") ?? "");
-    const variants = await (await import("../db/models")).ProductVariant.find({
+    // a one-tap star rating sends no title or body, so it must not wipe words written earlier
+    const status = await saveReview(user.id, {
       productId,
-    }).select("_id");
-    const variantIds = variants.map((variant) => variant._id);
-    const verifiedOrder = await Order.findOne({
-      customerId: user.id,
-      deliveryStatus: "delivered",
-      "items.variantId": { $in: variantIds },
-    }).sort({ createdAt: -1 });
-    if (!verifiedOrder)
+      rating,
+      ...(form.has("title") && { title }),
+      ...(form.has("body") && { body }),
+    });
+    if (!status)
       return { error: "Reviews are available after this product is delivered." };
-    // a one-tap star rating sends no title or body, so it must not wipe words written earlier;
-    // and re-rating never republishes a review the store hid
-    const set: Record<string, unknown> = { verifiedOrderId: verifiedOrder._id, rating };
-    if (form.has("title")) set.title = title;
-    if (form.has("body")) set.body = body;
-    await ProductReview.updateOne(
-      { customerId: user.id, productId },
-      { $set: set, $setOnInsert: { status: "published" } },
-      { upsert: true, runValidators: true },
-    );
     revalidatePath(`/products/${form.get("slug")}`);
     revalidatePath("/account/orders/[id]", "page");
-    return { success: "Your verified review is live." };
+    // a review the shop hid stays hidden when its writer edits it
+    return {
+      success:
+        status === "hidden"
+          ? "Saved. The shop has hidden this review, so it isn’t shown on the product page."
+          : "Your verified review is live.",
+    };
   } catch (error) {
     return {
       error:
@@ -99,6 +93,7 @@ export async function moderateReviewAction(
       details: { reason },
     });
     revalidatePath("/admin/reviews");
+    revalidatePath("/super-admin/feedback");
     return { success: "Review moderation saved." };
   } catch {
     return { error: "Unable to moderate this review." };

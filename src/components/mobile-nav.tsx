@@ -50,9 +50,8 @@ export function MobileNav({ locale, unread = 0 }: { locale: Locale; unread?: num
           href === "/"
             ? pathname === "/"
             : href === "/account"
-              ? // the wishlist has its own tab; staff pages have their own tab bar
-                (pathname.startsWith("/account") && !pathname.startsWith("/account/wishlist")) ||
-                /^\/school(\/|$)/.test(pathname)
+              ? // the wishlist has its own tab; staff pages and the school marketplace have their own tab bars
+                pathname.startsWith("/account") && !pathname.startsWith("/account/wishlist")
               : pathname.startsWith(href) || (href === "/catalog" && pathname.startsWith("/products"));
         const basket = href === "/cart";
         return (

@@ -29,7 +29,7 @@ import { currentLocale } from "@/lib/i18n";
 import { customerStage } from "@/lib/display";
 import { dayLabel } from "@/lib/commerce/slots";
 import { OrderHistory } from "@/components/order-history";
-import { SchoolMember } from "@/lib/schools/models";
+import { representsActiveSchool } from "@/lib/schools/membership";
 export const metadata = { title: "Your account", robots: { index: false } };
 export default async function Account({
   searchParams,
@@ -42,7 +42,7 @@ export default async function Account({
   const locale = await currentLocale();
   const mr = locale === "mr";
   const profile = await User.findById(user.id).select("preferredPaymentMethod substitutionPreference");
-  const representsSchool = Boolean(await SchoolMember.exists({ userId: user.id }));
+  const representsSchool = await representsActiveSchool(user.id);
   const customerOverview = await Promise.all([
           Order.findOne({
             customerId: user.id,
@@ -185,8 +185,8 @@ export default async function Account({
               ...(representsSchool
                 ? [
                     [
-                      mr ? "शाळेचे कोटेशन" : "School quotations",
-                      mr ? "शाळेची यादी, कोटेशन आणि उत्तरे" : "Your school’s catalogue, basket and quotations",
+                      mr ? "माझ्या शाळेसाठी" : "For my school",
+                      mr ? "शाळेच्या दरात खरेदी करा आणि कोटेशन मागा" : "Shop at school prices and ask for quotations",
                       "/school",
                       School,
                     ],

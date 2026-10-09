@@ -92,9 +92,8 @@ export default async function ProductPage({
       : null,
   ]);
   const canReview = user !== null && Boolean(delivered);
-  const averageRating = reviews.length
-    ? reviews.reduce((sum, review) => sum + review.rating, 0) / reviews.length
-    : 0;
+  // every published review counts, as on the product cards; only the latest 20 are listed below
+  const averageRating = p.reviewCount ? p.rating : 0;
   // the cutoff is an IST hour; the server clock is UTC on Vercel
   const deliveryDay = minutesUntilCutoff(rules.cutoffHour) > 0 ? "today" : "tomorrow";
   const v = p.variants[0];
@@ -154,7 +153,7 @@ export default async function ProductPage({
           <div className="product-assurance-row">
             <span>
               <Star size={14} aria-hidden="true" />
-              {averageRating ? `${averageRating.toFixed(1)} · ${reviews.length} verified reviews` : "New in store"}
+              {averageRating ? `${averageRating.toFixed(1)} · ${p.reviewCount} verified ${p.reviewCount === 1 ? "review" : "reviews"}` : "New in store"}
             </span>
             <span>
               <Truck size={14} aria-hidden="true" /> Delivery {deliveryDay}

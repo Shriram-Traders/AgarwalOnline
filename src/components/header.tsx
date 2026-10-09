@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, Bell, ChevronDown, Heart, MapPin, UserRound } from "lucide-react";
+import { ArrowRight, Bell, ChevronDown, Heart, MapPin, School, UserRound } from "lucide-react";
 import { SmartSearch } from "./smart-search";
 import { MobileNav } from "./mobile-nav";
 import { LocaleToggle } from "./locale-toggle";
@@ -15,8 +15,11 @@ import { shopAssistantEnabled } from "@/lib/assistant/flags";
 import { BackButton } from "./back-button";
 import { BasketLink } from "./basket";
 import { formatPrice } from "@/lib/display";
-import { SchoolMember } from "@/lib/schools/models";
+import { representsActiveSchool } from "@/lib/schools/membership";
+import { schoolCopy } from "@/lib/schools/copy";
 import { copy, type Locale } from "@/lib/locale-types";
+import { pendingFeedbackOrder } from "@/lib/feedback/service";
+import { FeedbackPrompt } from "./feedback-prompt";
 
 export type CategoryLink = { slug: string; en: string; mr: string };
 
@@ -59,14 +62,19 @@ export async function Header({
       endsAt: { $gte: now },
     }).select("code minimumSubtotalPaise"),
   ]);
-  // both depend on who's signed in, not on each other: ask at the same time
-  const [usedWelcome, schoolMember, unread] = user
+  // staff accounts aren't asked to rate: their test orders would skew the shop's scores
+  const shopper = user && !staffRoleOf(user.roles) ? user : null;
+  // all four depend on who's signed in, not on each other: ask at the same time
+  const [usedWelcome, schoolMember, toRate, unread] = user
     ? await Promise.all([
         offer ? PromotionRedemption.exists({ promotionId: offer._id, customerId: user.id }) : null,
-        SchoolMember.exists({ userId: user.id }),
+        // a paused school has nothing to open, so it doesn't count
+        representsActiveSchool(user.id),
+        // a delivered order waiting for "How did we do?"; never worth failing the page over
+        shopper ? pendingFeedbackOrder(shopper.id).catch(() => null) : null,
         Notification.countDocuments({ userId: user.id, readAt: null }),
       ])
-    : [null, null, 0];
+    : [null, null, null, 0];
   // someone who already used it isn't told about it again
   const welcome = usedWelcome ? null : offer;
   const text = copy[locale];
@@ -94,6 +102,12 @@ export async function Header({
             )}
           </p>
           <div className="top-strip-links">
+            {representsSchool && (
+              // phones only: the category row with the desktop button is hidden there
+              <Link href="/school" className="school-door">
+                <School size={14} aria-hidden="true" /> {schoolCopy[locale].forMySchool}
+              </Link>
+            )}
             <Link href="/serviceability">
               {text.sameDay(cutoff)} <ArrowRight size={14} aria-hidden="true" />
             </Link>
@@ -118,6 +132,11 @@ export async function Header({
             <Link href="/catalog?sort=discount" className="offers">
               {text.deals}
             </Link>
+            {representsSchool && (
+              <Link href="/school" className="school-door-pill">
+                <School size={16} aria-hidden="true" /> {schoolCopy[locale].forMySchool}
+              </Link>
+            )}
           </nav>
           {/* logo → where we deliver → search → icons; phones put the icons in the bottom bar */}
           <div className="header-actions">
@@ -176,6 +195,7 @@ export async function Header({
       </header>
       <MobileNav locale={locale} unread={unread} />
       <CartBar locale={locale} />
+      {shopper && <FeedbackPrompt order={toRate} locale={locale} />}
       {/* hidden until the store introduces it: SHOP_ASSISTANT=on */}
       {shopAssistantEnabled() && <ShopAssistant locale={locale} signedIn={Boolean(user)} />}
     </>
