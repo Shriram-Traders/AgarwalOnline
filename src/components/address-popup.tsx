@@ -6,6 +6,7 @@ import { ActionForm } from "./action-form";
 import { PhoneInput } from "./phone-input";
 import { Modal } from "./modal";
 import { addressAction } from "@/lib/commerce/actions";
+import { PolicyNotice } from "./policy-notice";
 
 type Area = { id: string; name: string; pincodes: string[] };
 
@@ -111,6 +112,7 @@ export function AddressPopup({
                   Delivery instructions <small className="muted">Optional: a landmark, gate or floor</small>
                   <textarea name="instructions" maxLength={300} rows={2} />
                 </label>
+                <PolicyNotice kind="address" />
               </ActionForm>
             </>
           ) : (

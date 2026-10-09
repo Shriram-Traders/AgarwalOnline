@@ -5,6 +5,7 @@ import { connectDB } from "../src/lib/db/connect";
 import { Category, InventoryItem, Product, ProductVariant, ServiceArea, User } from "../src/lib/db/models";
 import { Address, CartLine, DeliverySlot, Order } from "../src/lib/commerce/models";
 import { checkout } from "../src/lib/commerce/service";
+import { POLICY_VERSION } from "../src/lib/legal/version";
 import { Notification } from "../src/lib/engagement/models";
 import { Refund } from "../src/lib/payments/models";
 import { Family } from "../src/lib/family/models";
@@ -75,6 +76,7 @@ describe.skipIf(!uri)("Families", () => {
       slotId: slot,
       idempotencyKey: randomUUID(),
       method: "cod",
+      termsVersion: POLICY_VERSION,
       ...(forId === undefined ? {} : { forId }),
     });
   };

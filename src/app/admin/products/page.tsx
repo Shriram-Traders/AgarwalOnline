@@ -85,9 +85,9 @@ export default async function Products({
           <input name="q" defaultValue={params.q} maxLength={80} />
         </label>
         <label>
-          Aisle
+          Category
           <select name="category" defaultValue={params.category ?? ""}>
-            <option value="">All aisles</option>
+            <option value="">All categories</option>
             {categories.map((category) => (
               <option key={category.slug} value={category.slug}>
                 {category.name.en}
@@ -203,7 +203,7 @@ export default async function Products({
           <EmptyState
             icon={PackageOpen}
             title={filtered ? "No products match" : "No products yet"}
-            body={filtered ? "Try another name, aisle or stock filter." : "Add your first product to start selling."}
+            body={filtered ? "Try another name, category or stock filter." : "Add your first product to start selling."}
             action={
               filtered ? (
                 <Link href="/admin/products" className="secondary-button">

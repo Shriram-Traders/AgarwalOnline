@@ -8,6 +8,7 @@ import { ActionForm } from "@/components/action-form";
 import Link from "next/link";
 import { User } from "@/lib/db/models";
 import { ClaimPhone } from "@/components/claim-phone";
+import { PolicyNotice } from "@/components/policy-notice";
 export const metadata = { title: "Saved addresses", robots: { index: false } };
 export default async function Addresses({
   searchParams,
@@ -95,6 +96,7 @@ export default async function Addresses({
                   />
                 </label>
                 <label><input type="checkbox" name="isDefault" defaultChecked={a.isDefault} /> Use as my default address</label>
+                <PolicyNotice kind="address" />
               </ActionForm>
               <ActionForm
                 action={addressAction}
@@ -155,6 +157,7 @@ export default async function Addresses({
                 <textarea name="instructions" maxLength={300} />
               </label>
               <label><input type="checkbox" name="isDefault" defaultChecked={!addresses.length} /> Use as my default address</label>
+              <PolicyNotice kind="address" />
             </ActionForm>
           ) : (
             <p>

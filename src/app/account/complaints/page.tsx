@@ -11,6 +11,8 @@ import { UploadedEvidence } from "@/lib/evidence/models";
 import { evidenceAction } from "@/lib/evidence/actions";
 import { displayStatus } from "@/lib/display";
 import { PhotoInput } from "@/components/photo-input";
+import { PolicyNotice } from "@/components/policy-notice";
+import { getEnv } from "@/lib/env";
 export const metadata = { title: "Complaints & returns", robots: { index: false } };
 const TYPES = ["missing-item", "damaged-item", "wrong-item", "other"];
 
@@ -21,6 +23,8 @@ export default async function Complaints({
 }) {
   const user = await requirePage("complaint:own");
   const params = await searchParams;
+  // the photo notice says how long they're kept: the cleanup job's own setting
+  const evidenceDays = getEnv().EVIDENCE_RETENTION_DAYS;
   const orders = await Order.find({ customerId: user.id })
     .select("number deliveryStatus")
     .sort({ createdAt: -1 })
@@ -101,6 +105,7 @@ export default async function Complaints({
                     JPG, PNG or WebP · big phone photos are made smaller automatically
                     <PhotoInput />
                   </label>
+                  <PolicyNotice kind="evidence" days={evidenceDays} />
                 </ActionForm>
               </article>
             );
@@ -151,6 +156,7 @@ export default async function Complaints({
                 Item issues and returns can be reported after delivery. The
                 store will review your request.
               </p>
+              <PolicyNotice kind="complaint" />
             </ActionForm>
           ) : (
             <p>You can report an issue here once you place an order.</p>

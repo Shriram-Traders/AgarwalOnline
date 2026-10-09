@@ -13,6 +13,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { currentUser } from "@/lib/auth/session";
+import { hasPermission } from "@/lib/auth/permissions";
 import { categoryImages, heroImage } from "@/lib/catalog/images";
 import { chosenSchool } from "@/lib/schools/current";
 import { schoolContext } from "@/lib/schools/membership";
@@ -104,6 +105,29 @@ export default async function SchoolHome({
   // a link naming one of their schools: switch to it so the header agrees
   if (params.s && context.current && params.s !== preferred) redirect(switchHref(params.s, "/school"));
 
+  // the owner shops for any school; with none added yet, the way on is to add one
+  const owner = hasPermission(user.roles, "settings:write");
+  if (!context.schools.length && owner)
+    return (
+      <section className="page-container">
+        <PageHeading
+          eyebrow="For schools"
+          title="Agarwal for schools"
+          lead="Schools shop here at school prices and ask for a quotation at checkout. As the owner you can shop for any school."
+        />
+        <EmptyState
+          icon={SchoolIcon}
+          title="Add your first school"
+          body="Once a school is added you can shop for it here, and its representatives can too."
+          action={
+            <Link href="/super-admin/schools?edit=new#school" className="primary-button">
+              Add a school
+            </Link>
+          }
+        />
+      </section>
+    );
+
   if (!context.schools.length) {
     const requests = await SchoolAccessRequest.find({ userId: user.id }).sort({ createdAt: -1 }).limit(20);
     const names = await School.find({ _id: { $in: requests.map((r) => r.schoolId) } }).select("name");
@@ -178,7 +202,11 @@ export default async function SchoolHome({
     const usable = context.schools.filter((school) => school.active);
     return (
       <section className="page-container">
-        <PageHeading eyebrow="For schools" title="Choose your school" lead="Which school are you buying for today?" />
+        <PageHeading
+          eyebrow="For schools"
+          title="Choose your school"
+          lead={owner ? "As the owner you can shop for any school. Which one is this for?" : "Which school are you buying for today?"}
+        />
         {current && !current.active && (
           <p className="notice school-paused" role="status">
             <PauseCircle size={18} aria-hidden="true" /> {current.name} is paused by the store for now. Its basket and
@@ -236,7 +264,9 @@ export default async function SchoolHome({
       <section className="hero school-hero" aria-labelledby="school-welcome">
         <div className="hero-card">
           <Image src={categoryImages.school ?? heroImage} alt="" fill sizes="60vw" priority />
-          <span className="hero-badge">School prices · {current.name}</span>
+          <span className="hero-badge">
+            {owner ? `Shopping for ${current.name} as the owner` : `School prices · ${current.name}`}
+          </span>
           <h1 id="school-welcome">
             Everything your school needs,
             <em> priced for schools</em>
@@ -317,7 +347,7 @@ export default async function SchoolHome({
           <Section
             id="school-aisles-title"
             icon={LayoutGrid}
-            title="Shop by aisle"
+            title="Shop by category"
             subtitle="School items, at school prices"
             link="/school/catalog"
             linkLabel="See all"

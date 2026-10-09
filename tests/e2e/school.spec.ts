@@ -2,7 +2,8 @@
 // out of the shop; a representative joins through the school's link and the owner approves;
 // the representative shops the school marketplace like the shop, and checkout creates a quotation
 // for 500 instead of taking payment; the owner prices it with GST and sends it; the school asks
-// for changes, gets version 2 and accepts it; and another school's representative can't look.
+// for changes, gets version 2 and accepts it; anyone with the quotation's view-only link can read
+// and print it until the owner makes a new link; and another school's representative can't look.
 import { test, expect, type Browser, type Page, type TestInfo } from "@playwright/test";
 import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
@@ -12,7 +13,7 @@ import { QuoteRequest, School, SchoolMember } from "../../src/lib/schools/models
 const uri = "mongodb://127.0.0.1:27028/ags_test_e2e?replicaSet=ags-local";
 const PASSWORD = "Local-test-password-123";
 const TOKEN = "e2e-school-join-token-01";
-const NOT_FOUND = "We couldn’t find that aisle.";
+const NOT_FOUND = "We couldn’t find that page.";
 const PEOPLE = {
   owner: { name: "E2E Owner", email: "school-owner@e2e.test", phone: "9000000121", roles: ["customer", "super-admin"] },
   rep: { name: "Asha Patil", email: "school-rep@e2e.test", phone: "9000000122", roles: ["customer"] },
@@ -228,6 +229,38 @@ test("the school asks for changes, gets version 2 and accepts it", async ({ brow
   expect((await QuoteRequest.findById(quoteId))?.status).toBe("accepted");
 });
 
+test("anyone with the quotation's link can see and print it, and a new link stops the old one", async ({ browser, page }, info) => {
+  const rep = await as("rep", browser, info);
+  await rep.goto(`/school/quotations/${quoteId}`);
+  const link = await rep.getByLabel("View-only link").inputValue();
+  const code = link.match(/\/q\/([A-Za-z0-9_-]{24})$/)![1];
+  expect(code).toBe((await QuoteRequest.findById(quoteId))?.shareToken);
+
+  // signed out: the latest version to read and print, and no way to answer or see the school's notes
+  await page.goto(`/q/${code}`);
+  await expect(page.locator("main .quotation")).toContainText("₹23,600.00");
+  await expect(page.getByRole("button", { name: "Print or save as PDF" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Accept quotation" })).toHaveCount(0);
+  await expect(page.getByText("Can you do ₹40 if we take 500?")).toHaveCount(0);
+  await expect(page.getByText("Deliver to the school office")).toHaveCount(0);
+  await shot(page, "shared-link");
+
+  const owner = await as("owner", browser, info);
+  await owner.goto(`/super-admin/quotations/${quoteId}`);
+  await expect(owner.getByLabel("View-only link")).toHaveValue(link);
+  await owner.getByRole("button", { name: "Make a new link" }).click();
+  await owner.getByRole("button", { name: "Yes, make a new link" }).click();
+  await expect(owner.getByText("A new link is ready. The old one no longer works.")).toBeVisible();
+  await expect(owner.getByLabel("View-only link")).not.toHaveValue(link);
+
+  await page.goto(`/q/${code}`);
+  await expect(page.getByRole("heading", { name: NOT_FOUND })).toBeVisible();
+  await expect(page.getByText("E2E Attendance Register")).toHaveCount(0);
+  const fresh = (await QuoteRequest.findById(quoteId))?.shareToken;
+  await page.goto(`/q/${fresh}`);
+  await expect(page.locator("main .quotation")).toContainText("₹23,600.00");
+});
+
 test("another school's representative finds nothing there", async ({ browser }, info) => {
   const other = await as("other", browser, info);
   await other.goto(`/school/quotations/${quoteId}`);
@@ -238,4 +271,26 @@ test("another school's representative finds nothing there", async ({ browser }, 
   await other.goto("/school");
   await expect(other.locator("main").getByText("E2E Other School").first()).toBeVisible();
   await expect(other.getByText("E2E Vidya Mandir")).toHaveCount(0);
+});
+
+test("the owner shops for any school and creates its quotation", async ({ browser }, info) => {
+  const owner = await as("owner", browser, info);
+  await owner.goto("/");
+  // the owner represents no school, but gets the way in by default
+  await owner.getByRole("link", { name: "For schools" }).first().click();
+  await expect(owner).toHaveURL("/school");
+  await expect(owner.getByRole("heading", { name: "Choose your school" })).toBeVisible();
+  await owner.getByRole("link", { name: "E2E Vidya Mandir" }).click();
+  await expect(owner.getByText("Shopping for E2E Vidya Mandir as the owner")).toBeVisible();
+  await owner.goto("/school/catalog?view=cards");
+  const card = owner.locator(".school-card", { hasText: "E2E Attendance Register" });
+  await card.getByLabel("How many of E2E Attendance Register").fill("40");
+  await card.getByRole("button", { name: "Add to basket" }).click();
+  await expect(card.getByText("Added. The basket now has 40 of this.")).toBeVisible();
+  await owner.goto("/school/checkout");
+  await owner.getByRole("button", { name: "Create quotation" }).click();
+  await expect(owner).toHaveURL(/\/school\/quotations\/[a-f\d]{24}\?sent=1/);
+  // it lands on the owner's desk like any school's request
+  await expect(owner.getByRole("link", { name: "Quotation desk" })).toBeVisible();
+  expect(await QuoteRequest.countDocuments({ schoolId })).toBe(2);
 });

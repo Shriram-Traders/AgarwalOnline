@@ -73,7 +73,9 @@ test.afterAll(async () => {
 async function addMarkers(page: Page) {
   await page.goto("/products/fictional-marker-set");
   await page.getByRole("button", { name: "Add to basket" }).click();
-  await expect(page.locator(".success-message")).toContainText("Basket updated");
+  await expect(page.locator("main").getByText("1 in basket")).toBeVisible();
+  // shown at once, saved just after: wait for the save before leaving the page
+  await expect(page.locator("main .product-quantity").first()).toHaveAttribute("aria-busy", "false");
   await page.goto("/cart");
 }
 async function shot(page: Page, name: string) {

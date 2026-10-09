@@ -4,6 +4,8 @@ import Link from "next/link";
 import { ActionForm } from "./action-form";
 import { checkoutAction } from "@/lib/commerce/actions";
 import { formatPrice } from "@/lib/display";
+import { POLICY_VERSION } from "@/lib/legal/version";
+import { LegalText } from "./legal-text";
 type Option = {
   id: string;
   label: string;
@@ -29,7 +31,8 @@ export function CheckoutForm({
   tab,
 }: {
   addresses: Option[];
-  slots: { id: string; areaId: string; label: string }[];
+  /** In time order; `label` is the whole "Today · 4:00 PM – 7:00 PM", `day` and `time` its parts. */
+  slots: { id: string; areaId: string; label: string; day: string; time: string }[];
   subtotal: number;
   threshold: number;
   promotionDiscount?: number;
@@ -54,6 +57,11 @@ export function CheckoutForm({
   );
   const a = addresses.find((a) => a.id === addressId);
   const available = slots.filter((s) => s.areaId === a?.areaId);
+  // the times grouped under their day: Today, Tomorrow, Thu, 1 Jan…
+  const days = [...new Set(available.map((s) => s.day))].map((day) => ({
+    day,
+    times: available.filter((s) => s.day === day),
+  }));
   const fee = subtotal >= threshold ? 0 : (a?.fee ?? 0);
   const codBlocked = method === "cod" && a && (!a.codEnabled || subtotal + fee > a.codLimit);
   const total = subtotal - promotionDiscount + fee;
@@ -95,18 +103,28 @@ export function CheckoutForm({
           <p className="muted">
             <Link href="/account/addresses">Manage saved addresses</Link>
           </p>
-          <label>
-            Delivery slot
-            {/* the earliest window is the likely one; up to 14 days of windows stay a list */}
-            <select key={addressId} name="slotId" required defaultValue={available[0]?.id ?? ""}>
-              {!available.length && <option value="">No delivery windows open</option>}
-              {available.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.label}
-                </option>
+          {available.length > 0 && (
+            // a tap on a time instead of a dropdown; the earliest is chosen to start with
+            <fieldset className="slot-picker" key={addressId}>
+              <legend>Delivery time</legend>
+              {days.map(({ day, times }) => (
+                <div className="slot-day" key={day}>
+                  <span className="slot-day-name" aria-hidden="true">
+                    {day}
+                  </span>
+                  <div className="slot-options">
+                    {times.map((s) => (
+                      <label className="slot-option" key={s.id}>
+                        <input type="radio" name="slotId" value={s.id} required defaultChecked={s.id === available[0].id} />
+                        <span aria-hidden="true">{s.time}</span>
+                        <span className="sr-only">{s.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
               ))}
-            </select>
-          </label>
+            </fieldset>
+          )}
           {!available.length && (
             <p className="error-message" role="status">
               No delivery times are open for this address right now, so the order can’t be placed yet.
@@ -189,13 +207,18 @@ export function CheckoutForm({
           {method === "cod" ? "Total to collect" : method === "tab" ? "Total on the tab" : "Total to pay"}:{" "}
           {formatPrice(total)}
         </h3>
-        {/* only cash asks twice: a no-show costs the shop a trip; the button names everything else */}
-        {method === "cod" && (
-          <label className="checkbox-label">
-            <input type="checkbox" required />
-            I confirm this order and will pay cash on delivery.
-          </label>
-        )}
+        <label className="checkbox-label">
+          {/* ticking it agrees to this Terms version, which the order keeps */}
+          <input type="checkbox" name="termsVersion" value={POLICY_VERSION} required />
+          <span>
+            {method === "cod"
+              ? "I confirm this order, will pay cash on delivery, and agree to the "
+              : method === "tab"
+                ? "I confirm this order on the family tab and agree to the "
+                : "I confirm this order, will complete payment online, and agree to the "}
+            <LegalText newTab text="[Terms & Conditions](/p/terms-and-conditions) and [Refunds & Cancellations](/p/refunds-and-cancellations) policy." />
+          </span>
+        </label>
         <p className="muted">Prices and availability are checked again when you confirm.</p>
       </aside>
       <input type="hidden" name="idempotencyKey" value={idempotencyKey} />

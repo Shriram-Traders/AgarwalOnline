@@ -7,8 +7,10 @@ import { istDate } from "@/lib/commerce/delivery";
 import { User } from "@/lib/db/models";
 import { stateOfGstin } from "@/lib/tax/gst";
 import { taxProfile } from "@/lib/tax/profile";
+import { getEnv } from "@/lib/env";
 import { QuoteRequest, School } from "@/lib/schools/models";
-import { draftDiscount } from "@/lib/schools/quotes";
+import { quotationShareHref } from "@/lib/schools/links";
+import { draftDiscount, quoteShareToken } from "@/lib/schools/quotes";
 import { quoteDeskAction } from "@/lib/schools/actions";
 import { istDatePlus, quoteTotals, startingUnitPrice, supplyType } from "@/lib/schools/quote-math";
 import { ownerStatus, quoteDate, quoteMoney } from "@/lib/schools/display";
@@ -16,6 +18,7 @@ import { ActionForm } from "@/components/action-form";
 import { DataTable } from "@/components/data-table";
 import { PageHeading } from "@/components/page-heading";
 import { RecordHistory } from "@/components/record-history";
+import { ShareLink } from "@/components/share-link";
 import { StatusPill } from "@/components/status-pill";
 import { When } from "@/components/when";
 import { QuoteSheet, type SheetRow } from "@/components/quote-sheet";
@@ -103,6 +106,7 @@ export default async function QuotationDesk({ params }: { params: Promise<{ id: 
   const draftExpired = Boolean(draft && draft.validUntil < today);
   const nextVersion = request.currentVersion + 1;
   const status = ownerStatus(request.status, versions[0]?.validUntil);
+  const shareUrl = `${getEnv().APP_ORIGIN}${quotationShareHref(await quoteShareToken(request))}`;
   return (
     <section className="page-container">
       <nav className="breadcrumb" aria-label="Breadcrumb">
@@ -263,6 +267,33 @@ export default async function QuotationDesk({ params }: { params: Promise<{ id: 
           ]}
           empty={<p className="muted">Nothing sent yet.</p>}
         />
+      </section>
+
+      <section className="panel quote-share" aria-labelledby="share-heading">
+        <h2 id="share-heading">Link to share</h2>
+        <p className="muted">
+          Anyone with this link can see and print the latest quotation, without signing in, for example the school’s
+          principal or accounts office. Only the school’s representatives can accept it. The link’s code is random, so it
+          can’t be guessed from the quotation number.
+        </p>
+        <ShareLink
+          label="View-only link"
+          url={shareUrl}
+          hint={request.currentVersion ? "Opens the latest version sent." : "Shows the quotation once you send version 1."}
+          title={`Quotation ${request.number} from Agarwal General Stores`}
+          copy="Copy link"
+          copied="Copied"
+        />
+        <ActionForm
+          action={quoteDeskAction}
+          submit="Make a new link"
+          className="form-stack inline-grant"
+          buttonClassName="secondary-button compact-button"
+          confirmMessage="The current link stops working straight away. Anyone who should still see the quotation needs the new one."
+        >
+          <input type="hidden" name="operation" value="new-link" />
+          <input type="hidden" name="requestId" value={id} />
+        </ActionForm>
       </section>
 
       {open && (

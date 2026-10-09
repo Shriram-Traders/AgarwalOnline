@@ -153,6 +153,7 @@ export default async function StoreSettings({
             legalName: business.legalName,
             gstin: business.gstin,
             stateName: GST_STATES.find((state) => state.code === business.stateCode)?.name,
+            grievanceName: business.grievanceName,
           },
           stockThreshold: Number(stockThreshold?.value ?? 100),
           synonymGroups: synonyms.length,
@@ -593,7 +594,17 @@ export default async function StoreSettings({
       <section className="settings-section" aria-labelledby="tax-heading" id="tax" tabIndex={-1}>
         <div className="settings-intro">
           <h2 id="tax-heading">Business and tax details</h2>
-          <p>Printed at the top of every school quotation, with the GST worked out from your state.</p>
+          <p>
+            Printed at the top of every school quotation, with the GST worked out from your state. The name, address,
+            phone, email and grievance officer are also shown to everyone on the{" "}
+            <Link href="/p/contact-and-grievance">Contact &amp; Grievance</Link> page.
+          </p>
+          {!business.grievanceName && (
+            <p className="notice">
+              No grievance officer yet. Online shops must name one, so the Contact page says the details are being
+              added.
+            </p>
+          )}
           {!business.gstin && (
             <p className="notice">
               No GSTIN yet. Quotations still go out, with a note that the GSTIN will be added.
@@ -602,7 +613,7 @@ export default async function StoreSettings({
         </div>
         <div className="settings-cards">
           <div className="panel">
-            <h2>On quotations</h2>
+            <h2>On quotations and the Contact page</h2>
             <ActionForm action={taxDetailsAction} submit="Save business details">
               <label>
                 Legal name <small>As registered for GST</small>
@@ -635,7 +646,7 @@ export default async function StoreSettings({
               </label>
               <div className="staff-form-grid">
                 <label>
-                  Phone <small>Optional</small>
+                  Phone <small>Shown on quotations and the Contact page</small>
                   <PhoneInput
                     defaultValue={business.phone ?? ""}
                     pattern="[0-9]{10}"
@@ -643,10 +654,25 @@ export default async function StoreSettings({
                   />
                 </label>
                 <label>
-                  Email <small>Optional</small>
+                  Email <small>Shown on quotations and the Contact page</small>
                   <input name="email" type="email" defaultValue={business.email ?? ""} maxLength={120} />
                 </label>
               </div>
+              <fieldset className="staff-form-grid grievance-fields" id="grievance" tabIndex={-1}>
+                <legend>Grievance officer <small>Shown on the Contact &amp; Grievance page</small></legend>
+                <label>
+                  Name
+                  <input name="grievanceName" defaultValue={business.grievanceName ?? ""} maxLength={80} />
+                </label>
+                <label>
+                  Designation <small>Like Proprietor or Manager</small>
+                  <input
+                    name="grievanceDesignation"
+                    defaultValue={business.grievanceDesignation ?? ""}
+                    maxLength={80}
+                  />
+                </label>
+              </fieldset>
               <label>
                 Quotation terms <small>Optional, like payment terms; printed at the bottom</small>
                 <textarea name="terms" defaultValue={business.terms ?? ""} maxLength={1000} />

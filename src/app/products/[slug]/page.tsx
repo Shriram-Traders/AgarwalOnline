@@ -4,7 +4,7 @@ import { ChevronRight, Star, Truck } from "lucide-react";
 import { productImages } from "@/lib/catalog/images";
 import { currentUser } from "@/lib/auth/session";
 import { ActionForm } from "@/components/action-form";
-import { cartAction } from "@/lib/commerce/actions";
+import { PolicyNotice } from "@/components/policy-notice";
 import { catalogCategories, productBySlug } from "@/lib/catalog/queries";
 import { WishlistButton } from "@/components/wishlist-button";
 import { currentLocale } from "@/lib/i18n";
@@ -17,6 +17,8 @@ import { recommendationsFor } from "@/lib/catalog/recommendations";
 import { ProductCard } from "@/components/product-card";
 import { deliveryRules } from "@/lib/commerce/service";
 import { ProductGallery } from "@/components/product-gallery";
+import { ProductQuantity } from "@/components/quick-add";
+import { orderedPhotos } from "@/lib/catalog/photos";
 import { discountPercent, formatPrice, minutesUntilCutoff } from "@/lib/display";
 import { getEnv } from "@/lib/env";
 import { listsFor } from "@/lib/lists/service";
@@ -130,10 +132,7 @@ export default async function ProductPage({
       </nav>
       <div className="product-detail">
         <ProductGallery
-          images={[
-            ...p.images,
-            ...(image && !p.images.includes(image) ? [image] : []),
-          ]}
+          images={orderedPhotos(p).length ? orderedPhotos(p) : image ? [image] : []}
           name={p.name.en}
           category={p.categorySlug}
         />
@@ -186,22 +185,16 @@ export default async function ProductPage({
                         : "Currently out of stock"}
                     </small>
                   </div>
+                  {/* tapping again adds one more; it used to set the basket to the typed number */}
                   {v.available > 0 ? (
-                    <ActionForm action={cartAction} submit="Add to basket">
-                      <input type="hidden" name="variantId" value={v.id} />
-                      <label>
-                        Quantity
-                        <input
-                          type="number"
-                          name="quantity"
-                          defaultValue={1}
-                          min={1}
-                          max={max}
-                          inputMode="numeric"
-                          required
-                        />
-                      </label>
-                    </ActionForm>
+                    <ProductQuantity
+                      variantId={v.id}
+                      pricePaise={v.pricePaise}
+                      available={v.available}
+                      max={max}
+                      name={`${p.name[locale]} (${v.label})`}
+                      mr={mr}
+                    />
                   ) : (
                     <span className="status-pill">Sold out</span>
                   )}
@@ -264,6 +257,7 @@ export default async function ProductPage({
                 Your review
                 <textarea name="body" rows={4} maxLength={1000} />
               </label>
+              <PolicyNotice kind="review" />
             </ActionForm>
           </div>
         )}

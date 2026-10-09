@@ -10,6 +10,8 @@ const PARENTS: [RegExp, string][] = [
   [/^\/admin\/orders\/[^/]+$/, "/admin"],
   [/^\/delivery\/orders\/[^/]+$/, "/delivery"],
   [/^\/lists\/[^/]+$/, "/"],
+  // a quotation's view-only link, often opened from WhatsApp or email
+  [/^\/q\/[^/]+$/, "/"],
   [/^\/family\/[^/]+$/, "/"],
   [/^\/school\/join\/[^/]+$/, "/"],
   [/^\/school\/products\/[^/]+$/, "/school/catalog"],

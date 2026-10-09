@@ -18,6 +18,7 @@ import {
 } from "../../src/lib/commerce/models";
 import { Family } from "../../src/lib/family/models";
 import { OrderFeedback } from "../../src/lib/feedback/models";
+import { POLICY_VERSION } from "../../src/lib/legal/version";
 const uri = "mongodb://127.0.0.1:27028/ags_test_e2e?replicaSet=ags-local";
 test.beforeAll(async () => {
   await mongoose.connect(uri);
@@ -175,7 +176,9 @@ test("customer OTP, basket, address, COD, tracking and cancellation", async ({
   expect(sessionCookie?.sameSite).toBe("Lax");
   await page.goto("/products/everyday-basmati-rice");
   await page.getByRole("button", { name: "Add to basket" }).click();
-  await expect(page.getByRole("status")).toContainText("Basket updated");
+  await expect(page.locator("main").getByText("1 in basket")).toBeVisible();
+  // shown at once, saved just after: wait for the save before leaving the page
+  await expect(page.locator("main .product-quantity").first()).toHaveAttribute("aria-busy", "false");
   await page.goto("/account/addresses");
   await page.getByLabel("Recipient name").fill("Fictional Neighbour");
   await page.getByLabel("Mobile number").fill("9000000088");
@@ -197,17 +200,25 @@ test("customer OTP, basket, address, COD, tracking and cancellation", async ({
   await expect(page.getByRole("status")).toContainText("Address saved");
   await page.goto("/checkout");
   await page
-    .getByLabel("Delivery slot")
-    .selectOption({ label: "Thu, 1 Jan · 4:00 PM – 7:00 PM" });
+    .getByRole("radio", { name: "Thu, 1 Jan · 4:00 PM – 7:00 PM" })
+    .check();
   await expect(
     page.getByRole("heading", { name: "Total to collect: ₹139" }),
   ).toBeVisible();
+  // the box also agrees to the Terms, which open in a new tab so the checkout isn't lost
+  const terms = page.locator(".checkout-summary").getByRole("link", { name: /Terms & Conditions/ });
+  await expect(terms).toHaveAttribute("href", "/p/terms-and-conditions");
+  await expect(terms).toHaveAttribute("target", "_blank");
   await page.getByRole("checkbox").check();
   await page
     .getByRole("button", { name: "Confirm Cash on Delivery order" })
     .click();
   await expect(page).toHaveURL(/\/account\/orders\/[a-f0-9]+/);
   await expect(page.getByText(/^Status: Order placed$/i)).toBeVisible();
+  // the order keeps the Terms version that was ticked, and says so
+  const placed = await Order.findById(page.url().split("/").pop());
+  expect(placed.termsVersion).toBe(POLICY_VERSION);
+  await expect(page.getByText(`Version ${POLICY_VERSION}`)).toBeVisible();
   await page.getByRole("checkbox").check();
   await page.getByRole("button", { name: "Cancel this order" }).click();
   // the confirm dialog is aria-modal, so it must take focus and close on Escape
@@ -351,7 +362,7 @@ test("mobile storefront stays within viewport and navigation is visible", async 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
   await expect(page.getByRole("combobox", { name: "Search products" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Shop by aisle" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Shop by category" })).toBeVisible();
   await expect(
     page.getByRole("navigation", { name: "Mobile navigation" }),
   ).toBeVisible();
@@ -463,7 +474,8 @@ test("admin packing through partner delivery and cash reconciliation", async ({
         .getByLabel("Password", { exact: true })
         .fill("Local-test-password-123");
       await p.getByRole("button", { name: "Sign in with email" }).click();
-      await expect(p).not.toHaveURL(/staff\/login/);
+      // signed in once the page leaves /login; going on before that loses the session under load
+      await p.waitForURL((url) => url.pathname !== "/login", { timeout: 30_000 });
     }
     await adminPage.goto(`/admin/orders/${order._id}`);
     await adminPage

@@ -4,6 +4,7 @@ import { currentLocale } from "@/lib/i18n";
 import { GoogleButton, googleErrorMessage } from "@/components/google-button";
 import { googleEnabled } from "@/lib/auth/better-auth";
 import { returnPath } from "@/lib/return-path";
+import { PolicyNotice } from "@/components/policy-notice";
 export const metadata = { title: "Sign in", description: "Sign in with your mobile number or email to order from Agarwal General Stores." };
 
 export default async function Login({
@@ -52,6 +53,7 @@ export default async function Login({
           process.env.MOCK_OTP === "true"
         }
       />
+      <PolicyNotice kind="signin" locale={locale} google={googleEnabled()} className="form-notice auth-legal" />
       <p className="auth-switch"><Link href={back ? `/signup?then=${encodeURIComponent(back)}` : "/signup"}>{mr ? "नवीन ग्राहक? खाते तयार करा →" : "New customer? Create an account →"}</Link></p>
       <p className="auth-switch"><Link href="/catalog">{mr ? "साइन इन न करता खरेदी पाहा →" : "Continue browsing without signing in →"}</Link></p>
     </section>

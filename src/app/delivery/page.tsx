@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { PackageCheck } from "lucide-react";
+import { MapPin, PackageCheck, Phone } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { requirePage } from "@/lib/auth/session";
 import { Order } from "@/lib/commerce/models";
@@ -19,7 +19,7 @@ export default async function Delivery() {
   })
     .sort({ deliveryDate: 1 })
     .select(
-      "number deliveryDate deliveryWindow deliveryStatus totalPaise paymentMethod",
+      "number deliveryDate deliveryWindow deliveryStatus totalPaise paymentMethod address",
     );
   const history = await Order.find({
     assignedTo: user.id,
@@ -69,19 +69,46 @@ export default async function Delivery() {
       {orders.length ? (
         <div className="stop-list">
           {orders.map((o) => (
-            <Link className="panel stop-row" key={String(o._id)} href={`/delivery/orders/${o._id}`}>
-              <span>
-                <strong>{o.address.name}</strong>
-                <small>
-                  {o.address.areaName ? `${o.address.areaName} · ` : ""}
-                  {o.deliveryWindow} · {o.number}
-                </small>
-              </span>
-              <StatusPill value={o.deliveryStatus} />
-              <strong className="stop-collect">
-                {o.paymentMethod === "cod" ? `Collect ${formatPrice(o.totalPaise)}` : o.paymentMethod === "tab" ? "Family tab · collect nothing" : "Already paid"} →
-              </strong>
-            </Link>
+            // the call and map buttons sit beside the stop's link, not inside it
+            <div className="panel stop-row" key={String(o._id)}>
+              <Link className="stop-main" href={`/delivery/orders/${o._id}`}>
+                <span>
+                  <strong>{o.address.name}</strong>
+                  {o.address.line && <small className="stop-address">{o.address.line}</small>}
+                  <small>
+                    {o.address.areaName ? `${o.address.areaName} · ` : ""}
+                    {o.deliveryWindow} · {o.number}
+                  </small>
+                </span>
+                <StatusPill value={o.deliveryStatus} />
+                <strong className="stop-collect">
+                  {o.paymentMethod === "cod"
+                    ? `Collect ${formatPrice(o.totalPaise)}`
+                    : o.paymentMethod === "tab"
+                      ? "Family tab · collect nothing"
+                      : "Already paid"}{" "}
+                  →
+                </strong>
+              </Link>
+              <div className="stop-actions">
+                {o.address.phone && (
+                  <a className="secondary-button compact-button" href={`tel:+91${o.address.phone}`} aria-label={`Call ${o.address.name}`}>
+                    <Phone size={16} aria-hidden="true" /> Call
+                  </a>
+                )}
+                <a
+                  className="secondary-button compact-button"
+                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+                    [o.address.line, o.address.areaName, o.address.pin].filter(Boolean).join(" "),
+                  )}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label={`Map to ${o.address.name}’s address (opens Google Maps)`}
+                >
+                  <MapPin size={16} aria-hidden="true" /> Map
+                </a>
+              </div>
+            </div>
           ))}
         </div>
       ) : (

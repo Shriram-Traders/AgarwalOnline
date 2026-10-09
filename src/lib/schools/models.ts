@@ -215,6 +215,11 @@ const quoteRequestSchema = new Schema(
       enum: ["requested", "quoted", "changes-requested", "accepted", "closed"],
       default: "requested",
     },
+    /**
+     * The random code in the quotation's view-only link (/q/<code>); a new one stops the old link.
+     * Requests from before links were added get one the first time it's needed.
+     */
+    shareToken: String,
     /** What the school asked for, as it stood when they sent it. */
     items: { type: [requestItemSchema], default: [] },
     draft: draftSchema,
@@ -227,6 +232,7 @@ const quoteRequestSchema = new Schema(
   opts,
 );
 quoteRequestSchema.index({ number: 1 }, { unique: true });
+quoteRequestSchema.index({ shareToken: 1 }, { unique: true, sparse: true });
 quoteRequestSchema.index({ schoolId: 1, createdAt: -1 });
 quoteRequestSchema.index({ status: 1, updatedAt: -1 });
 

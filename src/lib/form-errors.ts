@@ -64,6 +64,8 @@ const LABELS: Record<string, string> = {
   gstin: "GSTIN",
   stateCode: "State",
   legalName: "Legal name",
+  grievanceName: "Grievance officer",
+  grievanceDesignation: "Grievance officer’s designation",
   contactName: "Contact person",
   address: "Address",
   note: "Note",

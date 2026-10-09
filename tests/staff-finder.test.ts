@@ -19,10 +19,13 @@ describe("workspace search", () => {
     expect(ids("sunday")).toContain("settings.weekly-holiday");
     expect(ids("cod limit")[0]).toBe("settings.cod-limit");
     expect(ids("gst")).toEqual(expect.arrayContaining(["settings.gstin", "settings.gst-rate"]));
+    expect(ids("grievance")[0]).toBe("settings.grievance-officer");
+    expect(ids("तक्रार निवारण", owner, "mr")).toContain("settings.grievance-officer");
     expect(ids("feedback")[0]).toBe("page.feedback");
     expect(ids("low rating")).toContain("page.feedback-attention");
     expect(ids("अभिप्राय", owner, "mr")).toContain("page.feedback");
     expect(ids("hide review")).toContain("page.feedback-reviews");
+    expect(ids("school marketplace")[0]).toBe("page.marketplace");
   });
 
   it("only offers what the person may open", () => {

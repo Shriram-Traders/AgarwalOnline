@@ -2,6 +2,7 @@ import Link from "next/link";
 import mongoose from "mongoose";
 import { UsersRound } from "lucide-react";
 import { ActionForm } from "@/components/action-form";
+import { PolicyNotice } from "@/components/policy-notice";
 import { PasswordInput } from "@/components/password-input";
 import { RecordHistory } from "@/components/record-history";
 import { PageHeading } from "@/components/page-heading";
@@ -43,7 +44,7 @@ const CAN: Partial<Record<Permission, string>> = {
   "packing:write": "Fill in packing checklists",
   "delivery:assign": "Assign delivery partners",
   "cod:reconcile": "Reconcile cash handovers and record family tab payments",
-  "catalog:write": "Edit products, aisles and school kits",
+  "catalog:write": "Edit products, categories and school kits",
   "inventory:adjust": "Adjust stock",
   "approval:request": "Ask for price and stock changes",
   "chat:support": "Answer support chats",
@@ -341,6 +342,7 @@ export default async function StaffManagement({
             added to it and the other fields are optional. Otherwise all fields
             create a new account.
           </p>
+          <PolicyNotice kind="staff" />
           <div className="staff-form-grid">
             <label>
               Phone

@@ -17,7 +17,7 @@ import { plainMessage } from "../form-errors";
 import { log } from "../logger";
 
 const SAVED = {
-  category: "Aisle saved.",
+  category: "Category saved.",
   product: "Product details saved.",
   visibility: "",
   pack: "Pack saved.",

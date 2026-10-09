@@ -9,10 +9,13 @@ import {
   Heart,
   Bell,
   School,
+  ShieldCheck,
   UsersRound,
 } from "lucide-react";
 import { requirePage } from "@/lib/auth/session";
-import { staffHome } from "@/lib/auth/permissions";
+import { hasPermission, staffHome } from "@/lib/auth/permissions";
+import { pushPublicKey } from "@/lib/push/service";
+import { PushSettings } from "@/components/push-settings";
 import { linkGoogleAction, logoutAction, resendVerificationAction } from "@/lib/auth/actions";
 import { emailEnabled, isPlaceholderEmail } from "@/lib/email/send";
 import { MailCheck } from "lucide-react";
@@ -182,11 +185,24 @@ export default async function Account({
                 "/account/complaints",
                 RotateCcw,
               ],
+              [
+                mr ? "गोपनीयता आणि तुमची माहिती" : "Privacy & your data",
+                mr ? "आम्ही काय ठेवतो आणि हटवायला कसे सांगायचे" : "What we keep, and how to ask us to delete it",
+                "/p/privacy-policy#your-rights",
+                ShieldCheck,
+              ],
               ...(representsSchool
                 ? [
                     [
-                      mr ? "माझ्या शाळेसाठी" : "For my school",
-                      mr ? "शाळेच्या दरात खरेदी करा आणि कोटेशन मागा" : "Shop at school prices and ask for quotations",
+                      ...(user.roles.includes("super-admin")
+                        ? [
+                            mr ? "शाळांसाठी" : "For schools",
+                            mr ? "कोणत्याही शाळेसाठी शाळेच्या दरात खरेदी करा" : "Shop at school prices for any school",
+                          ]
+                        : [
+                            mr ? "माझ्या शाळेसाठी" : "For my school",
+                            mr ? "शाळेच्या दरात खरेदी करा आणि कोटेशन मागा" : "Shop at school prices and ask for quotations",
+                          ]),
                       "/school",
                       School,
                     ],
@@ -215,6 +231,12 @@ export default async function Account({
           </Link>
         ))}
       </div>
+      <PushSettings
+        publicKey={pushPublicKey()}
+        account={user.id}
+        mr={mr}
+        staff={hasPermission(user.roles, "order:manage")}
+      />
       <GoogleSignInPanel
         userId={user.id}
         mr={mr}

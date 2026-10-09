@@ -2,6 +2,10 @@ import Link from "next/link";
 import { Bell, BellOff } from "lucide-react";
 import { requirePage } from "@/lib/auth/session";
 import { Notification } from "@/lib/engagement/models";
+import { hasPermission } from "@/lib/auth/permissions";
+import { currentLocale } from "@/lib/i18n";
+import { pushPublicKey } from "@/lib/push/service";
+import { PushSettings } from "@/components/push-settings";
 import { MarkRead } from "@/components/mark-read";
 export const metadata = { title: "Notifications", robots: { index: false } };
 
@@ -21,6 +25,13 @@ export default async function NotificationsPage() {
         </div>
         <span className="live-chip">{unread} unread</span>
       </div>
+      <PushSettings
+        id="push"
+        publicKey={pushPublicKey()}
+        account={user.id}
+        mr={(await currentLocale()) === "mr"}
+        staff={hasPermission(user.roles, "order:manage")}
+      />
       <MarkRead unread={unread} />
       <div className="notification-list">
         {notifications.map((item) => (

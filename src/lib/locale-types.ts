@@ -23,7 +23,7 @@ export const copy = {
     all: "Shop all",
     deals: "Offers",
     home: "Home",
-    explore: "Aisles",
+    explore: "Categories",
     you: "You",
     orders: "Orders",
     saved: "Wishlist",

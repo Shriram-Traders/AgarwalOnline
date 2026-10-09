@@ -10,6 +10,7 @@ import { estimateQuote } from "@/lib/schools/estimate";
 import { GST_STATES } from "@/lib/tax/gst";
 import { ActionForm } from "@/components/action-form";
 import { PageHeading } from "@/components/page-heading";
+import { PolicyNotice } from "@/components/policy-notice";
 export const metadata = { title: "School checkout", robots: { index: false, follow: false } };
 export const dynamic = "force-dynamic";
 
@@ -123,6 +124,7 @@ export default async function SchoolCheckout({ searchParams }: { searchParams: P
           )}
           <h3 className="summary-total">Expected total: {quoteMoney(estimate.totalPaise)}</h3>
           <p className="muted">Final prices come in the quotation.</p>
+          <PolicyNotice kind="school-quote" />
         </aside>
       </ActionForm>
     </section>

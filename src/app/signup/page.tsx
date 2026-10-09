@@ -4,6 +4,7 @@ import Link from "next/link";
 import { currentLocale } from "@/lib/i18n";
 import { GoogleButton, googleErrorMessage } from "@/components/google-button";
 import { googleEnabled } from "@/lib/auth/better-auth";
+import { PolicyNotice } from "@/components/policy-notice";
 export const metadata = { title: "Create an account", description: "Create an Agarwal General Stores account with your mobile number." };
 
 export default async function Signup({
@@ -33,6 +34,7 @@ export default async function Signup({
         then={back ?? undefined}
         mock={process.env.NODE_ENV !== "production" && process.env.MOCK_OTP === "true"}
       />
+      <PolicyNotice kind="signup" locale={locale} google={googleEnabled()} className="form-notice auth-legal" />
       <p className="auth-switch"><Link href={back ? `/login?then=${encodeURIComponent(back)}` : "/login"}>{mr ? "आधीच खाते आहे? साइन इन करा →" : "Already have an account? Sign in →"}</Link></p>
     </section>
   );

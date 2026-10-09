@@ -4,7 +4,7 @@ import { formatPrice, methodLabel } from "@/lib/display";
 import { StatusStrip } from "@/components/status-pill";
 import { PageHeading } from "@/components/page-heading";
 import Link from "next/link";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Printer, ReceiptText } from "lucide-react";
 import { requirePage } from "@/lib/auth/session";
 import { hasPermission } from "@/lib/auth/permissions";
 import { Order, OrderTimelineEvent } from "@/lib/commerce/models";
@@ -284,6 +284,18 @@ export default async function ManageOrder({
         eyebrow="Order"
         title={o.number}
         lead={`${o.address.name} · ${o.deliveryDate} · ${o.deliveryWindow}`}
+        aside={
+          <div className="split-actions order-print">
+            <Link href={`/admin/orders/${id}/slip`} className="secondary-button compact-button">
+              <Printer size={16} aria-hidden="true" /> Packing slip
+            </Link>
+            {!cancelled && (
+              <a className="secondary-button compact-button" href={`/api/invoices/${id}`} target="_blank" rel="noreferrer">
+                <ReceiptText size={16} aria-hidden="true" /> Bill
+              </a>
+            )}
+          </div>
+        }
       />
       <StatusStrip
         items={[
@@ -408,6 +420,21 @@ export default async function ManageOrder({
                 was told the new total.
               </p>
             )}
+            <p className="muted">
+              {o.termsVersion ? (
+                <>
+                  The customer agreed to Terms version {o.termsVersion} at checkout
+                  {o.termsAcceptedAt && (
+                    <>
+                      , <When at={o.termsAcceptedAt} />
+                    </>
+                  )}
+                  .
+                </>
+              ) : (
+                "No Terms record: this order was placed before checkout saved one."
+              )}
+            </p>
             {/* payments stay out: the shortfall on an online payment is only noted here, and read
                 against the order's refunds (a cancelled order says who refunds what at the top) */}
             {refundState && !cancelled && (

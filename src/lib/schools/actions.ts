@@ -23,6 +23,7 @@ import {
 import {
   addToQuote,
   closeQuoteRequest,
+  resetQuoteLink,
   respondToQuotation,
   saveQuoteDraft,
   sendQuotation,
@@ -177,11 +178,14 @@ export async function schoolRepAction(_state: MutationState, form: FormData): Pr
   redirect(to);
 }
 
-/** The owner's quotation desk: save the prices, send them as the next version, or close the request. */
+/**
+ * The owner's quotation desk: save the prices, send them as the next version, close the request,
+ * or replace its view-only link.
+ */
 export async function quoteDeskAction(_state: MutationState, form: FormData): Promise<MutationState> {
   try {
     const user = await requirePermission("settings:write");
-    const operation = z.enum(["save-draft", "send", "close"]).parse(form.get("operation"));
+    const operation = z.enum(["save-draft", "send", "close", "new-link"]).parse(form.get("operation"));
     const requestId = form.get("requestId");
     let success = "";
     if (operation === "save-draft") {
@@ -197,6 +201,9 @@ export async function quoteDeskAction(_state: MutationState, form: FormData): Pr
       success = `Version ${sent.version} sent (${quoteMoney(sent.totalPaise)} with GST). The school sees it in its area${
         reach.length ? `; ${reach.join(", ")}` : ""
       }.`;
+    } else if (operation === "new-link") {
+      await resetQuoteLink(user.id, requestId);
+      success = "A new link is ready. The old one no longer works.";
     } else {
       await closeQuoteRequest(user.id, { requestId, reason: form.get("reason") });
       success = "Request closed. The school has been told.";

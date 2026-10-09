@@ -7,6 +7,7 @@ import { schoolRepAction } from "@/lib/schools/actions";
 import { schoolJoinHref } from "@/lib/schools/links";
 import { switchHref } from "@/lib/schools/access";
 import { ActionForm } from "@/components/action-form";
+import { PolicyNotice } from "@/components/policy-notice";
 import { EmptyState } from "@/components/empty-state";
 import { PageHeading } from "@/components/page-heading";
 export const metadata = { title: "Join a school", robots: { index: false, follow: false } };
@@ -92,6 +93,7 @@ export default async function JoinSchool({ params }: { params: Promise<{ token: 
               A line for the store <small>Optional</small>
               <input name="message" maxLength={300} placeholder="e.g. Office in-charge, Vidya Mandir" />
             </label>
+            <PolicyNotice kind="school-join" />
           </ActionForm>
         ) : (
           <div className="sign-in-choices">

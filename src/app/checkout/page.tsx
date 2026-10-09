@@ -186,6 +186,8 @@ export default async function Checkout({ searchParams }: { searchParams: Promise
               areaId: String(s.areaId),
               // "Today · 4:00 PM – 7:00 PM" instead of "2026-09-30 · …"
               label: `${dayLabel(s.date, now)} · ${s.label}`,
+              day: dayLabel(s.date, now),
+              time: s.label as string,
             }))}
           subtotal={subtotal}
           promotionDiscount={quote.promotionDiscountPaise}

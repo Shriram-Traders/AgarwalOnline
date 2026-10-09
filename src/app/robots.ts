@@ -10,7 +10,8 @@ export default function robots(): MetadataRoute.Robots {
     rules: {
       userAgent: "*",
       allow: "/",
-      disallow: ["/account", "/admin", "/super-admin", "/delivery", "/checkout", "/cart", "/school", "/api/"],
+      // /q/<code> is a quotation's view-only link: private to whoever was sent it
+      disallow: ["/account", "/admin", "/super-admin", "/delivery", "/checkout", "/cart", "/school", "/q/", "/api/"],
     },
     sitemap: `${origin}/sitemap.xml`,
   };

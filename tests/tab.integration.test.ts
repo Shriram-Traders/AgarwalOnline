@@ -5,6 +5,7 @@ import { connectDB } from "../src/lib/db/connect";
 import { AuditLog, Category, InventoryItem, OTPChallenge, Product, ProductVariant, ServiceArea, User } from "../src/lib/db/models";
 import { Address, CartLine, DeliverySlot, Order } from "../src/lib/commerce/models";
 import { cancelOrder, checkout } from "../src/lib/commerce/service";
+import { POLICY_VERSION } from "../src/lib/legal/version";
 import { Notification } from "../src/lib/engagement/models";
 import { CODCollection } from "../src/lib/operations/models";
 import {
@@ -83,6 +84,7 @@ describe.skipIf(!uri)("Family tab (khata)", () => {
       slotId: slot,
       idempotencyKey: randomUUID(),
       method,
+      termsVersion: POLICY_VERSION,
       ...(forId === undefined ? {} : { forId }),
     });
   };

@@ -14,6 +14,17 @@ const config: NextConfig = {
     // Vercel rejects request bodies over 4.5 MB, so stay under that.
     serverActions: { bodySizeLimit: "4mb" },
   },
+  // the policies live under /p (src/lib/legal/pages.ts); the short addresses people type, and payment
+  // providers ask for, forward there. tests/legal.test.ts keeps this list and the pages in step.
+  async redirects() {
+    return Object.entries({
+      privacy: "privacy-policy",
+      terms: "terms-and-conditions",
+      refunds: "refunds-and-cancellations",
+      shipping: "shipping-and-delivery",
+      contact: "contact-and-grievance",
+    }).map(([key, page]) => ({ source: `/${key}`, destination: `/p/${page}`, permanent: true }));
+  },
   async headers() {
     return [
       {

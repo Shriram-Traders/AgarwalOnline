@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f172a">
+<meta name="robots" content="noindex">
+<title>No connection | Agarwal General Stores</title>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: grid;
+    place-items: center;
+    padding: max(24px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom));
+    background: #ffffff;
+    color: #0f172a;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  main { width: 100%; max-width: 420px; text-align: center; }
+  svg { display: block; margin: 0 auto; }
+  h1 { margin: 18px 0 8px; font-size: 1.5rem; line-height: 1.2; }
+  p { margin: 0 0 8px; color: #3f4555; line-height: 1.5; }
+  p[lang="mr"] { color: #616672; }
+  button {
+    margin-top: 16px;
+    min-height: 48px;
+    padding: 0 28px;
+    border: 0;
+    border-radius: 999px;
+    background: #1e3a8a;
+    color: #ffffff;
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  button:focus-visible { outline: 3px solid #fbbf24; outline-offset: 3px; }
+</style>
+</head>
+<body>
+<main>
+  <!-- drawn inline: with no connection, nothing else can load -->
+  <svg width="72" height="72" viewBox="0 0 512 512" aria-hidden="true"><rect width="512" height="512" rx="112" fill="#1e3a8a"/><g transform="translate(256 256) scale(0.92) translate(-256 -281)"><path fill="#ffffff" fill-rule="evenodd" d="M114 404 L222 104 L290 104 L398 404 L330 404 L307 340 L205 340 L182 404 Z M223.8 288 L256 198.4 L288.2 288 Z"/><rect x="178" y="430" width="156" height="28" rx="14" fill="#fbbf24"/></g></svg>
+  <h1>You’re offline</h1>
+  <p>Check your internet connection. The shop opens again as soon as you’re back online.</p>
+  <p lang="mr">इंटरनेट कनेक्शन नाही. कनेक्शन परत आल्यावर दुकान पुन्हा उघडेल.</p>
+  <button type="button" onclick="location.reload()">Try again</button>
+</main>
+<script>
+  // back online: open the page they were trying to reach
+  addEventListener("online", () => location.reload());
+</script>
+</body>
+</html>

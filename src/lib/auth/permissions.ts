@@ -71,6 +71,10 @@ export function staffHome(userRoles: readonly Role[]) {
   const role = staffRoleOf(userRoles);
   return role === "super-admin" || role === "admin" ? "/admin" : role === "delivery" ? "/delivery" : null;
 }
+/** Every role that grants this permission. */
+export function rolesWith(permission: Permission): Role[] {
+  return roles.filter((role) => (grants[role] as readonly string[]).includes(permission));
+}
 /** The full roles array for a person with this staff role (or none). */
 export function rolesFor(staffRole: StaffRole | null): Role[] {
   return staffRole ? ["customer", staffRole] : ["customer"];

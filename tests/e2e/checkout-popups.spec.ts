@@ -95,7 +95,9 @@ test("a new shopper signs up and adds an address from checkout popups, then uses
   // a guest fills the basket
   await page.goto("/products/fictional-gel-pen");
   await page.getByRole("button", { name: "Add to basket" }).click();
-  await expect(page.locator(".success-message")).toContainText("Basket updated");
+  await expect(page.locator("main").getByText("1 in basket")).toBeVisible();
+  // shown at once, saved just after: wait for the save before leaving the page
+  await expect(page.locator("main .product-quantity").first()).toHaveAttribute("aria-busy", "false");
   await page.goto("/cart");
 
   // the basket shows one line for coupons; tapping it opens the box for any code and the shop's
@@ -148,7 +150,7 @@ test("a new shopper signs up and adds an address from checkout popups, then uses
   await where.getByRole("button", { name: "Save address & continue" }).click();
   await expect(where).toBeHidden();
   await expect(page.getByLabel("Delivery address")).toContainText("New Shopper — Fictional House 7, Test Street, 999999");
-  await expect(page.getByLabel("Delivery slot")).toBeVisible();
+  await expect(page.getByRole("group", { name: "Delivery time" })).toBeVisible();
   await shot(page, "checkout-after-address");
 
   // a basket big enough for LOCAL10: apply it from the list, then take it off again

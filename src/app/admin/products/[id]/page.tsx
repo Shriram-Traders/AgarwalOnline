@@ -1,4 +1,3 @@
-import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronRight, ExternalLink } from "lucide-react";
@@ -9,14 +8,13 @@ import { productImages } from "@/lib/catalog/images";
 import { formatPrice } from "@/lib/display";
 import { catalogManagementAction } from "@/lib/catalog/manage-actions";
 import { governanceAction } from "@/lib/governance/actions";
-import { evidenceAction } from "@/lib/evidence/actions";
 import { ActionForm } from "@/components/action-form";
 import { MoneyInput } from "@/components/money-input";
 import { PageHeading } from "@/components/page-heading";
 import { RecordHistory } from "@/components/record-history";
 import { StatusPill } from "@/components/status-pill";
-import { AisleIcon } from "@/components/aisle-icon";
-import { PhotoInput } from "@/components/photo-input";
+import { ProductPhotos } from "@/components/product-photos";
+import { orderedPhotos } from "@/lib/catalog/photos";
 import { ApprovalRequest } from "@/lib/governance/models";
 import { hasPermission } from "@/lib/auth/permissions";
 import { isShopperVisible } from "@/lib/catalog/visibility";
@@ -60,7 +58,7 @@ export default async function EditProduct({ params }: { params: Promise<{ id: st
     if (request.kind === "price") return `${pack?.label ?? "Pack"}: price to ${formatPrice(Number(request.after.pricePaise))}`;
     return `${pack?.label ?? "Pack"}: stock ${Number(request.after.delta) > 0 ? "+" : ""}${Number(request.after.delta)}`;
   };
-  const image = product.image ?? productImages[product.slug];
+  const photos = orderedPhotos(product);
   const category = categories.find((item) => String(item._id) === String(product.categoryId));
   const live = product.status === "published";
   const inShop = isShopperVisible(product);
@@ -114,7 +112,7 @@ export default async function EditProduct({ params }: { params: Promise<{ id: st
             <legend>How shoppers find it</legend>
             <div className="staff-form-grid">
               <label>
-                Aisle
+                Category
                 <select name="categoryId" defaultValue={String(product.categoryId)}>
                   {categories.map((item) => (
                     <option value={String(item._id)} key={String(item._id)}>
@@ -164,16 +162,10 @@ export default async function EditProduct({ params }: { params: Promise<{ id: st
                   .join("\n")}
               />
             </label>
-            <div className="staff-form-grid">
-              <label>
-                Tags <small>Separated by commas</small>
-                <input name="dietaryTags" defaultValue={(product.dietaryTags ?? []).join(", ")} />
-              </label>
-              <label>
-                More photo links <small>One per line, up to 8</small>
-                <textarea name="images" defaultValue={(product.images ?? []).join("\n")} />
-              </label>
-            </div>
+            <label>
+              Tags <small>Separated by commas</small>
+              <input name="dietaryTags" defaultValue={(product.dietaryTags ?? []).join(", ")} />
+            </label>
           </fieldset>
           <fieldset className="form-section">
             <legend>Tax <small>Printed on school quotations</small></legend>
@@ -254,23 +246,16 @@ export default async function EditProduct({ params }: { params: Promise<{ id: st
               </label>
             </ActionForm>
           </div>
-          <div className="panel">
-            <h2>Photo</h2>
-            <span className={`product-art editor-photo${image ? "" : " quiet"}`}>
-              {image ? (
-                <Image src={image} alt={`Current photo of ${product.name.en}`} fill sizes="320px" />
-              ) : (
-                <AisleIcon slug={product.categorySlug} />
-              )}
-            </span>
-            <ActionForm action={evidenceAction} submit="Upload new photo">
-              <input type="hidden" name="purpose" value="product" />
-              <input type="hidden" name="productId" value={id} />
-              <label>
-                Photo <small>JPG, PNG or WebP · big phone photos are made smaller automatically</small>
-                <PhotoInput />
-              </label>
-            </ActionForm>
+          <div className="panel" id="photos">
+            <h2>Photos</h2>
+            <p className="muted">The first photo is the cover: it shows on cards, in search and in the basket.</p>
+            <ProductPhotos
+              mode="edit"
+              productId={id}
+              initial={photos}
+              fallback={productImages[product.slug]}
+              name={product.name.en}
+            />
           </div>
           <div className="panel">
             <h2>Packs and prices</h2>

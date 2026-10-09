@@ -2,6 +2,7 @@ import { paymentsEnabled, paymentConfig } from "../payments/provider";
 import mongoose from "mongoose";
 import { z } from "zod";
 import { connectDB } from "../db/connect";
+import { POLICY_VERSION } from "../legal/version";
 import {
   InventoryItem,
   Product,
@@ -28,7 +29,7 @@ import {
   rulesSchema,
   stillBookable,
 } from "./delivery";
-import { notify } from "../engagement/service";
+import { notify, notifyNewOrder } from "../engagement/service";
 import { bestPromotion, returnOffer } from "../promotions/service";
 import { Promotion, PromotionRedemption } from "../promotions/models";
 import { isShopperVisible, shopperVisible } from "../catalog/visibility";
@@ -91,6 +92,10 @@ export async function checkout(customerId: string, input: unknown) {
       idempotencyKey: z.string().uuid(),
       method: z.enum(["cod", "razorpay", "tab"]),
       promotionCode: z.string().max(24).optional(),
+      // the checkout box: agreeing to the Terms as they are now, not as an old open tab showed them
+      termsVersion: z.literal(POLICY_VERSION, {
+        error: "Our Terms were updated. Reload the page, then tick the box again.",
+      }),
       // who in the family it is for: an adult or child id, "" for everyone, "private" to keep it out
       forId: z.union([objectId, z.literal("private"), z.literal("")]).optional(),
     })
@@ -285,6 +290,8 @@ export async function checkout(customerId: string, input: unknown) {
           ...(data.method === "razorpay"
             ? { expiresAt: new Date(Date.now() + 15 * 60 * 1000) }
             : {}),
+          termsVersion: data.termsVersion,
+          termsAcceptedAt: new Date(),
         },
       ],
       { session },
@@ -365,6 +372,7 @@ export async function checkout(customerId: string, input: unknown) {
       },
       session,
     );
+    await notifyNewOrder(order, session);
     if (tabFamily && String(tabFamily.ownerId) !== customerId)
       await notify(
         {

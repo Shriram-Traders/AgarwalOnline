@@ -16,6 +16,11 @@ import { notify } from "../engagement/service";
 import { log } from "../logger";
 import { ApprovalRequest, ApprovalHistory } from "./models";
 import { gstRateField, hsnField, optionalField } from "../tax/gst";
+import { UploadedEvidence } from "../evidence/models";
+import { photoFields, photoList } from "../catalog/photos";
+
+/** Photos chosen for a product waiting for approval are kept this long; a rejected request's then go. */
+const PENDING_PHOTO_DAYS = 60;
 
 /** A school price is optional and set before GST; a blank box means "price on quotation". */
 const schoolPriceField = optionalField(z.coerce.number().int().min(1).max(10000000));
@@ -55,6 +60,8 @@ export const productInput = z
     gstRatePercent: optionalField(gstRateField),
     hsnCode: optionalField(hsnField),
     schoolPricePaise: schoolPriceField,
+    // in order, the first is the cover; requests made before photos could be added have none
+    images: photoList.default([]),
   })
   .refine((d) => d.pricePaise <= d.mrpPaise, {
     message: "Price must not exceed MRP",
@@ -164,6 +171,13 @@ export async function submitProduct(actorId: string, input: unknown) {
   let live = false;
   await mongoose.connection.transaction(async (session) => {
     await assertFree({ slug: data.slug, sku: data.sku }, session);
+    // the photos chosen for it wait as long as the request might
+    if (data.images.length)
+      await UploadedEvidence.updateMany(
+        { url: { $in: data.images }, purpose: "product-draft" },
+        { $set: { expiresAt: new Date(Date.now() + PENDING_PHOTO_DAYS * 86400 * 1000) } },
+        { session },
+      );
     live = await openRequest(
       { kind: "product", targetId: new mongoose.Types.ObjectId(), after: data },
       actorId,
@@ -363,10 +377,18 @@ async function publish(
           showToSchools: data.showToSchools,
           ...(data.gstRatePercent != null ? { gstRatePercent: data.gstRatePercent } : {}),
           ...(data.hsnCode ? { hsnCode: data.hsnCode } : {}),
+          ...(data.images.length ? photoFields(data.images) : {}),
         },
       ],
       { session },
     );
+    // the photos chosen on Add product become the product's own, shown to everyone and kept for good
+    if (data.images.length)
+      await UploadedEvidence.updateMany(
+        { url: { $in: data.images }, purpose: "product-draft" },
+        { $set: { purpose: "product", productId: p._id }, $unset: { expiresAt: 1 } },
+        { session },
+      );
     await createPack(data, p._id, new mongoose.Types.ObjectId(), actorId, session);
   } else if (kind === "variant") {
     const data = variantInput.parse(after);

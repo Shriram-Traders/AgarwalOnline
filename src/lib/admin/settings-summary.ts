@@ -17,7 +17,7 @@ type HubInput = {
   upcoming: { enabled: boolean; reserved: number; capacity: number }[];
   /** Areas with nothing bookable over the next open days. */
   gapAreas: string[];
-  business: { legalName: string; gstin?: string | null; stateName?: string };
+  business: { legalName: string; gstin?: string | null; stateName?: string; grievanceName?: string | null };
   stockThreshold: number;
   synonymGroups: number;
   services: { payments: boolean; photos: boolean; sms: boolean };
@@ -102,7 +102,10 @@ export function settingsHub(input: HubInput): HubCard[] {
       href: "#tax",
       edit: input.business.gstin ? "Change details" : "Add GSTIN",
       lines: [input.business.legalName, ...(input.business.stateName ? [input.business.stateName] : [])],
-      warnings: input.business.gstin ? [] : ["No GSTIN yet; quotations say it will be added"],
+      warnings: [
+        ...(input.business.gstin ? [] : ["No GSTIN yet; quotations say it will be added"]),
+        ...(input.business.grievanceName ? [] : ["No grievance officer yet; the Contact page says it’s being added"]),
+      ],
     },
     {
       id: "stock-approval",

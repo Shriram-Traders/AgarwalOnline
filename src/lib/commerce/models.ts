@@ -188,6 +188,9 @@ const orderSchema = new Schema(
     },
     assignedTo: { type: Schema.Types.ObjectId, ref: "User" },
     expiresAt: Date,
+    // the Terms version ticked at checkout (src/lib/legal/version.ts); orders from before it was kept have none
+    termsVersion: String,
+    termsAcceptedAt: Date,
     // set when the buyer is in a family and did not keep the order private
     familyId: { type: Schema.Types.ObjectId, ref: "Family" },
     // who in the family it was for, as named when ordered; missing means everyone
