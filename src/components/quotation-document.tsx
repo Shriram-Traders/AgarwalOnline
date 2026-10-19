@@ -11,6 +11,10 @@ type Party = {
   phone?: string;
   email?: string;
   terms?: string;
+  /** How to pay, a signature line and a note, as set in Customize → Quotations when it was sent. */
+  payment?: string[];
+  signature?: string;
+  footer?: string;
 };
 export type QuotationVersion = {
   version: number;
@@ -257,7 +261,26 @@ export function QuotationDocument({ number, quote }: { number: string; quote: Qu
           <p>{seller.terms}</p>
         </section>
       )}
+      {seller.payment?.length ? (
+        <section className="quotation-note">
+          <h3>Payment details</h3>
+          <p>
+            {seller.payment.map((line) => (
+              <span key={line} className="quotation-pay-line">
+                {line}
+              </span>
+            ))}
+          </p>
+        </section>
+      ) : null}
+      {seller.signature && (
+        <p className="quotation-sign">
+          {seller.signature}
+          <small>For {seller.name}</small>
+        </p>
+      )}
       <footer className="quotation-legal">
+        {seller.footer && <p>{seller.footer}</p>}
         <p>This is a quotation, not a tax invoice. Amounts are in Indian rupees.</p>
         {!seller.gstin && <p>The store’s GSTIN will be shown once it is added.</p>}
       </footer>

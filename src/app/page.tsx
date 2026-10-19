@@ -24,22 +24,19 @@ import { taxProfile } from "@/lib/tax/profile";
 import { jsonLd, storeJsonLd } from "@/lib/seo";
 import { getEnv } from "@/lib/env";
 import { paymentsEnabled } from "@/lib/payments/provider";
+import { fill, frontWords, shopSettings } from "@/lib/settings/shop";
 export const dynamic = "force-dynamic";
 // the title and description are the root layout's; shared links with tracking tags fold into one address
 export const metadata = { alternates: { canonical: "/" } };
 
 const copy = {
   en: {
-    heroBadge: "Same-day delivery · Nagothane",
-    heroTitle: (cutoff: string) => `Order by ${cutoff}, `,
-    heroTitleEm: "at your door today.",
     shopAll: "Shop all products",
     dealEyebrow: "Biggest saving today",
     dealCta: "See the deal",
     hubs: "Explore the categories",
     hubsMr: "विभाग पाहा",
     productsCount: (n: number) => (n === 1 ? "1 product" : `${n} products`),
-    lead: "Stationery, school supplies, toys and games at fair prices, carried to your door by the same people who serve you in store.",
     pinLabel: "Check delivery at your PIN code",
     pinHint: "Six digits. Used only to check serviceability.",
     checkPin: "Check",
@@ -78,23 +75,16 @@ const copy = {
     step2Note: "By the same people who serve you in store.",
     step3: "At your door the same day",
     step3Note: (online: boolean) => (online ? "Pay in cash when it arrives, or online." : "Pay in cash when it arrives."),
-    storyTitle: "A counter you already know.",
-    storyBody:
-      "Agarwal Online has served Nagothane from one counter for years. The website is the same shelves and the same prices, with delivery added. Order in English or Marathi and pay in cash at the door.",
     storyArea: "Check your area",
     storyTalk: "Talk to the store",
   },
   mr: {
-    heroBadge: "त्याच दिवशी वितरण · नागोठणे",
-    heroTitle: (cutoff: string) => `${cutoff} पूर्वी ऑर्डर करा, `,
-    heroTitleEm: "आज दारात.",
     shopAll: "सर्व उत्पादने पाहा",
     dealEyebrow: "आजची सर्वात मोठी बचत",
     dealCta: "ऑफर पाहा",
     hubs: "विभाग पाहा",
     hubsMr: "Explore the categories",
     productsCount: (n: number) => `${n} उत्पादने`,
-    lead: "लेखन साहित्य, शालेय वस्तू, खेळणी आणि खेळ योग्य किमतीत, दुकानातील तीच माणसे तुमच्या दारापर्यंत पोहोचवतात.",
     pinLabel: "तुमच्या पिन कोडवर वितरण तपासा",
     pinHint: "सहा अंक. फक्त वितरण उपलब्धता तपासण्यासाठी.",
     checkPin: "तपासा",
@@ -133,9 +123,6 @@ const copy = {
     step2Note: "दुकानात तुम्हाला भेटणारी तीच माणसे.",
     step3: "त्याच दिवशी तुमच्या दारी",
     step3Note: (online: boolean) => (online ? "आल्यावर रोख द्या, किंवा ऑनलाइन." : "आल्यावर रोख द्या."),
-    storyTitle: "तुमच्या ओळखीचाच काउंटर.",
-    storyBody:
-      "अग्रवाल ऑनलाइन वर्षानुवर्षे नागोठण्याला एकाच काउंटरवरून सेवा देत आहे. वेबसाइटवर त्याच वस्तू आणि त्याच किमती, फक्त वितरणाची सोय जोडली आहे. इंग्रजी किंवा मराठीत ऑर्डर करा आणि दारात रोख द्या.",
     storyArea: "तुमचे क्षेत्र तपासा",
     storyTalk: "दुकानाशी बोला",
   },
@@ -232,7 +219,7 @@ export default async function Home() {
     deliveryRules(),
   ]);
   // everything that only needs to know who's signed in, in one round
-  const [recommended, activeOffers, areaDocs, previousOrder, shop] = await Promise.all([
+  const [recommended, activeOffers, areaDocs, previousOrder, shop, front] = await Promise.all([
     recommendationsFor({
       customerId: user?.id,
       limit: 8,
@@ -241,6 +228,7 @@ export default async function Home() {
     liveAreaNames(),
     user ? Order.findOne({ customerId: user.id }).sort({ createdAt: -1 }).select("items.variantId") : null,
     taxProfile(),
+    shopSettings("storefront"),
   ]);
   const previousIds = new Set(
     previousOrder?.items.map((item: { variantId: unknown }) =>
@@ -335,12 +323,13 @@ export default async function Home() {
       <section className="hero" aria-labelledby="welcome-title">
         <div className="hero-card">
           <Image src={heroImage} alt="" fill sizes="60vw" priority />
-          <span className="hero-badge">{t.heroBadge}</span>
+          <span className="hero-badge">{frontWords(front, "heroBadge", locale)}</span>
           <h1 id="welcome-title">
-            {t.heroTitle(cutoff)}
-            <em>{t.heroTitleEm}</em>
+            {/* the owners' words from Customize → Shop front, or the shop's own */}
+            {fill(frontWords(front, "heroTitle", locale), { cutoff })}{" "}
+            <em>{fill(frontWords(front, "heroHighlight", locale), { cutoff })}</em>
           </h1>
-          <p>{t.lead}</p>
+          <p>{frontWords(front, "heroLead", locale)}</p>
           <div className="hero-actions">
             <Link href="/catalog" className="primary-button">
               {t.shopAll}
@@ -525,8 +514,8 @@ export default async function Home() {
         <section className="delivery-steps" id="delivery" aria-labelledby="story-title">
           <div>
             <span className="eyebrow">{t.storyEyebrow}</span>
-            <h2 id="story-title">{t.storyTitle}</h2>
-            <p>{t.storyBody}</p>
+            <h2 id="story-title">{frontWords(front, "storyTitle", locale)}</h2>
+            <p>{frontWords(front, "storyBody", locale)}</p>
           </div>
           <ol>
             <li>

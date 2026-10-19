@@ -21,6 +21,7 @@ import { schoolCopy } from "@/lib/schools/copy";
 import { copy, type Locale } from "@/lib/locale-types";
 import { pendingFeedbackOrder } from "@/lib/feedback/service";
 import { FeedbackPrompt } from "./feedback-prompt";
+import { shopSettings, words } from "@/lib/settings/shop";
 
 export type CategoryLink = { slug: string; en: string; mr: string };
 
@@ -52,12 +53,15 @@ export async function Header({
   offers?: boolean;
 }) {
   const now = new Date();
-  const [user, rules, offer] = await Promise.all([
+  const [user, rules, offer, front] = await Promise.all([
     currentUser(),
     deliveryRules(),
     // only the coupon the owner picked as the welcome offer; any live code used to be advertised
     liveOffers().then((offers) => offers.find((o) => o.welcome && o.code && runningAt(now)(o)) ?? null),
+    shopSettings("storefront"),
   ]);
+  // the owners' announcement (Customize → Shop front): shown while switched on and written
+  const announcement = front.announcementOn ? words(front.announcement, locale, front.announcement.en) : "";
   // staff accounts aren't asked to rate: their test orders would skew the shop's scores
   const shopper = user && !staffRoleOf(user.roles) ? user : null;
   // all four depend on who's signed in, not on each other: ask at the same time
@@ -85,13 +89,18 @@ export async function Header({
   const cutoff = `${rules.cutoffHour % 12 || 12} ${rules.cutoffHour >= 12 ? "PM" : "AM"}`;
   return (
     <>
+      {announcement && (
+        <p className="announcement-bar" role="note">
+          {announcement}
+        </p>
+      )}
       <div className="top-strip">
         <div className="top-strip-inner">
           <p>
-            <span>{text.freeFrom(formatPrice(rules.freeThresholdPaise))}</span>
-            {welcome?.code && (
+            {front.showFreeDelivery && <span>{text.freeFrom(formatPrice(rules.freeThresholdPaise))}</span>}
+            {front.showWelcome && welcome?.code && (
               <>
-                <span aria-hidden="true">·</span>
+                {front.showFreeDelivery && <span aria-hidden="true">·</span>}
                 <span>
                   <span className="welcome-long">
                     {text.welcomeCode(welcome.minimumSubtotalPaise ? formatPrice(welcome.minimumSubtotalPaise) : "")}
@@ -111,9 +120,11 @@ export async function Header({
                 <School size={14} aria-hidden="true" /> <span className="school-door-label">{schoolDoor}</span>
               </Link>
             )}
-            <Link href="/serviceability">
-              {text.sameDay(cutoff)} <ArrowRight size={14} aria-hidden="true" />
-            </Link>
+            {front.showSameDay && (
+              <Link href="/serviceability">
+                {text.sameDay(cutoff)} <ArrowRight size={14} aria-hidden="true" />
+              </Link>
+            )}
             <LocaleToggle locale={locale} />
           </div>
         </div>

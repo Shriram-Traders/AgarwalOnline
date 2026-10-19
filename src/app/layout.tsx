@@ -19,6 +19,7 @@ import { KeyboardAware } from "@/components/keyboard-aware";
 import { ServiceWorker } from "@/components/service-worker";
 import { pushPublicKey } from "@/lib/push/service";
 import { getEnv } from "@/lib/env";
+import { shopSettings } from "@/lib/settings/shop";
 
 const display = localFont({
   src: "../../node_modules/@fontsource-variable/plus-jakarta-sans/files/plus-jakarta-sans-latin-wght-normal.woff2",
@@ -49,17 +50,18 @@ const devanagari = localFont({
   display: "swap",
 });
 
-// a function, not a constant: the site's address comes from the environment at request time
-export function generateMetadata(): Metadata {
+// a function, not a constant: the site's address comes from the environment at request time, and the
+// title and description from Customize → Shop front
+export async function generateMetadata(): Promise<Metadata> {
+  const front = await shopSettings("storefront");
   return {
     // resolves the relative canonical and share-image links pages set
     metadataBase: new URL(getEnv().APP_ORIGIN),
     title: {
-      default: "Agarwal Online | Stationery, toys & games in Nagothane",
+      default: front.seoTitle,
       template: "%s | Agarwal Online",
     },
-    description:
-      "Pens, notebooks and school stationery from Cello, Classmate, Sulabh and Nataraj, and toys, board games and learning toys from Ratna's, at Agarwal Online, delivered same day in and around Nagothane.",
+    description: front.seoDescription,
     // the app's name and look once it is added to an iPhone's home screen (Chrome reads app/manifest.ts)
     appleWebApp: { capable: true, title: "Agarwal", statusBarStyle: "default" },
     // the WhatsApp/Facebook link preview; product pages swap in their own photo

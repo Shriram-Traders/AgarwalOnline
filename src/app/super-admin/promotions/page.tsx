@@ -13,6 +13,7 @@ import { DataTable } from "@/components/data-table";
 import { EmptyState } from "@/components/empty-state";
 import { RecordHistory } from "@/components/record-history";
 import { StatusPill, type Tone } from "@/components/status-pill";
+import { shopSettings } from "@/lib/settings/shop";
 export const metadata = { title: "Offers", robots: { index: false } };
 
 /** A datetime-local value ("2026-09-27T18:00") for an IST moment. */
@@ -49,7 +50,7 @@ type Offer = {
   listed?: boolean;
 };
 
-function OfferFields({ offer, now }: { offer?: Offer; now: Date }) {
+function OfferFields({ offer, now, days = 30 }: { offer?: Offer; now: Date; days?: number }) {
   return (
     <div className="staff-form-grid">
       <label>
@@ -129,7 +130,7 @@ function OfferFields({ offer, now }: { offer?: Offer; now: Date }) {
         <input
           name="endsAt"
           type="datetime-local"
-          defaultValue={istInput(offer?.endsAt ?? new Date(now.getTime() + 30 * 86400000))}
+          defaultValue={istInput(offer?.endsAt ?? new Date(now.getTime() + days * 86400000))}
           required
         />
       </label>
@@ -196,7 +197,7 @@ export default async function PromotionsPage({ searchParams }: { searchParams: P
           >
             <input type="hidden" name="operation" value={editing === "new" ? "create" : "update"} />
             {editing !== "new" && <input type="hidden" name="promotionId" value={String(editing._id)} />}
-            <OfferFields offer={editing === "new" ? undefined : editing} now={now} />
+            <OfferFields offer={editing === "new" ? undefined : editing} now={now} days={(await shopSettings("defaults")).offerDays} />
           </ActionForm>
           {editing !== "new" && (
             <>

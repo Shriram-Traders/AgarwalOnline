@@ -27,6 +27,9 @@ import { RecordHistory } from "@/components/record-history";
 import { When } from "@/components/when";
 import { FocusOnHash } from "@/components/focus-on-hash";
 import { operationAction } from "@/lib/operations/actions";
+import { billAction } from "@/lib/commerce/bill-actions";
+import { billNumber } from "@/lib/commerce/bill";
+import { taxProfile } from "@/lib/tax/profile";
 import { evidenceAction } from "@/lib/evidence/actions";
 import { UploadedEvidence } from "@/lib/evidence/models";
 import { MoneyInput } from "@/components/money-input";
@@ -177,6 +180,7 @@ export default async function ManageOrder({
 }) {
   const user = await requirePage("order:manage");
   const owner = hasPermission(user.roles, "staff:manage");
+  const shop = await taxProfile();
   const refunds = hasPermission(user.roles, "refund:write");
   const { id } = await params;
   if (!objectId.safeParse(id).success) notFound();
@@ -293,6 +297,12 @@ export default async function ManageOrder({
             {!cancelled && (
               <a className="secondary-button compact-button" href={`/api/invoices/${id}`} target="_blank" rel="noreferrer">
                 <ReceiptText size={16} aria-hidden="true" /> Bill
+              </a>
+            )}
+            {/* the "kaccha bill": an estimate before delivery, marked as not a bill; the real bill always follows */}
+            {!cancelled && o.deliveryStatus !== "delivered" && (
+              <a className="secondary-button compact-button" href={`/api/invoices/${id}?kind=estimate`} target="_blank" rel="noreferrer">
+                Estimate (kaccha bill)
               </a>
             )}
           </div>
@@ -866,6 +876,61 @@ export default async function ManageOrder({
             <p>
               Delivery {o.deliveryDate ? dayLabel(o.deliveryDate) : ""} · {noBreakTimes(o.deliveryWindow)}
             </p>
+          </div>
+          <div className="panel" id="bill">
+            <h2>Bill</h2>
+            <p className="muted">
+              {shop.gstin ? "Tax invoice" : "Cash memo"} {billNumber(o)} ·{" "}
+              {o.bill?.issuedAt ? (
+                <>
+                  given on delivery, <When at={o.bill.issuedAt} />
+                </>
+              ) : (
+                "given on delivery"
+              )}
+            </p>
+            {!cancelled && (
+              <ActionForm action={billAction} submit="Save bill details">
+                <input type="hidden" name="orderId" value={id} />
+                <label>
+                  Name on the bill <small>Blank: the delivery name, {o.address.name}</small>
+                  <input name="name" defaultValue={o.bill?.name ?? ""} maxLength={80} placeholder={o.address.name} autoComplete="off" />
+                </label>
+                {/* a buyer's GSTIN only means something on a tax invoice, so it waits for the shop's own GSTIN */}
+                {shop.gstin ? (
+                  <label>
+                    Buyer’s GSTIN <small>Optional: a business that wants its GST number on the bill</small>
+                    <input
+                      name="gstin"
+                      defaultValue={o.bill?.gstin ?? ""}
+                      maxLength={15}
+                      autoCapitalize="characters"
+                      spellCheck={false}
+                      autoComplete="off"
+                    />
+                  </label>
+                ) : (
+                  <input type="hidden" name="gstin" value={o.bill?.gstin ?? ""} />
+                )}
+                {o.bill?.issuedAt && (
+                  <p className="muted">The bill was already given: a change re-issues it under a new number that says which bill it replaces.</p>
+                )}
+              </ActionForm>
+            )}
+            {hasPermission(user.roles, "settings:write") && (
+              <ActionForm
+                action={billAction}
+                submit="Save shop name"
+                confirmMessage="Every bill from now on carries this name. Bills already given keep the name they were given with."
+              >
+                <input type="hidden" name="operation" value="shop-name" />
+                <input type="hidden" name="orderId" value={id} />
+                <label>
+                  Shop name on bills <small>Owners only. Also in Store settings → Business details</small>
+                  <input name="legalName" defaultValue={shop.legalName} minLength={2} maxLength={120} required />
+                </label>
+              </ActionForm>
+            )}
           </div>
           {cash && (
             <div className="panel">

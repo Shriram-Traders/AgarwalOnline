@@ -1561,7 +1561,7 @@ a.order-row:hover { border-color: var(--ink); color: var(--ink); }
 /* ---------- Footer ---------- */
 .site-footer { margin-top: auto; border-top: 1px solid var(--line); background: var(--canvas); color: var(--ink-2); font-size: 0.9rem; }
 /* minmax(0, …): with text at 200% a long link ("Refunds & Cancellations") wraps instead of pushing the page sideways */
-.footer-inner { display: grid; grid-template-columns: minmax(0, 2fr) repeat(4, minmax(0, 1fr)); gap: 32px; padding: 56px var(--gutter) 40px; }
+.footer-inner { display: grid; grid-template-columns: minmax(0, 2fr) repeat(3, minmax(0, 1fr)); gap: 32px; padding: 56px var(--gutter) 40px; }
 .footer-inner > * { min-width: 0; overflow-wrap: break-word; }
 .footer-brand .brand { margin-bottom: 12px; }
 .footer-brand p { max-width: 36ch; }
@@ -1572,6 +1572,9 @@ a.order-row:hover { border-color: var(--ink); color: var(--ink); }
 .site-footer li a { display: inline-block; padding: 2px 0; color: var(--ink-2); font-weight: 400; text-decoration: none; }
 .site-footer li a:hover { color: var(--accent); }
 .footer-store .locale-toggle { margin-top: 12px; }
+/* 20-odd aisles would make one column three times taller than the rest: they get their own band, several across */
+.footer-shop { grid-column: 1 / -1; padding-top: 28px; border-top: 1px solid var(--line); }
+.footer-shop ul { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 6px 32px; }
 .footer-base { border-top: 1px solid var(--line); }
 .footer-base-inner { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 16px; padding: 16px var(--gutter); font-size: 0.8rem; color: var(--muted); }
 .footer-base p { margin: 0; }
@@ -1634,8 +1637,8 @@ a.order-row:hover { border-color: var(--ink); color: var(--ink); }
 @media (max-width: 1023px) {
   .home .product-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .home .product-grid > :nth-child(n + 10) { display: none; }
-  /* five footer columns don't fit: the brand takes the top row, the four link columns sit below */
-  .footer-inner { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  /* four footer columns don't fit: the brand takes the top row, the three link columns sit below */
+  .footer-inner { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .footer-brand { grid-column: 1 / -1; }
   .legal-layout { grid-template-columns: 200px minmax(0, 1fr); gap: 32px; }
   /* tablets, landscape phones and phones: the tab rail scrolls inside itself: fade both edges so a cut-off tab reads as "more this way" */
@@ -3708,4 +3711,47 @@ body:has(.buy-bar) .assistant-launcher { bottom: 92px; }
   .mobile-nav { padding: 0 2px; }
   .nav-label { letter-spacing: -0.025em; }
   .quote-add:not(.is-compact) .add-button { white-space: normal; }
+}
+
+/* ---------- Customize (/super-admin/customize) and what it changes ---------- */
+/* the owners' announcement, above the top strip on every shop page */
+.announcement-bar { margin: 0; padding: 8px var(--gutter); background: var(--offer); color: var(--ink); font-size: 0.86rem; font-weight: 600; text-align: center; overflow-wrap: anywhere; }
+.footer-contact { display: grid; gap: 4px; margin: 0 0 12px; font-style: normal; }
+.footer-contact > * { display: inline-flex; align-items: flex-start; gap: 6px; min-height: 24px; color: var(--ink-2); overflow-wrap: anywhere; }
+.footer-contact svg { flex: none; margin-top: 3px; }
+.footer-contact a { text-decoration: none; }
+.footer-contact a:hover { color: var(--accent); }
+/* packing slip extras */
+.slip-head .slip-shop-line { color: var(--muted); font-size: 0.8rem; overflow-wrap: anywhere; }
+.slip-lines .slip-money { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.slip-foot { margin: 12px 0 0; color: var(--muted); font-size: 0.82rem; }
+.paper-a5 .packing-slip { max-width: 560px; }
+.paper-receipt .packing-slip { max-width: 340px; padding: 16px; font-size: 0.82rem; }
+.paper-receipt .slip-head { flex-direction: column; }
+.paper-receipt .slip-when { justify-items: start; text-align: left; }
+.paper-receipt .slip-facts { grid-template-columns: minmax(0, 1fr); }
+.paper-receipt .slip-head h1 { font-size: 1.3rem; }
+/* quotation extras */
+.quotation-pay-line { display: block; }
+.quotation-sign { display: grid; justify-items: end; gap: 2px; margin: 40px 0 0; padding-top: 0; text-align: right; }
+.quotation-sign::before { content: ""; width: 200px; max-width: 60%; border-top: 1px solid var(--ink); margin-bottom: 4px; }
+.quotation-sign small { color: var(--muted); font-size: 0.78rem; }
+/* the Customize page */
+.customize-jump { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 8px; }
+.customize-jump a { display: inline-flex; align-items: center; min-height: 36px; padding: 0 14px; border: 1px solid var(--line-strong); border-radius: var(--r-pill); background: var(--paper); color: var(--ink); font-size: 0.875rem; font-weight: 600; text-decoration: none; }
+.customize-jump a:hover { border-color: var(--ink); }
+.customize-both { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 12px; }
+.customize-both > legend { width: 100%; margin-bottom: 8px; padding: 0; font-weight: 600; }
+.customize-both > legend small { display: block; color: var(--muted); font-weight: 400; }
+.customize-both label { font-weight: 500; }
+.customize-colour input[type="color"] { width: 72px; min-height: 44px; padding: 4px; cursor: pointer; }
+@media (max-width: 760px) {
+  .announcement-bar { padding: 6px 16px; font-size: 0.8rem; }
+  /* the jump links would push eight sections down a phone screen; the folded sections are the list there */
+  .customize-jump { display: none; }
+  .customize-both { grid-template-columns: minmax(0, 1fr); }
+  .quotation-sign::before { width: 160px; }
+}
+@media print {
+  .announcement-bar { display: none !important; }
 }

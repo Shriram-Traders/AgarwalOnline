@@ -5,6 +5,7 @@ import { InventoryItem, Product, ProductVariant, User } from "../db/models";
 import { Order } from "../commerce/models";
 import { Refund } from "../payments/models";
 import { LOW_STOCK } from "../inventory/low-stock";
+import { shopSettings } from "../settings/shop";
 
 const dateInput = z.object({
   from: z.iso.date().optional(),
@@ -22,7 +23,7 @@ export async function analytics(actorId: string, input: unknown) {
     : new Date();
   const start = parsed.from
     ? new Date(`${parsed.from}T00:00:00+05:30`)
-    : new Date(end.getTime() - 29 * 86400 * 1000);
+    : new Date(end.getTime() - ((await shopSettings("defaults")).analyticsDays - 1) * 86400 * 1000);
   const orders = await Order.find({ createdAt: { $gte: start, $lte: end } })
     .select(
       "items totalPaise paymentStatus paymentMethod orderStatus deliveryStatus deliveryDate address.areaName assignedTo customerId createdAt updatedAt",
@@ -181,7 +182,7 @@ export async function profitReport(actorId: string, input: unknown) {
   assertPermission(actor.roles as Role[], "settings:write");
   const parsed = dateInput.catch({}).parse(input);
   const end = parsed.to ? new Date(`${parsed.to}T23:59:59.999+05:30`) : new Date();
-  const start = parsed.from ? new Date(`${parsed.from}T00:00:00+05:30`) : new Date(end.getTime() - 29 * 86400 * 1000);
+  const start = parsed.from ? new Date(`${parsed.from}T00:00:00+05:30`) : new Date(end.getTime() - ((await shopSettings("defaults")).analyticsDays - 1) * 86400 * 1000);
   const orders = await Order.find({ createdAt: { $gte: start, $lte: end }, orderStatus: { $ne: "cancelled" } })
     .select("items promotionDiscountPaise")
     .lean()

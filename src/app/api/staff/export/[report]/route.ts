@@ -6,6 +6,7 @@ import { connectDB } from "@/lib/db/connect";
 import { Order } from "@/lib/commerce/models";
 import { lowStockRows, lowStockWorkbook } from "@/lib/inventory/low-stock";
 import { xlsx, xlsxName } from "@/lib/xlsx";
+import { shopSettings } from "@/lib/settings/shop";
 
 export const runtime = "nodejs";
 
@@ -13,11 +14,11 @@ const noStore = { "Cache-Control": "private, no-store" };
 const rupees = (paise?: number | null) => (paise == null ? null : paise / 100);
 const ist = (date: Date) => new Intl.DateTimeFormat("en-IN", { timeZone: "Asia/Kolkata", dateStyle: "medium", timeStyle: "short" }).format(date);
 
-/** Every order in the dates chosen (the last 30 days by default): one tab of orders, one of the lines in them. */
+/** Every order in the dates chosen (by default the days set in Customize → Form defaults): one tab of orders, one of the lines in them. */
 async function ordersFile(params: URLSearchParams) {
   const dates = z.object({ from: z.iso.date().optional(), to: z.iso.date().optional() }).catch({}).parse(Object.fromEntries(params));
   const end = dates.to ? new Date(`${dates.to}T23:59:59.999+05:30`) : new Date();
-  const start = dates.from ? new Date(`${dates.from}T00:00:00+05:30`) : new Date(end.getTime() - 29 * 86400 * 1000);
+  const start = dates.from ? new Date(`${dates.from}T00:00:00+05:30`) : new Date(end.getTime() - ((await shopSettings("defaults")).analyticsDays - 1) * 86400 * 1000);
   const orders = await Order.find({ createdAt: { $gte: start, $lte: end } })
     .sort({ createdAt: 1 })
     .select("number createdAt address orderStatus paymentMethod paymentStatus deliveryStatus deliveryDate subtotalPaise promotionDiscountPaise deliveryPaise totalPaise items")

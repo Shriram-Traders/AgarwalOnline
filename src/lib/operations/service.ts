@@ -10,6 +10,8 @@ import {
   DeliverySlot,
 } from "../commerce/models";
 import { objectId } from "../commerce/service";
+import { billSeller } from "../commerce/bill";
+import { customerMessage } from "../settings/shop";
 import {
   assertPermission,
   hasPermission,
@@ -270,7 +272,7 @@ export async function changeOrderStatus(actorId: string, input: unknown) {
             data.next === "confirmed" ? "Order confirmed" : "Order completed",
           body:
             data.next === "confirmed"
-              ? `${order.number} is now being prepared.`
+              ? await customerMessage("orderConfirmed", order.number)
               : `${order.number} is complete. Thank you for shopping local.`,
           href: `/account/orders/${order._id}`,
         },
@@ -734,7 +736,7 @@ export async function partnerTransition(actorId: string, input: unknown) {
             : "Delivery needs your attention",
         body:
           data.next === "out-for-delivery"
-            ? `${order.number} is out for delivery.`
+            ? await customerMessage("outForDelivery", order.number)
             : `${order.number}: ${data.reason}`,
         href: `/account/orders/${order._id}`,
       },
@@ -1280,6 +1282,9 @@ export async function completeDelivery(actorId: string, input: unknown) {
       );
     }
     current.deliveryStatus = "delivered";
+    // the bill is issued now: it keeps the shop's details as they are today, whatever the shop is called later
+    current.set("bill.issuedAt", new Date());
+    current.set("bill.seller", await billSeller());
     await current.save({ session });
     await timeline(
       current._id,
@@ -1294,7 +1299,7 @@ export async function completeDelivery(actorId: string, input: unknown) {
         userId: current.customerId,
         type: "delivery",
         title: "Order delivered",
-        body: `${current.number} was delivered. How was it? Rate your items in one tap.`,
+        body: await customerMessage("delivered", current.number),
         href: `/account/orders/${current._id}#rate`,
       },
       session,

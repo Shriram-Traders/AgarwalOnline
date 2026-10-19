@@ -14,6 +14,7 @@ import { FEEDBACK_PERMISSION } from "@/lib/feedback/access";
 import { NEEDS_ATTENTION } from "@/lib/feedback/rules";
 import { FILTERS } from "./order-filters";
 import type { CountKey, StaffCountsResponse } from "@/lib/staff/types";
+import { shopSettings } from "@/lib/settings/shop";
 
 export type QueueKey =
   | "toConfirm"
@@ -227,6 +228,8 @@ export type QueueState = {
 export async function loadQueues(roles: readonly Role[], now = new Date()): Promise<QueueState[]> {
   await connectDB();
   const defs = QUEUES.filter((def) => hasPermission(roles, def.permission));
+  // how long each waits before it turns red: the owners' choice in Customize → Work queue
+  const timings: Partial<Record<QueueKey, number>> = await shopSettings("queues");
   return Promise.all(
     defs.map(async (def) => {
       const [count, oldest] = await Promise.all([
@@ -241,7 +244,8 @@ export async function loadQueues(roles: readonly Role[], now = new Date()): Prom
       ]);
       const at = def.sortField ? oldest?.[def.sortField] : null;
       const since = at instanceof Date ? at : null;
-      const late = Boolean(since && now.getTime() - since.getTime() > def.lateAfterMinutes * 60000);
+      const lateAfter = timings[def.key] ?? def.lateAfterMinutes;
+      const late = Boolean(since && now.getTime() - since.getTime() > lateAfter * 60000);
       return {
         key: def.key,
         label: def.label,

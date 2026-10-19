@@ -1,11 +1,13 @@
 import Link from "next/link";
-import { MapPin } from "lucide-react";
+import { Mail, MapPin, Phone } from "lucide-react";
 import { LocaleToggle } from "./locale-toggle";
 import type { CategoryLink } from "./header";
 import type { Locale } from "@/lib/locale-types";
 import { LEGAL_PAGES, POLICIES_HOME } from "@/lib/legal/pages";
+import { frontWords, shopSettings } from "@/lib/settings/shop";
+import { taxProfile } from "@/lib/tax/profile";
 
-export function SiteFooter({
+export async function SiteFooter({
   locale,
   categories,
   areas,
@@ -43,6 +45,9 @@ export function SiteFooter({
         </div>
       </footer>
     );
+  // the owners' line and contact details (Customize → Shop front; contact from Business and tax details)
+  const [front, shop] = await Promise.all([shopSettings("storefront"), taxProfile()]);
+  const tagline = frontWords(front, "footerTagline", locale);
   return (
     <footer className="site-footer">
       <div className="footer-inner">
@@ -50,11 +55,26 @@ export function SiteFooter({
           <Link href="/" className="brand" aria-label="Agarwal Online, home">
             Agarwal<small>Online</small>
           </Link>
-          <p>
-            {mr
-              ? "नागोठण्यातील तुमच्या ओळखीच्या दुकानातून लेखन साहित्य, शालेय वस्तू, खेळणी आणि खेळ."
-              : "Stationery, school supplies, toys and games from your neighbourhood store in Nagothane."}
-          </p>
+          <p>{tagline}</p>
+          {front.footerContact && (shop.phone || shop.email || shop.address) && (
+            <address className="footer-contact">
+              {shop.phone && (
+                <a href={`tel:+91${shop.phone}`}>
+                  <Phone size={14} aria-hidden="true" /> +91 {shop.phone}
+                </a>
+              )}
+              {shop.email && (
+                <a href={`mailto:${shop.email}`}>
+                  <Mail size={14} aria-hidden="true" /> {shop.email}
+                </a>
+              )}
+              {shop.address && (
+                <span>
+                  <MapPin size={14} aria-hidden="true" /> {shop.address}
+                </span>
+              )}
+            </address>
+          )}
           {areas.length > 0 && (
             <p className="footer-areas">
               <MapPin size={14} aria-hidden="true" />
@@ -63,23 +83,6 @@ export function SiteFooter({
             </p>
           )}
         </div>
-        <nav className="footer-shop" aria-label={mr ? "खरेदी" : "Shop"}>
-          <h2>{mr ? "खरेदी" : "Shop"}</h2>
-          <ul>
-            {categories.map((category) => (
-              <li key={category.slug}>
-                <Link href={`/catalog?category=${category.slug}`}>
-                  {category[locale]}
-                </Link>
-              </li>
-            ))}
-            {offers && (
-              <li>
-                <Link href="/catalog?sort=discount">{mr ? "खास ऑफर" : "Deals"}</Link>
-              </li>
-            )}
-          </ul>
-        </nav>
         <nav aria-label={mr ? "मदत" : "Help"}>
           <h2>{mr ? "मदत" : "Help"}</h2>
           <ul>
@@ -146,6 +149,23 @@ export function SiteFooter({
           </ul>
           <LocaleToggle locale={locale} />
         </div>
+        <nav className="footer-shop" aria-label={mr ? "खरेदी" : "Shop"}>
+          <h2>{mr ? "खरेदी" : "Shop"}</h2>
+          <ul>
+            {categories.map((category) => (
+              <li key={category.slug}>
+                <Link href={`/catalog?category=${category.slug}`}>
+                  {category[locale]}
+                </Link>
+              </li>
+            ))}
+            {offers && (
+              <li>
+                <Link href="/catalog?sort=discount">{mr ? "खास ऑफर" : "Deals"}</Link>
+              </li>
+            )}
+          </ul>
+        </nav>
       </div>
       <div className="footer-base">
         <div className="footer-base-inner">

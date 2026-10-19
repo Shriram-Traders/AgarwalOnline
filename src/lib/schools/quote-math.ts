@@ -157,6 +157,6 @@ export function istDatePlus(days: number, now = new Date()) {
   return date.toISOString().slice(0, 10);
 }
 
-/** AGSQ-20261002-00001: a quotation's number, apart from order numbers (AGS-…). */
-export const quoteNumber = (day: string, sequence: number) =>
-  `AGSQ-${day}-${String(sequence).padStart(5, "0")}`;
+/** AGSQ-20261002-00001: a quotation's number, apart from order numbers (AGS-…); the letters are set in Customize. */
+export const quoteNumber = (day: string, sequence: number, prefix = "AGSQ") =>
+  `${prefix}-${day}-${String(sequence).padStart(5, "0")}`;

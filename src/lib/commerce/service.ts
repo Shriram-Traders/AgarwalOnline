@@ -37,6 +37,7 @@ import { Promotion, PromotionRedemption } from "../promotions/models";
 import { isShopperVisible, shopperVisible } from "../catalog/visibility";
 import { resolveBasketLines } from "./basket-lines";
 import { orderFamily } from "../family/checkout";
+import { shopSettings } from "../settings/shop";
 export const objectId = z.string().regex(/^[a-f\d]{24}$/i, "Invalid record.");
 export type { UnavailableLine } from "./basket-lines";
 export async function cartFor(customerId: string) {
@@ -242,6 +243,8 @@ export async function checkout(customerId: string, input: unknown) {
     if (capacity.modifiedCount !== 1)
       throw Error("This delivery slot is full.");
     const day = istDate(new Date()).replaceAll("-", "");
+    // the letters before the number are the owners' choice (Customize → Numbers); the count is per day
+    const { orderPrefix } = await shopSettings("numbers");
     const sequence = await Sequence.findOneAndUpdate(
       { key: day },
       { $inc: { value: 1 } },
@@ -251,7 +254,7 @@ export async function checkout(customerId: string, input: unknown) {
       [
         {
           customerId,
-          number: `AGS-${day}-${String(sequence.value).padStart(5, "0")}`,
+          number: `${orderPrefix}-${day}-${String(sequence.value).padStart(5, "0")}`,
           idempotencyKey: data.idempotencyKey,
           items,
           address: {

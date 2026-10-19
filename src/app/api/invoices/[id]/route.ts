@@ -1,67 +1,73 @@
 import { currentUser } from "@/lib/auth/session";
-import { lineNotes, shortfallRefund, type PackedLine } from "@/lib/operations/packing";
+import { hasPermission } from "@/lib/auth/permissions";
+import { shortfallRefund } from "@/lib/operations/packing";
 import { Refund } from "@/lib/payments/models";
 import { invoiceOrder } from "@/lib/family/service";
-import { methodLabel } from "@/lib/display";
 import { taxProfile } from "@/lib/tax/profile";
+import { GST_STATES } from "@/lib/tax/gst";
+import { billNumber, previousBillNumber } from "@/lib/commerce/bill";
+import { shopSettings } from "@/lib/settings/shop";
+import { renderInvoice, type InvoiceOrder } from "@/lib/documents/invoice";
+import { lineFacts } from "@/lib/documents/line-facts";
+import { getEnv } from "@/lib/env";
 
-function escape(value: unknown) {
-  return String(value ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
-}
+const text = (message: string, status: number) =>
+  new Response(message, { status, headers: { "Content-Type": "text/plain; charset=utf-8" } });
 
-export async function GET(
-  _request: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
+/**
+ * An order's bill: a cash memo, or a tax invoice once the shop has a GSTIN (see renderInvoice). With
+ * ?kind=estimate, staff get a kaccha bill instead: the same lines before delivery, marked as not a bill.
+ */
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const user = await currentUser();
-  if (!user) return new Response("Authentication required", { status: 401 });
-  // staff who manage orders may open any invoice; everyone else their own, or their family's
+  if (!user) return text("Authentication required", 401);
+  // staff who manage orders may open any bill; everyone else their own, or their family's
   const order = await invoiceOrder(user, (await params).id);
-  if (!order) return new Response("Invoice not found", { status: 404 });
-  const rupees = (paise: number) => `₹${(paise / 100).toFixed(2)}`;
-  // the shop's name and details as the owners saved them (Store settings → Business and tax details)
-  const shop = await taxProfile();
-  const shopLine = [shop.address, shop.phone && `Phone ${shop.phone}`, shop.gstin && `GSTIN ${shop.gstin}`].filter(Boolean).join(" · ");
-  // a cash bill follows what was packed; an online payment stays as paid, with the shortfall noted
-  const charged = order.paymentMethod === "cod";
-  const rows = order.items
-    .map((item: PackedLine) => {
-      const notes = lineNotes(item, charged)
-        .map((note) => `<small class="note">${escape(note)}</small>`)
-        .join("");
-      return `<tr><td>${escape(item.name)}<small>${escape(item.label)}</small>${notes}</td><td>${item.quantity}</td><td>${rupees(item.pricePaise)}</td><td>${rupees(item.linePaise)}</td></tr>`;
-    })
-    .join("");
-  const offer = order.promotionDiscountPaise
-    ? `<p><span>Offer</span><strong>−${rupees(order.promotionDiscountPaise)}</strong></p>`
-    : "";
-  const asOrdered =
-    order.originalTotalPaise != null
-      ? `<p class="muted">Items that weren’t available were taken off this bill. Total as ordered: ${rupees(order.originalTotalPaise)}.</p>`
-      : "";
+  if (!order) return text("Bill not found", 404);
+  const staff = hasPermission(user.roles, "order:manage");
+  const estimate = new URL(request.url).searchParams.get("kind") === "estimate";
+  if (estimate) {
+    if (!staff) return text("Only the store can make an estimate.", 403);
+    if (order.orderStatus === "cancelled") return text("A cancelled order has no estimate.", 409);
+    if (order.deliveryStatus === "delivered" || order.bill?.issuedAt)
+      return text("This order is delivered: its bill is the one to give.", 409);
+  }
+  const [shop, bill, facts] = await Promise.all([taxProfile(), shopSettings("bill"), lineFacts(order.items)]);
+  // a bill already issued (at delivery) keeps the shop's details as they were then
+  const kept = order.bill?.issuedAt && order.bill?.seller?.legalName ? order.bill.seller : null;
+  const seller = {
+    legalName: kept?.legalName ?? shop.legalName,
+    address: kept ? kept.address : shop.address,
+    phone: kept ? kept.phone : shop.phone,
+    gstin: kept ? kept.gstin : shop.gstin,
+    email: shop.email,
+  };
+  const state = GST_STATES.find((entry) => entry.code === shop.stateCode);
   // read only: where the refund for items that weren't packed stands (it is made on the Refunds page)
   const refund = shortfallRefund(
     order.shortfallPaise,
     order.shortfallPaise ? await Refund.find({ orderId: order._id }).select("amountPaise status") : [],
   );
-  const shortfall = refund
-    ? `<p class="muted">Paid online. ${rupees(order.shortfallPaise)} of this payment is for items that weren’t available${
-        refund === "refunded"
-          ? ", and it has been refunded."
-          : refund === "under-way"
-            ? "; that refund is under way."
-            : "; the store arranges that refund separately."
-      }</p>`
-    : "";
-  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${escape(order.number)} invoice</title><style>body{font:15px Arial;color:#0f172a;max-width:760px;margin:48px auto;padding:0 24px}header{display:flex;justify-content:space-between;border-bottom:3px solid #1e3a8a;padding-bottom:22px}h1{font-size:24px;margin:0}.muted,small{display:block;color:#5b6472;margin-top:4px}table{width:100%;border-collapse:collapse;margin:32px 0}th,td{text-align:left;padding:12px 8px;border-bottom:1px solid #e5e8ee}th:last-child,td:last-child{text-align:right}.totals{margin-left:auto;width:300px}.totals p{display:flex;justify-content:space-between}.grand{font-size:20px;font-weight:700;border-top:2px solid #0f172a;padding-top:12px}small.note{color:#9a3412;font-weight:600}@media print{body{margin:20px auto}}</style></head><body><header><div><h1>${escape(shop.legalName)}</h1><span class="muted">${escape(shopLine)}</span></div><div><strong>Order invoice</strong><span class="muted">${escape(order.number)}</span></div></header><p><strong>Deliver to:</strong><br>${escape(order.address.name)}<br>${escape(order.address.line)}, ${escape(order.address.areaName)} ${escape(order.address.pin)}</p><p class="muted">Ordered ${new Date(order.createdAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })} · ${escape(methodLabel(order.paymentMethod))} · ${escape(order.paymentStatus)}</p><table><thead><tr><th>Item</th><th>Qty</th><th>Price</th><th>Total</th></tr></thead><tbody>${rows}</tbody></table><div class="totals"><p><span>Subtotal</span><strong>${rupees(order.subtotalPaise)}</strong></p>${offer}<p><span>Delivery</span><strong>${rupees(order.deliveryPaise)}</strong></p><p class="grand"><span>Total</span><span>${rupees(order.totalPaise)}</span></p></div>${asOrdered}${shortfall}<p class="muted">Computer-generated order invoice. Tax details are not shown because GST configuration has not been supplied.</p></body></html>`;
+  const number = estimate ? `EST-${order.number}` : billNumber(order);
+  const html = renderInvoice({
+    order: order.toObject() as InvoiceOrder,
+    seller,
+    stateName: state ? `${state.name} (${state.code})` : shop.stateCode,
+    number,
+    replaces: estimate ? null : previousBillNumber(order),
+    date: order.bill?.issuedAt ?? order.createdAt,
+    bill,
+    refund,
+    facts,
+    origin: getEnv().APP_ORIGIN,
+    estimate,
+    staffView: staff,
+  });
   return new Response(html, {
     headers: {
       "Content-Type": "text/html; charset=utf-8",
-      "Content-Disposition": `attachment; filename="${order.number}-invoice.html"`,
+      "Content-Disposition":
+        bill.openAs === "download" ? `attachment; filename="${number}-${estimate ? "estimate" : "bill"}.html"` : "inline",
       "Cache-Control": "private, no-store",
       "X-Content-Type-Options": "nosniff",
     },

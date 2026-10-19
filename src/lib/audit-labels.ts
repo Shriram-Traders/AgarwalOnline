@@ -50,6 +50,14 @@ const LABELS: Record<string, string> = {
   "variant.update": "Changed a pack",
   "variant.school-price": "Set a school price",
   "tax-details.update": "Changed the business and tax details",
+  "customize.bill": "Changed how bills look",
+  "customize.slip": "Changed how packing slips look",
+  "customize.quotation": "Changed the quotation settings",
+  "customize.storefront": "Changed the shop front",
+  "customize.messages": "Changed the customer messages",
+  "customize.numbers": "Changed order and quotation numbering",
+  "customize.defaults": "Changed the form defaults",
+  "customize.queues": "Changed the work queue timings",
   "school.create": "Added a school",
   "school.update": "Changed a school's details",
   "school.pause": "Paused a school",
@@ -96,7 +104,7 @@ export const AUDIT_GROUPS = {
   schools: { label: "Schools & quotations", prefixes: ["school.", "quote."] },
   team: {
     label: "Team & settings",
-    prefixes: ["staff.", "service-area.", "delivery-rules.", "delivery-slot.", "search-synonym.", "profile.", "tax-details."],
+    prefixes: ["staff.", "service-area.", "delivery-rules.", "delivery-slot.", "search-synonym.", "profile.", "tax-details.", "customize."],
   },
 } as const;
 export type AuditGroup = keyof typeof AUDIT_GROUPS;

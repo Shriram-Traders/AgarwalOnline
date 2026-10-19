@@ -29,6 +29,7 @@ import {
   type Discount,
 } from "./quote-math";
 import type { Sheet } from "./quote-form";
+import { shopSettings } from "../settings/shop";
 
 /*
  * A school's quote basket, the quotation requests it sends, and the owner's quotations back.
@@ -185,6 +186,7 @@ export async function submitQuoteRequest(userId: string, input: unknown) {
   let id = "";
   let number = "";
   let lines = 0;
+  const { quotePrefix } = await shopSettings("numbers");
   await mongoose.connection.transaction(async (session) => {
     const basket = await QuoteBasket.findOne({ schoolId: data.schoolId }).session(session);
     if (!basket || Number(basket.rev) !== data.rev)
@@ -220,7 +222,7 @@ export async function submitQuoteRequest(userId: string, input: unknown) {
       { $inc: { value: 1 } },
       { upsert: true, returnDocument: "after", session },
     );
-    number = quoteNumber(day, sequence.value);
+    number = quoteNumber(day, sequence.value, quotePrefix);
     const [request] = await QuoteRequest.create(
       [
         {
@@ -344,7 +346,14 @@ export async function sendQuotation(actorId: string, input: unknown) {
   await owner(actorId);
   const data = z.object({ requestId: objectId, stamp: z.string().min(1) }).parse(input);
   // fresh, not the minute-old copy pages use: the quotation keeps these details for good
-  const seller = await taxProfile(true);
+  const [seller, extras] = await Promise.all([taxProfile(true), shopSettings("quotation", true)]);
+  const payment = [
+    extras.accountName && `Account name: ${extras.accountName}`,
+    extras.bankName && `Bank: ${extras.bankName}`,
+    extras.accountNumber && `Account number: ${extras.accountNumber}`,
+    extras.ifsc && `IFSC: ${extras.ifsc}`,
+    extras.upiId && `UPI: ${extras.upiId}`,
+  ].filter((line): line is string => Boolean(line));
   let sent: {
     id: string;
     shareToken: string;
@@ -406,6 +415,9 @@ export async function sendQuotation(actorId: string, input: unknown) {
         phone: seller.phone,
         email: seller.email,
         terms: seller.terms,
+        payment: payment.length ? payment : undefined,
+        signature: extras.showSignature ? extras.signatureLabel : undefined,
+        footer: extras.footerNote || undefined,
       },
       buyer: {
         name: school.name,

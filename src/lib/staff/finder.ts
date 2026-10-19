@@ -12,8 +12,11 @@ export type FinderGroup = { kind: FinderGroupKind; hits: FinderHit[] };
 const PER_GROUP = 5;
 const TOTAL = 12;
 
-/** Order numbers look like AGS-20261003-00012; people often type only the start. */
-const ORDER_NUMBER = /^ags[-\s]?\d{2,8}(-\d{0,5})?$/i;
+/**
+ * Order numbers look like AGS-20261003-00012 (the letters are set in Customize, so any 2 to 6);
+ * people often type only the start.
+ */
+const ORDER_NUMBER = /^(ags[-\s]?\d{2,8}|[a-z]{2,6}[-\s]?\d{4,8})(-\d{0,5})?$/i;
 
 /**
  * "Orders matching…" and "Customers matching…" for whatever was typed. They lead when the text

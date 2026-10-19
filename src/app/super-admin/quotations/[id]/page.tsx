@@ -7,6 +7,7 @@ import { istDate } from "@/lib/commerce/delivery";
 import { User } from "@/lib/db/models";
 import { stateOfGstin } from "@/lib/tax/gst";
 import { taxProfile } from "@/lib/tax/profile";
+import { shopSettings } from "@/lib/settings/shop";
 import { getEnv } from "@/lib/env";
 import { QuoteRequest, School } from "@/lib/schools/models";
 import { quotationShareHref } from "@/lib/schools/links";
@@ -54,10 +55,11 @@ export default async function QuotationDesk({ params }: { params: Promise<{ id: 
   if (!objectId.safeParse(id).success) notFound();
   const request = await QuoteRequest.findById(id);
   if (!request) notFound();
-  const [school, seller, requester] = await Promise.all([
+  const [school, seller, requester, quoteSettings] = await Promise.all([
     School.findById(request.schoolId),
     taxProfile(),
     User.findById(request.requestedBy).select("name"),
+    shopSettings("quotation"),
   ]);
   const supply = supplyType(seller.stateCode, school?.stateCode ?? stateOfGstin(school?.gstin));
   const draft = request.draft?.lines?.length ? request.draft : null;
@@ -175,7 +177,7 @@ export default async function QuotationDesk({ params }: { params: Promise<{ id: 
               rows={rows}
               discountType={(draft?.discountType as "none" | "percent" | "amount") ?? "none"}
               discountValue={Number(draft?.discountValue ?? 0)}
-              validUntil={draft?.validUntil && draft.validUntil >= today ? draft.validUntil : istDatePlus(15)}
+              validUntil={draft?.validUntil && draft.validUntil >= today ? draft.validUntil : istDatePlus(quoteSettings.validityDays)}
               minDate={today}
               maxDate={istDatePlus(365)}
               note={draft?.note}
@@ -280,7 +282,7 @@ export default async function QuotationDesk({ params }: { params: Promise<{ id: 
           label="View-only link"
           url={shareUrl}
           hint={request.currentVersion ? "Opens the latest version sent." : "Shows the quotation once you send version 1."}
-          title={`Quotation ${request.number} from Agarwal Online`}
+          title={`Quotation ${request.number} from ${seller.legalName}`}
           copy="Copy link"
           copied="Copied"
         />

@@ -140,6 +140,10 @@ const partySchema = new Schema(
     phone: String,
     email: String,
     terms: String,
+    // the seller's extras from Customize → Quotations, kept as sent: how to pay, signature, a note
+    payment: { type: [String], default: undefined },
+    signature: String,
+    footer: String,
   },
   { _id: false },
 );

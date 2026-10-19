@@ -126,6 +126,18 @@ const orderSchema = new Schema(
       instructions: String,
       areaName: String,
     },
+    /**
+     * The bill: who it's made out to when that isn't the delivery name (a business, another person), and from
+     * delivery (when the bill is issued) the shop's details as they were then, so a later rename doesn't
+     * rewrite bills already given. A new name after that re-issues the bill under a new number.
+     */
+    bill: {
+      name: String,
+      gstin: String,
+      revision: { type: Number, default: 0 },
+      issuedAt: Date,
+      seller: { legalName: String, address: String, phone: String, gstin: String },
+    },
     slotId: ref("DeliverySlot"),
     deliveryDate: String,
     deliveryWindow: String,

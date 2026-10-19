@@ -45,6 +45,7 @@ import { SettingsHub } from "./_settings/settings-hub";
 import { SettingsFold } from "@/components/settings-fold";
 import { GST_STATES } from "@/lib/tax/gst";
 import { PhoneInput } from "@/components/phone-input";
+import { shopSettings } from "@/lib/settings/shop";
 export const metadata = { title: "Store settings", robots: { index: false } };
 
 function TimeSelect({ name, label, defaultValue }: { name: string; label: string; defaultValue: number }) {
@@ -99,7 +100,7 @@ export default async function StoreSettings({
   const until = new Date(`${today}T00:00:00Z`);
   until.setUTCDate(until.getUTCDate() + DAYS_AHEAD);
   const slotArea = params.slots && mongoose.isValidObjectId(params.slots) ? params.slots : undefined;
-  const [areas, rules, patterns, upcoming, synonyms, stockThreshold, gaps, business, report] = await Promise.all([
+  const [areas, rules, patterns, upcoming, synonyms, stockThreshold, gaps, business, report, starts] = await Promise.all([
     ServiceArea.find({}).sort({ name: 1 }),
     deliveryRules(),
     SlotPattern.find({}).sort({ startMinutes: 1 }),
@@ -114,6 +115,8 @@ export default async function StoreSettings({
     slotGaps(now),
     taxProfile(),
     reportSettings(),
+    // where a new area or delivery time starts (Customize → Form defaults)
+    shopSettings("defaults"),
   ]);
   const live = areas.filter((area) => area.enabled);
   const areaName = new Map(areas.map((area) => [String(area._id), area.name as string]));
@@ -145,6 +148,11 @@ export default async function StoreSettings({
         eyebrow="Owner"
         title="Store settings"
         lead="How delivery works, where you deliver and which changes need a second look. Changes apply at checkout straight away."
+        aside={
+          <Link className="secondary-button" href="/super-admin/customize">
+            Customize bills and the shop
+          </Link>
+        }
       />
       <SettingsHub
         cards={settingsHub({
@@ -329,7 +337,7 @@ export default async function StoreSettings({
                   <TimeSelect name="startMinutes" label="From" defaultValue={16 * 60} />
                   <TimeSelect name="endMinutes" label="To" defaultValue={19 * 60} />
                 </div>
-                <CapacityInput />
+                <CapacityInput defaultValue={starts.slotCapacity} />
               </ActionForm>
             ) : (
               <p className="muted">Add a delivery area below first.</p>
@@ -356,7 +364,7 @@ export default async function StoreSettings({
                     <TimeSelect name="startMinutes" label="From" defaultValue={16 * 60} />
                     <TimeSelect name="endMinutes" label="To" defaultValue={19 * 60} />
                   </div>
-                  <CapacityInput />
+                  <CapacityInput defaultValue={starts.slotCapacity} />
                 </ActionForm>
               </details>
             )}
@@ -522,14 +530,14 @@ export default async function StoreSettings({
                   Delivery fee (₹)
                   <MoneyInput
                     name="feeRupees"
-                    defaultValue={editingArea === "new" ? 30 : editingArea.feePaise / 100}
+                    defaultValue={editingArea === "new" ? starts.areaFee / 100 : editingArea.feePaise / 100}
                   />
                 </label>
                 <label>
                   Largest cash-on-delivery order (₹)
                   <MoneyInput
                     name="codLimitRupees"
-                    defaultValue={editingArea === "new" ? 5000 : editingArea.codLimitPaise / 100}
+                    defaultValue={editingArea === "new" ? starts.areaCodLimit / 100 : editingArea.codLimitPaise / 100}
                   />
                 </label>
                 <label className="checkbox-label">

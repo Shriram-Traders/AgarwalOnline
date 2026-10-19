@@ -21,6 +21,7 @@ import { formatPrice } from "@/lib/display";
 import { InventoryMovement } from "@/lib/commerce/models";
 import { InventoryItem, Product, ProductVariant } from "@/lib/db/models";
 import { DEFAULT_ALERT_BELOW, isLow } from "@/lib/inventory/low-stock";
+import { shopSettings } from "@/lib/settings/shop";
 export const metadata = { title: "Stock", robots: { index: false } };
 
 export default async function InventoryPage({
@@ -32,12 +33,14 @@ export default async function InventoryPage({
   // only an owner prices for schools
   const isOwner = hasPermission(user.roles, "settings:write");
   const params = await searchParams;
-  const [products, variants, inventory, movements] = await Promise.all([
+  const [products, variants, inventory, movements, starts] = await Promise.all([
     Product.find({}).sort({ "name.en": 1 }).limit(500),
     // purchase prices are read for owners only
     ProductVariant.find({}).select(isOwner ? "+costPaise" : "").sort({ sku: 1 }).limit(2000),
     InventoryItem.find({}).limit(2000),
     InventoryMovement.find({}).sort({ at: -1 }).limit(50).populate("variantId", "sku label"),
+    // where a new pack starts (Customize → Form defaults)
+    shopSettings("defaults"),
   ]);
   const rows = variants.map((variant) => {
     const product = products.find((item) => String(item._id) === String(variant.productId));
@@ -185,7 +188,7 @@ export default async function InventoryPage({
             </label>
             <label>
               Most one shopper can buy
-              <input name="maxQuantity" inputMode="numeric" pattern="[0-9]+" defaultValue={10} required />
+              <input name="maxQuantity" inputMode="numeric" pattern="[0-9]+" defaultValue={starts.packOrderLimit} required />
             </label>
             <label>
               Opening stock

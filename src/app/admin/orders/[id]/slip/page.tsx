@@ -10,6 +10,7 @@ import { dayLabel } from "@/lib/commerce/slots";
 import { lineNotes, type PackedLine } from "@/lib/operations/packing";
 import { taxProfile } from "@/lib/tax/profile";
 import { PrintButton } from "@/components/print-button";
+import { shopSettings } from "@/lib/settings/shop";
 export const metadata = { title: "Packing slip", robots: { index: false } };
 
 /** The customer's "If an item is unavailable" choice, as the packer should read it. */
@@ -27,7 +28,7 @@ export default async function PackingSlip({ params }: { params: Promise<{ id: st
   await requirePage("order:manage");
   const { id } = await params;
   if (!objectId.safeParse(id).success) notFound();
-  const [o, shop] = await Promise.all([Order.findById(id), taxProfile()]);
+  const [o, shop, slip] = await Promise.all([Order.findById(id), taxProfile(), shopSettings("slip")]);
   if (!o) notFound();
   const customer = await User.findById(o.customerId).select("substitutionPreference");
   const lines = o.items as (PackedLine & { variantId: string; name: string; label: string; quantity: number })[];
@@ -35,7 +36,9 @@ export default async function PackingSlip({ params }: { params: Promise<{ id: st
   const day = o.deliveryDate ? dayLabel(o.deliveryDate) : "";
   const pieces = lines.reduce((sum, line) => sum + line.quantity, 0);
   return (
-    <section className="page-container packing-slip-page">
+    <section className={`page-container packing-slip-page paper-${slip.paper}`}>
+      {/* the paper the owner picked in Customize → Packing slips */}
+      <style>{`@media print{@page{size:${slip.paper === "a5" ? "A5" : slip.paper === "receipt" ? "80mm auto" : "A4"};margin:${slip.paper === "receipt" ? "4mm" : "12mm"}}}`}</style>
       <nav className="breadcrumb slip-actions" aria-label="Breadcrumb">
         <Link href="/admin#orders">Orders</Link>
         <ChevronRight size={14} aria-hidden="true" />
@@ -55,7 +58,12 @@ export default async function PackingSlip({ params }: { params: Promise<{ id: st
       <article className="packing-slip">
         <header className="slip-head">
           <div>
-            <p className="slip-shop">{shop.legalName} · packing slip</p>
+            <p className="slip-shop">
+              {shop.legalName} · {slip.title}
+            </p>
+            {slip.showShopAddress && (
+              <p className="slip-shop-line">{[shop.address, shop.phone && `Phone ${shop.phone}`].filter(Boolean).join(" · ")}</p>
+            )}
             <h1>{o.number}</h1>
             <p>Placed {formatIst(o.createdAt)}</p>
           </div>
@@ -69,13 +77,13 @@ export default async function PackingSlip({ params }: { params: Promise<{ id: st
           <h2 id="slip-to">Deliver to</h2>
           <p>
             <strong>{o.address.name}</strong>
-            {o.address.phone && <> · +91 {o.address.phone}</>}
+            {slip.showPhone && o.address.phone && <> · +91 {o.address.phone}</>}
             <br />
             {o.address.line}
             <br />
             {o.address.areaName} · {o.address.pin}
           </p>
-          {o.address.instructions && <p className="slip-note">Note: “{o.address.instructions}”</p>}
+          {slip.showInstructions && o.address.instructions && <p className="slip-note">Note: “{o.address.instructions}”</p>}
         </section>
 
         <table className="slip-lines">
@@ -89,6 +97,11 @@ export default async function PackingSlip({ params }: { params: Promise<{ id: st
               </th>
               <th scope="col">Qty</th>
               <th scope="col">Item</th>
+              {slip.showPrices && (
+                <th scope="col" className="slip-money">
+                  Amount
+                </th>
+              )}
             </tr>
           </thead>
           <tbody>
@@ -104,32 +117,60 @@ export default async function PackingSlip({ params }: { params: Promise<{ id: st
                     <small key={note}>{note}</small>
                   ))}
                 </td>
+                {slip.showPrices && (
+                  <td className="slip-money">
+                    {formatPrice(line.linePaise)}
+                    <small>
+                      {line.quantity} × {formatPrice(line.pricePaise)}
+                    </small>
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
+          {slip.showPrices && (
+            <tfoot>
+              <tr>
+                <th scope="row" colSpan={3}>
+                  Total{o.deliveryPaise ? ` with ${formatPrice(o.deliveryPaise)} delivery` : ""}
+                </th>
+                <td className="slip-money">{formatPrice(o.totalPaise)}</td>
+              </tr>
+            </tfoot>
+          )}
         </table>
 
-        <dl className="slip-facts">
-          <div>
-            <dt>If an item is unavailable</dt>
-            <dd>{IF_UNAVAILABLE[customer?.substitutionPreference ?? "contact"] ?? IF_UNAVAILABLE.contact}</dd>
-          </div>
-          <div>
-            <dt>Payment</dt>
-            <dd>
-              {o.orderStatus === "cancelled"
-                ? "Cancelled: don’t send"
-                : cash
-                  ? `Cash on delivery: collect ${formatPrice(o.totalPaise)}`
-                  : "Paid online: collect nothing"}
-            </dd>
-          </div>
-        </dl>
+        {(slip.showPreference || slip.showPayment || o.orderStatus === "cancelled") && (
+          <dl className="slip-facts">
+            {slip.showPreference && (
+              <div>
+                <dt>If an item is unavailable</dt>
+                <dd>{IF_UNAVAILABLE[customer?.substitutionPreference ?? "contact"] ?? IF_UNAVAILABLE.contact}</dd>
+              </div>
+            )}
+            {/* a cancelled order says so whatever the settings: it must not go out */}
+            {(slip.showPayment || o.orderStatus === "cancelled") && (
+              <div>
+                <dt>Payment</dt>
+                <dd>
+                  {o.orderStatus === "cancelled"
+                    ? "Cancelled: don’t send"
+                    : cash
+                      ? `Cash on delivery: collect ${formatPrice(o.totalPaise)}`
+                      : "Paid online: collect nothing"}
+                </dd>
+              </div>
+            )}
+          </dl>
+        )}
 
-        <footer className="slip-sign">
-          <span>Packed by ____________________</span>
-          <span>Checked by ____________________</span>
-        </footer>
+        {slip.showSignatures && (
+          <footer className="slip-sign">
+            <span>{slip.signature1} ____________________</span>
+            <span>{slip.signature2} ____________________</span>
+          </footer>
+        )}
+        {slip.footerNote && <p className="slip-foot">{slip.footerNote}</p>}
       </article>
     </section>
   );

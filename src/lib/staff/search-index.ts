@@ -30,6 +30,90 @@ const TIMES = under(STORE, "Delivery times", "वितरणाच्या व
 const AREAS = under(STORE, "Service areas", "सेवा क्षेत्रे");
 const TAX = under(STORE, "Business and tax", "व्यवसाय व कर");
 const CHECKS = under(STORE, "Checks and search", "तपासणी व शोध");
+const CUSTOMIZE: Words = { en: "Customize", mr: "रचना बदला" };
+const custom = (
+  section: string,
+  en: string,
+  mr: string,
+  hint: [string, string],
+  keywords: string[],
+  keywordsMr: string[],
+): FinderEntry => ({
+  id: `customize.${section}`,
+  kind: "setting",
+  title: { en, mr },
+  hint: under(CUSTOMIZE, ...hint),
+  href: `/super-admin/customize#${section}`,
+  permission: "settings:write",
+  keywords,
+  keywordsMr,
+});
+const customize: FinderEntry[] = [
+  custom(
+    "bill",
+    "How the bill looks: paper size, logo, MRP, terms, signature",
+    "बिल कसे दिसते: कागद, लोगो, एमआरपी, अटी, सही",
+    ["Bills", "बिल"],
+    ["bill", "invoice", "receipt", "print bill", "paper size", "thermal", "logo", "terms", "signature", "mrp", "thank you", "amount in words"],
+    ["बिल", "पावती", "छपाई", "अटी", "सही"],
+  ),
+  custom(
+    "slip",
+    "Packing slip: title, prices, signature lines",
+    "पॅकिंग स्लिप: शीर्षक, किंमती, सही",
+    ["Packing slips", "पॅकिंग स्लिप"],
+    ["packing slip", "pick list", "packed by", "checked by"],
+    ["पॅकिंग", "स्लिप"],
+  ),
+  custom(
+    "quotation",
+    "Quotation validity and bank details",
+    "कोटेशनची मुदत व बँक तपशील",
+    ["School quotations", "शाळांची कोटेशन"],
+    ["quotation", "bank", "account number", "ifsc", "upi", "valid for", "validity"],
+    ["कोटेशन", "बँक", "खाते"],
+  ),
+  custom(
+    "storefront",
+    "Announcement bar, home page words, footer and Google title",
+    "घोषणा पट्टी, मुख्य पानाचा मजकूर, तळटीप व गूगल शीर्षक",
+    ["Shop front", "दुकानाचे स्वरूप"],
+    ["announcement", "banner", "notice", "closed", "holiday notice", "home page", "headline", "hero", "footer", "seo", "google", "meta description"],
+    ["घोषणा", "सूचना", "मुख्य पान", "तळटीप"],
+  ),
+  custom(
+    "messages",
+    "Messages customers get about their order",
+    "ग्राहकांना ऑर्डरबद्दल जाणारे संदेश",
+    ["Customer messages", "ग्राहक संदेश"],
+    ["notification text", "message", "order confirmed", "out for delivery", "delivered message"],
+    ["संदेश", "सूचना"],
+  ),
+  custom(
+    "numbers",
+    "Order and quotation number letters",
+    "ऑर्डर व कोटेशन क्रमांकाची अक्षरे",
+    ["Order and quotation numbers", "क्रमांक"],
+    ["order number", "prefix", "numbering", "quotation number", "ags"],
+    ["क्रमांक", "नंबर"],
+  ),
+  custom(
+    "defaults",
+    "Defaults for new packs, areas, delivery times and offers",
+    "नवीन पॅक, क्षेत्र, वेळा व ऑफरसाठी सुरुवातीची मूल्ये",
+    ["Form defaults", "सुरुवातीची मूल्ये"],
+    ["default", "purchase limit", "default fee", "default capacity", "offer length", "analytics range"],
+    ["सुरुवातीची", "मूल्ये"],
+  ),
+  custom(
+    "queues",
+    "When work queue items turn late",
+    "कामाच्या रांगेत उशीर कधी धरायचा",
+    ["Work queue timings", "कामाची रांग"],
+    ["late", "overdue", "work queue", "timings", "sla", "reminder"],
+    ["उशीर", "रांग"],
+  ),
+];
 
 const settings: FinderEntry[] = [
   {
@@ -467,6 +551,10 @@ const pageWords: Record<StaffNavKey, { keywords: string[]; keywordsMr: string[] 
   quotations: { keywords: ["quote", "quotation", "school order", "pricing"], keywordsMr: ["कोटेशन", "शाळा"] },
   marketplace: { keywords: ["school shop", "school marketplace", "shop for a school", "school basket", "school prices"], keywordsMr: ["शाळा", "दुकान"] },
   settings: { keywords: ["settings", "setup", "configuration", "delivery", "options"], keywordsMr: ["सेटिंग्ज"] },
+  customize: {
+    keywords: ["customize", "customise", "look", "design", "branding", "wording", "text", "print"],
+    keywordsMr: ["रचना", "बदल", "मजकूर"],
+  },
   staff: { keywords: ["staff", "team", "employee", "roles", "access"], keywordsMr: ["कर्मचारी"] },
   approvals: { keywords: ["approve", "pending", "waiting", "price change"], keywordsMr: ["मंजुरी"] },
   audit: { keywords: ["log", "history", "who changed", "activity", "sign ins"], keywordsMr: ["नोंद", "इतिहास"] },
@@ -559,4 +647,4 @@ const otherPages: FinderEntry[] = [
 ];
 
 /** Everything the workspace search can find, before filtering by who's asking. */
-export const FINDER_INDEX: FinderEntry[] = [...settings, ...actions, ...menuPages, ...otherPages];
+export const FINDER_INDEX: FinderEntry[] = [...settings, ...customize, ...actions, ...menuPages, ...otherPages];
