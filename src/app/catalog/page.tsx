@@ -1,7 +1,9 @@
 import Link from "next/link";
+import { permanentRedirect } from "next/navigation";
 import { CentreCurrent } from "@/components/centre-current";
 import { SearchX } from "lucide-react";
 import { catalog, catalogCategories } from "@/lib/catalog/queries";
+import { aisleDescription, aisleSummary, snippet } from "@/lib/seo";
 import { ProductCard } from "@/components/product-card";
 import { currentLocale } from "@/lib/i18n";
 import { CatalogFilterPanel } from "@/components/catalog-filter-panel";
@@ -21,11 +23,16 @@ export async function generateMetadata({
   if (category)
     return {
       title: `${category.en} online in Nagothane`,
-      description: `Shop ${category.en} from Agarwal Online with same-day delivery in and around Nagothane.`,
+      description: aisleDescription(category.en, await catalog({ category: category.slug })),
       alternates: { canonical: `/catalog?category=${category.slug}` },
     };
   if (params.sort === "discount") return { title: "Today’s offers and discounts", alternates: { canonical: "/catalog" } };
-  return { title: "All products", alternates: { canonical: "/catalog" } };
+  const aisles = (await catalogCategories()).map((item) => item.en.toLowerCase());
+  return {
+    title: "All products",
+    description: snippet(`All ${(await catalog()).length} products at Agarwal Online: ${aisles.slice(0, 6).join(", ")} and more.`),
+    alternates: { canonical: "/catalog" },
+  };
 }
 export default async function Catalog({
   searchParams,
@@ -44,6 +51,9 @@ export default async function Catalog({
     catalogCategories(),
   ]);
   const active = categories.find((category) => category.slug === params.category);
+  // an aisle that was renamed or removed (a link Google or someone saved) used to show an empty page
+  if (params.category && !active) permanentRedirect("/catalog");
+  const summary = aisleSummary(products);
   // ?page=3 shows the first three pages' worth: a link that works without JavaScript, and can be shared
   const page = Math.max(1, Math.min(100, Math.floor(Number(params.page)) || 1));
   const shown = products.slice(0, page * PAGE_SIZE);
@@ -67,6 +77,15 @@ export default async function Catalog({
                   ? "सर्व उत्पादने"
                   : "All products"}
           </h1>
+          {/* the aisle in a line, from its own products: whose, and at what prices (no words to translate) */}
+          {active && !params.q && products.length > 0 && (
+            <p className="muted">
+              {/* word joiners keep "₹90–₹240" on one line on a phone */}
+              {[summary.brands.slice(0, 4).join(", ") + (summary.brands.length > 4 ? "…" : ""), summary.range.replace("–", "\u2060–\u2060")]
+                .filter(Boolean)
+                .join(" · ")}
+            </p>
+          )}
         </div>
       </div>
       <nav className="catalog-chips" aria-label="Browse product categories">

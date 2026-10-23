@@ -230,7 +230,7 @@ export const SECTIONS = {
       heroHighlight: { kind: "both", label: "Headline, the part in yellow", max: 60, own: { en: "at your door today.", mr: "आज दारात." } },
       heroLead: { kind: "both", label: "Line under the headline", max: 240, long: true, own: { en: "Stationery, school supplies, toys and games at fair prices, carried to your door by the same people who serve you in store.", mr: "लेखन साहित्य, शालेय वस्तू, खेळणी आणि खेळ योग्य किमतीत, दुकानातील तीच माणसे तुमच्या दारापर्यंत पोहोचवतात." } },
       storyTitle: { kind: "both", label: "“How delivery works” heading", max: 80, own: { en: "A counter you already know.", mr: "तुमच्या ओळखीचाच काउंटर." } },
-      storyBody: { kind: "both", label: "“How delivery works” text", max: 500, long: true, own: { en: "Agarwal Online has served Nagothane from one counter for years. The website is the same shelves and the same prices, with delivery added. Order in English or Marathi and pay in cash at the door.", mr: "अग्रवाल ऑनलाइन वर्षानुवर्षे नागोठण्याला एकाच काउंटरवरून सेवा देत आहे. वेबसाइटवर त्याच वस्तू आणि त्याच किमती, फक्त वितरणाची सोय जोडली आहे. इंग्रजी किंवा मराठीत ऑर्डर करा आणि दारात रोख द्या." } },
+      storyBody: { kind: "both", label: "“How delivery works” text", max: 500, long: true, own: { en: "Agarwal Online is the website of Agarwal General Stores (Agarwal Stores) in Bazar Peth, Nagothane, also written Agrawal or Aggarwal, serving the town from one counter for years. The same shelves and the same prices, with delivery added. Order in English or Marathi and pay in cash at the door.", mr: "अग्रवाल ऑनलाइन ही नागोठण्याच्या बाजारपेठेतील अग्रवाल जनरल स्टोअरची (Agarwal General Stores, Agarwal Stores, Agrawal, Aggarwal) वेबसाइट आहे, वर्षानुवर्षे एकाच काउंटरवरून सेवा देणारी. त्याच वस्तू आणि त्याच किमती, फक्त वितरणाची सोय जोडली आहे. इंग्रजी किंवा मराठीत ऑर्डर करा आणि दारात रोख द्या." } },
       footerTagline: {
         kind: "both",
         label: "Line under the name in the footer",
@@ -252,15 +252,18 @@ export const SECTIONS = {
         kind: "text",
         label: "Title in Google and link previews",
         group: "Google and link previews",
-        default: "Agarwal Online | Stationery, toys & games in Nagothane",
+        // the signboard's name and the town first: that is what people type, and what Maps calls the shop
+        default: "Agarwal General Store Nagothane: Stationery & Toys Online",
         min: 10,
         max: 70,
       },
       seoDescription: {
         kind: "text",
         label: "Description in Google",
+        // the words people type: order online, home delivery, cash on delivery; Google shows about 160 characters
+        hint: "Google shows about the first 160 characters.",
         default:
-          "Pens, notebooks and school stationery from Cello, Classmate, Sulabh and Nataraj, and toys, board games and learning toys from Ratna's, at Agarwal Online, delivered same day in and around Nagothane.",
+          "Agarwal General Store (also Agrawal), Bazar Peth, Nagothane: order stationery, school supplies, toys and games online. Same-day home delivery, cash on delivery.",
         min: 50,
         max: 300,
         long: true,
