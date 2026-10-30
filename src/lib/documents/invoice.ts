@@ -1,7 +1,9 @@
 import { formatIst, paymentLabel } from "../display";
 import { lineNotes, type PackedLine } from "../operations/packing";
-import { rupeesInWords } from "../money-words";
+import { rupeesInMarathiWords, rupeesInWords } from "../money-words";
 import type { SectionValues } from "../settings/shop";
+import { dateOnly, escape, money } from "./format";
+import { renderBoxed, type BoxedTheme } from "./invoice-boxed";
 
 export type InvoiceLine = PackedLine & {
   variantId?: unknown;
@@ -32,8 +34,10 @@ export type InvoiceOrder = {
   originalTotalPaise?: number | null;
   shortfallPaise?: number | null;
 };
-/** What a line's product says today: MRP, HSN code and GST rate. Orders don't keep them. */
-export type LineFacts = { mrpPaise?: number; hsnCode?: string; gstRatePercent?: number };
+/** What a line's product says today: MRP, HSN code, GST rate and its Marathi name. Orders don't keep them. */
+export type LineFacts = { mrpPaise?: number; hsnCode?: string; gstRatePercent?: number; nameMr?: string };
+/** Where a customer can pay the shop, as filled in under Customize → School quotations. */
+export type PaymentDetails = { accountName?: string; bankName?: string; accountNumber?: string; ifsc?: string; upiId?: string };
 export type Seller = { legalName: string; address?: string; phone?: string; email?: string; gstin?: string };
 
 /**
@@ -85,17 +89,6 @@ export function inclusiveTax(
   };
 }
 
-const escape = (value: unknown) =>
-  String(value ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
-const inr = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", minimumFractionDigits: 2 });
-/** Bills show paise, with Indian digit grouping: ₹1,234.00. */
-const money = (paise: number) => inr.format(paise / 100);
-const dateOnly = (value: Date | string) =>
-  new Date(value).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" });
 
 const PAGE = {
   a4: "@page{size:A4;margin:14mm}body{font-size:14px;max-width:780px}",
@@ -154,6 +147,7 @@ export function renderInvoice({
   sample = false,
   estimate = false,
   staffView = false,
+  payment,
 }: {
   order: InvoiceOrder;
   /** The shop as the bill was issued (kept on the order at delivery), or as it is now. */
@@ -176,6 +170,8 @@ export function renderInvoice({
   estimate?: boolean;
   /** Staff are looking: say what is missing for a correct bill (customers never see this). */
   staffView?: boolean;
+  /** The shop's bank and UPI details, printed when Customize → Bills asks for them. */
+  payment?: PaymentDetails | null;
 }) {
   const cash = order.paymentMethod === "cod";
   const factOf = (line: InvoiceLine) => facts.get(String(line.variantId)) ?? {};
@@ -189,6 +185,96 @@ export function renderInvoice({
         order.deliveryPaise,
       )
     : null;
+  const saved = (order.merchandiseSavingsPaise ?? 0) + (order.promotionDiscountPaise ?? 0);
+  const missingNames = staffView && tax?.missing.length ? tax.missing.map((index) => order.items[index].name) : [];
+  // under the totals: what changed since the order was placed, and how delivery was taxed
+  const noteTexts = [
+    order.originalTotalPaise != null
+      ? `Items that weren’t available were taken off this bill. Total as ordered: ${money(order.originalTotalPaise)}.`
+      : "",
+    refund && order.shortfallPaise
+      ? `Paid online. ${money(order.shortfallPaise)} of this payment is for items that weren’t available${
+          refund === "refunded" ? ", and it has been refunded." : refund === "under-way" ? "; that refund is under way." : "; the store arranges that refund separately."
+        }`
+      : "",
+    tax?.delivery && tax.delivery.rate ? `Delivery is taxed at ${tax.delivery.rate}%, the highest rate on this bill.` : "",
+  ].filter(Boolean);
+  // what the law asks each kind to say about tax, at the foot
+  const legal =
+    kind === "cash-memo"
+      ? "Not registered under GST – no GST charged."
+      : kind === "estimate"
+        ? "This estimate is not a bill and not a tax invoice. The bill comes with the delivery."
+        : "Prices include GST.";
+  const bank = bill.showBankDetails && payment && Object.values(payment).some((value) => value?.trim()) ? payment : null;
+
+  // a classic boxed style, and every kaccha bill, on A4 or A5; receipt paper keeps the narrow layout below
+  const theme: BoxedTheme | null =
+    bill.paper === "receipt" ? null : bill.style !== "modern" ? (bill.style as BoxedTheme) : estimate ? "plain" : null;
+  if (theme)
+    return renderBoxed({
+      theme,
+      kind,
+      heading: HEADINGS[kind],
+      taxed,
+      seller,
+      shopNameMr: bill.shopNameMr,
+      stateName,
+      number,
+      replaces: replaces ?? null,
+      date: dateOnly(date),
+      orderNumber: order.number,
+      validUntil: kind === "estimate" && order.deliveryDate ? dateOnly(order.deliveryDate) : null,
+      billTo: { name: order.bill?.name || order.address.name || "", gstin: taxed ? order.bill?.gstin : undefined },
+      shipTo: {
+        line: [order.address.line, [order.address.areaName, order.address.pin].filter(Boolean).join(" ")].filter(Boolean).join(", "),
+        phone: bill.showCustomerPhone ? order.address.phone : undefined,
+      },
+      payment: bill.showPayment && kind !== "estimate" ? paymentLabel(order) : null,
+      lines: order.items.map((line, index) => {
+        const { mrpPaise, hsnCode, nameMr } = factOf(line);
+        // the printed price before the shop's own discount: the MRP when it is higher
+        const listPaise = mrpPaise && mrpPaise > line.pricePaise ? mrpPaise : line.pricePaise;
+        return {
+          name: line.name,
+          nameMr,
+          label: line.label,
+          quantity: line.quantity,
+          pricePaise: line.pricePaise,
+          listPaise,
+          discountPaise: (listPaise - line.pricePaise) * line.quantity,
+          amountPaise: line.linePaise,
+          hsn: hsnCode,
+          rate: rates[index],
+          notes: lineNotes(line, cash),
+        };
+      }),
+      totals: {
+        items: order.subtotalPaise,
+        offer: order.promotionDiscountPaise ?? 0,
+        offerName: order.appliedPromotion?.code || order.appliedPromotion?.name || undefined,
+        delivery: order.deliveryPaise,
+        total: order.totalPaise,
+      },
+      tax: tax ? { summary: tax.summary, taxable: tax.taxable, cgst: tax.cgst, sgst: tax.sgst } : null,
+      words: bill.amountInWords ? rupeesInWords(order.totalPaise) : null,
+      wordsMr: bill.amountInWords && theme === "bilingual" ? rupeesInMarathiWords(order.totalPaise) : null,
+      saved: bill.showMrp && saved > 0 && kind !== "estimate" ? saved : 0,
+      notes: noteTexts,
+      legal,
+      terms: bill.terms,
+      thankYou: kind !== "estimate" ? bill.thankYou : "",
+      footerNote: bill.footerNote,
+      signature: bill.showSignature && kind !== "estimate" ? bill.signatureLabel : null,
+      bank,
+      greeting: bill.greeting,
+      logo: bill.showLogo ? `${origin}/icons/icon-192.png` : null,
+      paper: bill.paper === "a5" ? "a5" : "a4",
+      printButton: bill.openAs === "page",
+      sample,
+      missingNames,
+    });
+
   const accent = /^#[0-9a-f]{6}$/i.test(bill.accent) ? bill.accent : "#1e3a8a";
   const page = PAGE[bill.paper as keyof typeof PAGE] ?? PAGE.a4;
 
@@ -277,29 +363,23 @@ export function renderInvoice({
         )
         .join("")}<tr class="sum"><td>Total</td><td>${money(tax.taxable)}</td><td>${money(tax.cgst)}</td><td>${money(tax.sgst)}</td></tr></tbody></table>`
     : "";
-  const saved = (order.merchandiseSavingsPaise ?? 0) + (order.promotionDiscountPaise ?? 0);
-  const missingRates =
-    staffView && tax?.missing.length
-      ? `<p class="warn">GST rate not set on ${tax.missing.map((index) => escape(order.items[index].name)).join(", ")}: no tax is worked out for ${tax.missing.length === 1 ? "it" : "them"}. Set it on the product (Catalog → the product → Tax). Customers don’t see this line.</p>`
-      : "";
-  const notes = [
-    order.originalTotalPaise != null
-      ? `<p class="muted">Items that weren’t available were taken off this bill. Total as ordered: ${money(order.originalTotalPaise)}.</p>`
-      : "",
-    refund && order.shortfallPaise
-      ? `<p class="muted">Paid online. ${money(order.shortfallPaise)} of this payment is for items that weren’t available${
-          refund === "refunded" ? ", and it has been refunded." : refund === "under-way" ? "; that refund is under way." : "; the store arranges that refund separately."
-        }</p>`
-      : "",
-    tax?.delivery && tax.delivery.rate ? `<p class="muted">Delivery is taxed at ${tax.delivery.rate}%, the highest rate on this bill.</p>` : "",
-  ].join("");
-  // what the law asks each kind to say about tax, at the foot
-  const legal =
-    kind === "cash-memo"
-      ? "Not registered under GST – no GST charged."
-      : kind === "estimate"
-        ? "This estimate is not a bill and not a tax invoice. The bill comes with the delivery."
-        : "Prices include GST.";
+  const missingRates = missingNames.length
+    ? `<p class="warn">GST rate not set on ${missingNames.map(escape).join(", ")}: no tax is worked out for ${missingNames.length === 1 ? "it" : "them"}. Set it on the product (Catalog → the product → Tax). Customers don’t see this line.</p>`
+    : "";
+  const notes = noteTexts.map((text) => `<p class="muted">${escape(text)}</p>`).join("");
+  const bankBlock = bank
+    ? `<div class="terms"><strong>Pay by bank or UPI</strong>${escape(
+        [
+          bank.accountName && `Account name: ${bank.accountName}`,
+          bank.bankName && `Bank: ${bank.bankName}`,
+          bank.accountNumber && `Account number: ${bank.accountNumber}`,
+          bank.ifsc && `IFSC: ${bank.ifsc}`,
+          bank.upiId && `UPI: ${bank.upiId}`,
+        ]
+          .filter(Boolean)
+          .join("\n"),
+      )}</div>`
+    : "";
 
   const style = `*{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;color:#0f172a;margin:28px auto;padding:0 22px;line-height:1.45}${page}header{display:flex;justify-content:space-between;gap:20px;border-bottom:3px solid ${accent};padding-bottom:16px}.shop{display:flex;gap:14px;align-items:flex-start}.logo{width:52px;height:52px;border-radius:12px}h1{font-size:1.6em;margin:0;color:${accent}}.doc{display:grid;gap:2px;text-align:right;align-content:start}.doc strong{font-size:1.2em;color:${accent};text-transform:uppercase;letter-spacing:.02em}.tag{font-size:.75em;font-weight:700;letter-spacing:.08em;text-transform:uppercase}.muted,small{color:#5b6472}small{display:block;margin-top:3px}.parties{display:flex;gap:16px;margin:18px 0 6px}.parties>div{flex:1;padding:10px 12px;border:1px solid #e5e8ee;border-radius:8px}.parties h2{margin:0 0 4px;font-size:.78em;letter-spacing:.06em;text-transform:uppercase;color:#5b6472}table{width:100%;border-collapse:collapse;margin:20px 0}caption{text-align:left;font-weight:700;margin-bottom:6px}th{text-align:left;font-size:.82em;color:#5b6472;border-bottom:2px solid ${accent}}th,td{padding:9px 7px;border-bottom:1px solid #e5e8ee;vertical-align:top}th:last-child,td:last-child{text-align:right}.gst{max-width:520px;margin-left:auto}.gst td,.gst th{text-align:right}.gst td:first-child,.gst th:first-child{text-align:left}.gst .sum td{font-weight:700;border-top:2px solid #0f172a}.totals{margin-left:auto;width:320px;max-width:100%}.totals p{display:flex;justify-content:space-between;margin:6px 0}.grand{font-size:1.25em;font-weight:700;border-top:2px solid #0f172a;padding-top:10px}.words{text-align:right;font-style:italic;color:#3f4555}.saved{color:#047857;font-weight:700;text-align:right}small.note{color:#9a3412;font-weight:600}.thanks{margin-top:24px;font-weight:700;color:${accent}}.terms{margin-top:14px;white-space:pre-line;font-size:.9em}.terms strong{display:block}.sign{margin:52px 0 0 auto;width:240px;max-width:100%;text-align:center;border-top:1px solid #0f172a;padding-top:6px;font-size:.9em}.legal{margin-top:20px;font-weight:700}.foot{margin-top:10px;font-size:.85em}.print,.sample,.estimate,.revised,.warn{display:block;margin:0 0 18px}.print{padding:10px 18px;border:0;border-radius:10px;background:${accent};color:#fff;font:600 15px Arial;cursor:pointer}.sample{padding:10px 14px;border-radius:10px;background:#fef3c7;color:#854d0e;font-weight:600}.warn{padding:10px 14px;border-radius:10px;background:#fbe8ec;color:#a11d33;font-weight:600}.estimate{padding:12px 14px;border:2px dashed #a11d33;border-radius:10px;color:#a11d33;font-weight:700;text-align:center;text-transform:uppercase}.revised{font-weight:700}@media print{body{margin:0 auto}.print,.sample,.warn{display:none}}`;
   const parts = [
@@ -321,6 +401,7 @@ export function renderInvoice({
     careLine ? `<p class="muted">Customer care: ${escape(careLine)}</p>` : "",
     bill.thankYou && kind !== "estimate" ? `<p class="thanks">${escape(bill.thankYou)}</p>` : "",
     bill.terms ? `<div class="terms"><strong>Terms</strong>${escape(bill.terms)}</div>` : "",
+    kind !== "estimate" ? bankBlock : "",
     bill.showSignature && kind !== "estimate"
       ? `<p class="sign">${escape(bill.signatureLabel)}<br><small>For ${escape(seller.legalName)}</small></p>`
       : "",

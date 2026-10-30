@@ -32,7 +32,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     if (order.deliveryStatus === "delivered" || order.bill?.issuedAt)
       return text("This order is delivered: its bill is the one to give.", 409);
   }
-  const [shop, bill, facts] = await Promise.all([taxProfile(), shopSettings("bill"), lineFacts(order.items)]);
+  const [shop, bill, facts, pay] = await Promise.all([
+    taxProfile(),
+    shopSettings("bill"),
+    lineFacts(order.items),
+    shopSettings("quotation"),
+  ]);
   // a bill already issued (at delivery) keeps the shop's details as they were then
   const kept = order.bill?.issuedAt && order.bill?.seller?.legalName ? order.bill.seller : null;
   const seller = {
@@ -62,6 +67,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     origin: getEnv().APP_ORIGIN,
     estimate,
     staffView: staff,
+    // the bank and UPI details the owner keeps for school quotations, when Bills asks for them
+    payment: { accountName: pay.accountName, bankName: pay.bankName, accountNumber: pay.accountNumber, ifsc: pay.ifsc, upiId: pay.upiId },
   });
   return new Response(html, {
     headers: {

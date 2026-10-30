@@ -677,7 +677,11 @@ tbody tr:hover { background: var(--canvas); }
   text-transform: uppercase;
   color: var(--muted);
 }
-.primary-nav { grid-area: nav; display: flex; align-items: center; gap: 26px; min-width: 0; margin: 0 calc(-1 * var(--gutter)); padding: 0 var(--gutter); overflow-x: auto; scrollbar-width: none; }
+.nav-row { grid-area: nav; display: flex; align-items: center; min-width: 0; }
+.primary-nav { flex: 1 1 auto; display: flex; align-items: center; gap: 26px; min-width: 0; margin: 0 calc(-1 * var(--gutter)); padding: 0 var(--gutter); overflow-x: auto; scrollbar-width: none; }
+/* with the school door beside them, the aisles stop short of it and fade out under the edge */
+.nav-row.with-door { gap: 4px; }
+.nav-row.with-door .primary-nav { margin-right: 0; padding-right: 32px; -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 32px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 32px), transparent); }
 .primary-nav::-webkit-scrollbar { display: none; }
 .primary-nav a { display: inline-flex; align-items: center; min-height: 44px; color: var(--ink-2); font-size: 0.92rem; font-weight: 500; white-space: nowrap; border-bottom: 1.5px solid transparent; }
 .primary-nav a:hover { color: var(--ink); border-color: var(--accent); }
@@ -1701,7 +1705,7 @@ a.order-row:hover { border-color: var(--ink); color: var(--ink); }
     gap: 6px 12px;
     padding: 10px var(--gutter) 12px;
   }
-  .primary-nav { display: none; }
+  .nav-row { display: none; }
   .brand { min-height: 44px; align-items: center; font-size: 25px; } /* px on purpose: enlarged text grows the content, not the wordmark */
   /* a phone's brand row has room for "Agarwal Online" side by side (about 366px with the promise) */
   .header:not(.staff-header, .school-header) .brand { flex-direction: row; flex-wrap: wrap; align-items: baseline; gap: 3px 10px; }
@@ -2089,6 +2093,8 @@ details.account-menu[open] > summary svg:last-child { transform: rotate(180deg);
   .workspace-heading:has(.overview-aside) { align-items: flex-start; }
   /* the chip on the left, New on the right, so its menu opens leftwards inside the screen */
   .overview-aside { width: 100%; justify-content: space-between; }
+  /* New stays on the right even when it wraps under the chip, or its menu opens off the screen */
+  .overview-aside .new-menu { margin-left: auto; }
   .new-menu .popover-panel { left: auto; right: 0; max-width: calc(100vw - 2 * var(--gutter)); }
   .needs-row { grid-template-columns: 30px minmax(0, 1fr) auto; gap: 10px; }
   .needs-count { font-size: 1.4rem; }
@@ -3154,10 +3160,12 @@ a.school-pill:hover, .school-switch > summary:hover .school-pill { background: #
 .school-main-area { flex: 1 0 auto; }
 
 /* the door between shop and school: in the shop it leads in, in the school header it leads back out.
-   A pill in the aisle row, a chip in the phone's top strip */
-.school-header .primary-nav a.school-door-pill { margin-left: auto; }
-.primary-nav a.school-door-pill { gap: 6px; min-height: 36px; padding: 0 14px; border: 1px solid var(--brand); border-radius: var(--r-pill); background: var(--brand-tint); color: var(--brand); font-weight: 600; }
-.primary-nav a.school-door-pill:hover { background: #dde1ed; background: color-mix(in oklab, var(--brand) 15%, var(--canvas)); border-color: var(--brand); }
+   A button pinned at the end of the aisle row (never scrolled out of sight), a chip in the phone's top strip */
+.school-door-pill { display: inline-flex; flex: none; align-items: center; gap: 6px; min-height: 40px; padding: 0 16px; border: 1px solid var(--brand); border-radius: var(--r-pill); background: var(--brand); color: var(--on-brand); font-size: 0.92rem; font-weight: 600; white-space: nowrap; text-decoration: none; }
+.school-door-pill:hover { border-color: var(--brand-strong); background: var(--brand-strong); color: var(--on-brand); }
+/* in the school, the way back to the shop is the quieter outline */
+.school-header .school-door-pill { background: var(--brand-tint); color: var(--brand); }
+.school-header .school-door-pill:hover { background: #dde1ed; background: color-mix(in oklab, var(--brand) 15%, var(--canvas)); border-color: var(--brand); color: var(--brand); }
 .top-strip-links > a.school-door { display: none; }
 
 /* home: the shop's welcome band, with the basket or a ready quotation beside it */
@@ -3318,6 +3326,11 @@ li .school-row-item { text-decoration: none; }
 .slot-picker legend { margin-bottom: 6px; padding: 0; font-weight: 600; }
 .slot-day { display: grid; grid-template-columns: 96px minmax(0, 1fr); align-items: start; gap: 8px 12px; padding: 10px 0; border-top: 1px solid var(--line); }
 .slot-day:first-of-type { border-top: 0; }
+/* later days fold away under "Show more times" (the grid above would otherwise override hidden) */
+.slot-day[hidden] { display: none; }
+.slot-more { display: inline-flex; align-items: center; justify-content: center; gap: 6px; justify-self: start; min-height: 44px; margin-top: 4px; padding: 0 18px; border: 1px solid var(--line-strong); border-radius: var(--r-pill); background: var(--paper); color: var(--link); font: inherit; font-size: 0.92rem; font-weight: 600; cursor: pointer; }
+.slot-more:hover { border-color: var(--ink); color: var(--ink); }
+.slot-more:focus-visible { outline: 0; box-shadow: var(--ring); }
 .slot-day-name { padding-top: 10px; font-weight: 600; }
 .slot-options { display: flex; flex-wrap: wrap; gap: 8px; }
 .slot-option { position: relative; display: inline-flex; }
@@ -3420,8 +3433,10 @@ table.slip-lines { width: 100%; min-width: 0; margin: 16px 0; border-collapse: c
   .variant-card:only-child .product-limit { display: none; }
   .slot-day { grid-template-columns: 1fr; gap: 6px; }
   .slot-day-name { padding-top: 0; }
-  .slot-option { flex: 1 1 calc(50% - 4px); }
-  .slot-option span[aria-hidden] { justify-content: center; width: 100%; }
+  /* two times to a row: "10 AM – 1 PM" fits half a phone */
+  .slot-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .slot-option span[aria-hidden] { justify-content: center; width: 100%; padding: 0 8px; white-space: nowrap; }
+  .slot-more { justify-self: stretch; }
   .search-popover .search-chips a { min-height: 44px; }
   .search-start-head .text-button { min-height: 44px; }
   .packing-slip { padding: 18px; }

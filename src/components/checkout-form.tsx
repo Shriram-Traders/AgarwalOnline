@@ -1,11 +1,15 @@
 "use client";
 import { useState } from "react";
 import Link from "next/link";
+import { ChevronDown, ChevronUp } from "lucide-react";
 import { ActionForm } from "./action-form";
 import { checkoutAction } from "@/lib/commerce/actions";
 import { formatPrice } from "@/lib/display";
 import { POLICY_VERSION } from "@/lib/legal/version";
 import { LegalText } from "./legal-text";
+/** Days of delivery times shown before "Show more times". */
+const SHOWN_DAYS = 2;
+
 type Option = {
   id: string;
   label: string;
@@ -59,6 +63,13 @@ export function CheckoutForm({
     day,
     times: available.filter((s) => s.day === day),
   }));
+  // two days of times to start with; the rest open on a tap, and the chosen time's day always shows
+  const [allDays, setAllDays] = useState(false);
+  const [picked, setPicked] = useState<{ addressId: string; slotId: string } | null>(null);
+  const chosen = picked?.addressId === addressId ? picked.slotId : available[0]?.id;
+  const chosenDay = available.find((s) => s.id === chosen)?.day;
+  const folded = (index: number, day: string) => !allDays && index >= SHOWN_DAYS && day !== chosenDay;
+  const foldedCount = days.filter(({ day }, index) => folded(index, day)).length;
   const fee = subtotal >= threshold ? 0 : (a?.fee ?? 0);
   const codBlocked = method === "cod" && a && (!a.codEnabled || subtotal + fee > a.codLimit);
   const total = subtotal - promotionDiscount + fee;
@@ -99,22 +110,45 @@ export function CheckoutForm({
             // a tap on a time instead of a dropdown; the earliest is chosen to start with
             <fieldset className="slot-picker" key={addressId}>
               <legend>Delivery time</legend>
-              {days.map(({ day, times }) => (
-                <div className="slot-day" key={day}>
+              {days.map(({ day, times }, index) => (
+                // folded days stay in the form (hidden), so the time picked in one still goes with the order
+                <div className="slot-day" key={day} hidden={folded(index, day)}>
                   <span className="slot-day-name" aria-hidden="true">
                     {day}
                   </span>
                   <div className="slot-options">
                     {times.map((s) => (
                       <label className="slot-option" key={s.id}>
-                        <input type="radio" name="slotId" value={s.id} required defaultChecked={s.id === available[0].id} />
-                        <span aria-hidden="true">{s.time}</span>
+                        <input
+                          type="radio"
+                          name="slotId"
+                          value={s.id}
+                          required
+                          defaultChecked={s.id === available[0].id}
+                          onChange={() => setPicked({ addressId, slotId: s.id })}
+                        />
+                        {/* "10 AM – 1 PM": short enough for two to a row on a phone; the full time is read out */}
+                        <span aria-hidden="true">{s.time.replace(/:00(?=\s?[AP]M)/gi, "")}</span>
                         <span className="sr-only">{s.label}</span>
                       </label>
                     ))}
                   </div>
                 </div>
               ))}
+              {(allDays || foldedCount > 0) && (
+                <button type="button" className="slot-more" aria-expanded={allDays} onClick={() => setAllDays(!allDays)}>
+                  {allDays ? (
+                    <>
+                      Show fewer times <ChevronUp size={16} aria-hidden="true" />
+                    </>
+                  ) : (
+                    <>
+                      Show more times ({foldedCount} more {foldedCount === 1 ? "day" : "days"}){" "}
+                      <ChevronDown size={16} aria-hidden="true" />
+                    </>
+                  )}
+                </button>
+              )}
             </fieldset>
           )}
           {!available.length && (

@@ -15,6 +15,13 @@ describe("shop settings", () => {
     expect(bill.showPayment).toBe(true);
     expect(bill.showMrp).toBe(false);
     expect(bill.paper).toBe("a4");
+    // today's layout until the owner picks a boxed one; no bank details until asked for
+    expect(bill.style).toBe("modern");
+    expect(bill.showBankDetails).toBe(false);
+    expect(bill.shopNameMr).toBe("अग्रवाल ऑनलाइन");
+    expect(bill.greeting).toBe("");
+    expect(readValues("bill", { style: "shree" }).style).toBe("shree");
+    expect(readValues("bill", { style: "fancy" }).style).toBe("modern");
     expect(defaultsOf("numbers")).toEqual({ orderPrefix: "AGS", quotePrefix: "AGSQ" });
     expect(defaultsOf("storefront").heroBadge).toEqual({ en: "", mr: "" });
     expect(defaultsOf("defaults").areaFee).toBe(3000);
