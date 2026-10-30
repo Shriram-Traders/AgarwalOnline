@@ -81,11 +81,15 @@ test("a guest asks about delivery, finds a pen and adds it", async ({ page }) =>
     // after typing stops)
     await expect(page.locator(".cart-bar")).toBeVisible();
     await expect(page.getByRole("navigation", { name: "Mobile navigation" })).toBeVisible();
-    const button = (await page.getByRole("button", { name: "Ask the shop assistant" }).boundingBox())!;
-    const basketBar = (await page.locator(".cart-bar").boundingBox())!;
-    const tabs = (await page.getByRole("navigation", { name: "Mobile navigation" }).boundingBox())!;
-    expect(button.y + button.height).toBeLessThanOrEqual(basketBar.y);
-    expect(basketBar.y + basketBar.height).toBeLessThanOrEqual(tabs.y);
+    // measured once they've finished sliding back in: visible comes before settled
+    await expect
+      .poll(async () => {
+        const button = (await page.getByRole("button", { name: "Ask the shop assistant" }).boundingBox())!;
+        const basketBar = (await page.locator(".cart-bar").boundingBox())!;
+        const tabs = (await page.getByRole("navigation", { name: "Mobile navigation" }).boundingBox())!;
+        return button.y + button.height <= basketBar.y && basketBar.y + basketBar.height <= tabs.y;
+      })
+      .toBe(true);
     await shot(page, "closed");
   }
 });

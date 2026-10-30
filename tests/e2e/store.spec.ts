@@ -198,6 +198,9 @@ test("customer OTP, basket, address, COD, tracking and cancellation", async ({
   await page.getByRole("button", { name: "Save address" }).click();
   await expect(page.getByRole("status")).toContainText("Address saved");
   await page.goto("/checkout");
+  // checkout shows two days of times; later days open with "Show more times"
+  const moreTimes = page.getByRole("button", { name: /^Show more times/ });
+  if (await moreTimes.isVisible()) await moreTimes.click();
   await page
     .getByRole("radio", { name: "Thu, 1 Jan · 4:00 PM – 7:00 PM" })
     .check();

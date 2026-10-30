@@ -57,23 +57,26 @@ export function SchoolHeader({
         <Link href="/school" className="brand" aria-label={text.home}>
           Agarwal Online<small>{text.forSchools}</small>
         </Link>
-        <nav className="primary-nav" aria-label={text.aislesLabel}>
-          <BackButton label={shop.back} className="nav-back" />
-          {current && (
-            <>
-              <Link href="/school/catalog">{text.allItems}</Link>
-              {aisles.slice(0, 5).map((aisle) => (
-                <Link key={aisle.slug} href={`/school/catalog?category=${aisle.slug}`}>
-                  {aisle[locale]}
-                </Link>
-              ))}
-              <Link href="/school/quotations">{text.quotations}</Link>
-            </>
-          )}
+        {/* as in the shop: the aisles scroll, the door back to the shop stays pinned at the end */}
+        <div className="nav-row with-door">
+          <nav className="primary-nav" aria-label={text.aislesLabel}>
+            <BackButton label={shop.back} className="nav-back" />
+            {current && (
+              <>
+                <Link href="/school/catalog">{text.allItems}</Link>
+                {aisles.slice(0, 5).map((aisle) => (
+                  <Link key={aisle.slug} href={`/school/catalog?category=${aisle.slug}`}>
+                    {aisle[locale]}
+                  </Link>
+                ))}
+                <Link href="/school/quotations">{text.quotations}</Link>
+              </>
+            )}
+          </nav>
           <Link href="/" className="school-door-pill">
             <Store size={16} aria-hidden="true" /> {text.backToShop}
           </Link>
-        </nav>
+        </div>
         <div className="header-actions">
           {current ? (
             others.length ? (

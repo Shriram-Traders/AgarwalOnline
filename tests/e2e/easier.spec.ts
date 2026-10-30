@@ -1,13 +1,13 @@
 // Round 1 of "easier to use", at desktop and phone width: the product page's − / + stepper, hearts
 // that remember, Load more, recent and popular searches, the packing slip, the new-order sound and
-// stock from a spreadsheet. (Delivery time buttons are in store.spec, the rider's Call and Map in
-// journey.spec.)
+// stock from a spreadsheet, and checkout's delivery times folded to two days. (Picking a delivery
+// time is in store.spec, the rider's Call and Map in journey.spec.)
 import { test, expect, type Browser, type Page, type TestInfo } from "@playwright/test";
 import { execFileSync } from "node:child_process";
 import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
-import { InventoryItem, Product, ProductVariant, User } from "../../src/lib/db/models";
-import { Address, Order, SystemSetting } from "../../src/lib/commerce/models";
+import { InventoryItem, Product, ProductVariant, ServiceArea, User } from "../../src/lib/db/models";
+import { Address, DeliverySlot, Order, SystemSetting } from "../../src/lib/commerce/models";
 import { WishlistItem } from "../../src/lib/engagement/models";
 import { OrderFeedback } from "../../src/lib/feedback/models";
 
@@ -163,6 +163,61 @@ test("hearts show what the shopper saved, after a reload too", async ({ browser 
   await expect(again.getByRole("button", { name: /^Remove .* from wishlist$/ })).toHaveAttribute("aria-pressed", "true");
   expect(await WishlistItem.countDocuments()).toBe(1);
   await page.context().close();
+});
+
+test("checkout: two days of delivery times, the rest a tap away", async ({ browser }, info) => {
+  // the demo shop's areas start switched off: deliver to the shopper's addresses for this test
+  const addresses = await Address.find({}, "areaId pin");
+  const areaIds = [...new Set(addresses.map((address) => String(address.areaId)))];
+  const before = await ServiceArea.find({ _id: { $in: areaIds } }, "enabled pincodes").lean();
+  for (const address of addresses)
+    await ServiceArea.updateOne({ _id: address.areaId }, { $set: { enabled: true }, $addToSet: { pincodes: address.pin } });
+  // four more days of times there, far ahead so none has passed (Sunday left out)
+  for (const areaId of areaIds)
+    for (const date of ["2099-01-01", "2099-01-02", "2099-01-03", "2099-01-05"])
+      for (const [label, startMinutes, endMinutes] of [
+        ["10:00 AM – 1:00 PM", 600, 780],
+        ["4:00 PM – 7:00 PM", 960, 1140],
+      ] as const)
+        await DeliverySlot.updateOne(
+          { areaId, date, label },
+          { $setOnInsert: { startMinutes, endMinutes, capacity: 5 } },
+          { upsert: true },
+        );
+  const page = await signedIn(browser, "customer", info.project.use);
+  await page.goto(`/products/${product.slug}`);
+  const main = page.locator("main");
+  const add = main.getByRole("button", { name: "Add to basket" }).first();
+  if (await add.isVisible()) {
+    await add.click();
+    await expect(main.locator(".product-quantity").first()).toHaveAttribute("aria-busy", "false");
+  }
+  await page.goto("/checkout");
+  await expect(page.getByRole("group", { name: "Delivery time" })).toBeVisible();
+  const total = await page.locator(".slot-day").count();
+  expect(total).toBeGreaterThanOrEqual(4);
+  // two days to start with; the rest wait behind one button
+  await expect(page.locator(".slot-day:visible")).toHaveCount(2);
+  const more = page.getByRole("button", { name: `Show more times (${total - 2} more days)` });
+  await expect(more).toHaveAttribute("aria-expanded", "false");
+  const monday = page.getByRole("radio", { name: "Mon, 5 Jan · 4:00 PM – 7:00 PM" });
+  await expect(monday).toBeHidden();
+  await shot(page, "checkout-times-folded");
+  await more.click();
+  await expect(page.locator(".slot-day:visible")).toHaveCount(total);
+  // short on the button; the full time is what's read out
+  await expect(page.locator(".slot-option", { has: monday })).toContainText("4 PM – 7 PM");
+  await monday.check();
+  await page.getByRole("button", { name: "Show fewer times" }).click();
+  // folding again keeps the chosen time's day in sight
+  await expect(monday).toBeVisible();
+  await expect(monday).toBeChecked();
+  await expect(page.locator(".slot-day:visible")).toHaveCount(3);
+  const left = total - 3;
+  await expect(page.getByRole("button", { name: `Show more times (${left} more ${left === 1 ? "day" : "days"})` })).toBeVisible();
+  await shot(page, "checkout-times-chosen");
+  await page.context().close();
+  for (const area of before) await ServiceArea.updateOne({ _id: area._id }, { $set: { enabled: area.enabled, pincodes: area.pincodes } });
 });
 
 test("staff: a packing slip and the bill from the order page", async ({ browser }, info) => {
