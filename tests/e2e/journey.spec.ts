@@ -182,6 +182,9 @@ test("whole journey: sign up, shop, pay, pack, deliver, reconcile", async ({ bro
   await shot(page, "addresses-populated");
 
   await page.goto("/checkout");
+  // checkout shows two days of times; later days open with "Show more times"
+  const moreTimes = page.getByRole("button", { name: /^Show more times/ });
+  if (await moreTimes.isVisible()) await moreTimes.click();
   await page.getByRole("radio", { name: "Thu, 1 Jan · 4:00 PM – 7:00 PM" }).check();
   await shot(page, "checkout-populated");
   await page.getByRole("checkbox").check();

@@ -3,8 +3,9 @@ import type { ReactNode } from "react";
 import { requirePage } from "@/lib/auth/session";
 import { PageHeading } from "@/components/page-heading";
 import { SettingsFold } from "@/components/settings-fold";
-import { shopSettings, SECTION_KEYS, type SectionKey } from "@/lib/settings/shop";
+import { BILL_STYLES, shopSettings, SECTION_KEYS, type SectionKey } from "@/lib/settings/shop";
 import { CustomizeForm } from "./_settings/customize-form";
+import { BillStyles } from "./_settings/bill-styles";
 
 export const metadata = { title: "Customize", robots: { index: false } };
 
@@ -24,11 +25,14 @@ function Section({
   values,
   submit,
   children,
+  before,
 }: {
   id: SectionKey;
   values: Record<string, unknown>;
   submit: string;
   children: ReactNode;
+  /** A panel above the section's form, in the wide column (the bill styles). */
+  before?: ReactNode;
 }) {
   return (
     <section className="settings-section" aria-labelledby={`${id}-heading`} id={id} tabIndex={-1}>
@@ -38,6 +42,7 @@ function Section({
         {children}
       </div>
       <div className="settings-cards">
+        {before}
         <div className="panel">
           <CustomizeForm section={id} values={values} submit={submit} />
         </div>
@@ -52,6 +57,8 @@ export default async function CustomizePage() {
   const saved = Object.fromEntries(
     await Promise.all(SECTION_KEYS.map(async (key) => [key, await shopSettings(key, true)] as const)),
   ) as Record<SectionKey, Record<string, unknown>>;
+  const styleName =
+    BILL_STYLES.find((option) => option.value === saved.bill.style)?.label.replace(/\s*\(.*\)$/, "") ?? "Modern";
   return (
     <section className="page-container">
       <PageHeading
@@ -60,7 +67,7 @@ export default async function CustomizePage() {
         lead="How bills, packing slips and quotations look, the shop front’s words, customer messages and the defaults staff start from. Each change applies as soon as it’s saved."
         aside={
           <a className="secondary-button" href="/api/invoices/sample" target="_blank" rel="noreferrer">
-            Preview a bill
+            Preview the bill in use
           </a>
         }
       />
@@ -72,16 +79,19 @@ export default async function CustomizePage() {
         ))}
       </nav>
 
-      <Section id="bill" values={saved.bill} submit="Save bill settings">
+      <Section
+        id="bill"
+        values={saved.bill}
+        submit="Save bill settings"
+        before={<BillStyles current={String(saved.bill.style)} />}
+      >
         <p>
           What the customer’s bill shows and how it prints. The shop’s name, address, phone and GSTIN come from{" "}
           <Link href="/super-admin#tax">Business and tax details</Link>; each product’s GST rate from its own page.
         </p>
         <p>
-          <a href="/api/invoices/sample" target="_blank" rel="noreferrer">
-            Preview a sample bill
-          </a>{" "}
-          with what is saved now.
+          Bills print in the <strong>{styleName}</strong> style. Every style is shown under Bill styles, to open full size
+          or use with one tap.
         </p>
       </Section>
       <Section id="slip" values={saved.slip} submit="Save packing slip settings">

@@ -134,26 +134,29 @@ export async function Header({
           <Link href="/" className="brand" aria-label="Agarwal Online, home">
             Agarwal<small>Online</small>
           </Link>
-          <nav className="primary-nav" aria-label={text.shopByCategory}>
-            {/* desktop and tablet: first in the category row; phones get the one beside search */}
-            <BackButton label={text.back} className="nav-back" />
-            <Link href="/catalog">{text.all}</Link>
-            {nav.map((category) => (
-              <Link key={category.slug} href={`/catalog?category=${category.slug}`}>
-                {category[locale]}
-              </Link>
-            ))}
-            {offers && (
-              <Link href="/catalog?sort=discount" className="offers">
-                {text.deals}
-              </Link>
-            )}
+          {/* the aisles scroll sideways when they don't fit; the school door is pinned at the end, never cut off */}
+          <div className={representsSchool ? "nav-row with-door" : "nav-row"}>
+            <nav className="primary-nav" aria-label={text.shopByCategory}>
+              {/* desktop and tablet: first in the category row; phones get the one beside search */}
+              <BackButton label={text.back} className="nav-back" />
+              <Link href="/catalog">{text.all}</Link>
+              {nav.map((category) => (
+                <Link key={category.slug} href={`/catalog?category=${category.slug}`}>
+                  {category[locale]}
+                </Link>
+              ))}
+              {offers && (
+                <Link href="/catalog?sort=discount" className="offers">
+                  {text.deals}
+                </Link>
+              )}
+            </nav>
             {representsSchool && (
               <Link href="/school" className="school-door-pill">
                 <School size={16} aria-hidden="true" /> {schoolDoor}
               </Link>
             )}
-          </nav>
+          </div>
           {/* logo → where we deliver → search → icons; phones put the icons in the bottom bar */}
           <div className="header-actions">
             <Link href="/serviceability" className="location">
