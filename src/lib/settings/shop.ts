@@ -61,6 +61,13 @@ export const PAPERS = [
   { value: "a5", label: "A5 (half an A4 page)" },
   { value: "receipt", label: "80 mm receipt printer" },
 ] as const;
+/** How a bill is laid out: today's open layout, or one of the classic boxed ones (src/lib/documents/invoice-boxed.ts). */
+export const BILL_STYLES = [
+  { value: "modern", label: "Modern, as now" },
+  { value: "ledger", label: "Parchment ledger (boxed, khaki paper)" },
+  { value: "bilingual", label: "Marathi and English (boxed)" },
+  { value: "shree", label: "Shree festive (boxed, ॥ श्री ॥ and a toran)" },
+] as const;
 export const DURATIONS = [15, 30, 60, 120, 240, 480, 720, 1440, 2880, 4320, 10080] as const;
 export const durationLabel = (minutes: number) =>
   minutes < 60
@@ -109,7 +116,36 @@ export const SECTIONS = {
       footerNote: { kind: "text", label: "Note at the very bottom", default: "This is a computer-generated bill.", max: 300 },
       showSignature: { kind: "check", label: "A signature line", default: false },
       signatureLabel: { kind: "text", label: "Words under the signature line", default: SIGNATORY, min: 2, max: 40 },
-      paper: { kind: "choice", label: "Paper size", group: "Paper and look", default: "a4", options: PAPERS },
+      showBankDetails: {
+        kind: "check",
+        label: "Bank and UPI details",
+        hint: "Taken from School quotations → How schools pay you; shown once something is filled in there.",
+        default: false,
+      },
+      style: {
+        kind: "choice",
+        label: "Bill style",
+        group: "Paper and look",
+        hint: "The boxed styles print on their own paper and ink; the colour below is for Modern only. Receipt paper always prints the narrow receipt. A kaccha bill is always boxed.",
+        default: "modern",
+        options: BILL_STYLES,
+      },
+      shopNameMr: {
+        kind: "text",
+        label: "Shop name in Marathi",
+        hint: "On the Marathi and English bill.",
+        default: "अग्रवाल ऑनलाइन",
+        min: 2,
+        max: 80,
+      },
+      greeting: {
+        kind: "text",
+        label: "Greeting at the foot of the Shree festive bill",
+        hint: "For example: शुभ दीपावली · Happy Diwali. Leave blank for none.",
+        default: "",
+        max: 120,
+      },
+      paper: { kind: "choice", label: "Paper size", default: "a4", options: PAPERS },
       accent: { kind: "colour", label: "Colour of the lines and headings", default: "#1e3a8a" },
       openAs: {
         kind: "choice",
@@ -516,6 +552,26 @@ export async function saveShopSettings(actorId: string, section: SectionKey, for
     );
   });
   return after;
+}
+
+/**
+ * "Use this style" under Customize → Bills: changes the bill style only, leaving the other bill
+ * settings as saved. Recorded in the audit trail like a full save.
+ */
+export async function saveBillStyle(actorId: string, style: unknown) {
+  await connectDB();
+  if (!mongoose.isValidObjectId(actorId)) throw Error("UNAUTHENTICATED");
+  const actor = await User.findOne({ _id: actorId, active: true });
+  if (!actor) throw Error("UNAUTHENTICATED");
+  assertPermission(actor.roles as Role[], "settings:write");
+  const chosen = z.enum(BILL_STYLES.map((option) => option.value) as [string, ...string[]]).parse(style);
+  await mongoose.connection.transaction(async (session) => {
+    const before = (await SystemSetting.findOne({ key: keyOf("bill") }).session(session))?.value ?? null;
+    const after = { ...readValues("bill", before), style: chosen };
+    await SystemSetting.updateOne({ key: keyOf("bill") }, { $set: { value: after }, $inc: { version: 1 } }, { upsert: true, session });
+    await AuditLog.create([{ actorId, action: "customize.bill", target: keyOf("bill"), details: { before, after } }], { session });
+  });
+  return chosen;
 }
 
 /** "{cutoff}", "{order}" and the like, filled in. */

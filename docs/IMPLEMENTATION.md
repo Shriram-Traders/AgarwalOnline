@@ -249,3 +249,32 @@ Every page was checked at four sizes: Pixel 7, a 360×640 phone, a Pixel 7 turne
   - delivery times don't break before "PM" (`noBreakTimes`);
   - the new-order sound switch is a speaker, not a second bell;
   - the empty basket and "Access restricted" page are in Marathi.
+
+## Bill styles (October 2026)
+
+Customize → Bills has a **Bill style** choice. Modern, the open layout bills had before, stays the default. The three classic Indian boxed styles are Parchment ledger, Marathi and English, and Shree festive. A **kaccha bill** (the estimate staff print before delivery) is always boxed: the chosen style, or a plain cream one under Modern, with a red dashed "Estimate · not a bill / not a tax invoice" banner and no GST columns. Only the layout changes. The kind of bill (cash memo, tax invoice, tax invoice-cum-bill of supply, estimate), its number and the GST worked out of GST-inclusive prices are the same as before.
+
+- **The box** (`src/lib/documents/invoice-boxed.ts`, called from `renderInvoice` in `invoice.ts`):
+  - Top: the heading in capitals, with "Original for recipient" on taxed kinds. Then the shop centred, with its GSTIN on taxed kinds. Then the billing details beside the bill facts: number, date, valid until, order, place of supply, reverse charge, payment, and the bill it replaces.
+  - Items: Sr., Item (pack beneath), HSN, Qty, List price, Disc., Tax % and Amount. List price is the MRP when it is higher than the price, and Disc. is the difference times the quantity. HSN and Tax % show on a tax invoice only; a kaccha bill has Rate instead. The ruled columns run down to the foot of the page, and on a phone screen HSN, List price and Disc. are hidden.
+  - Under the items: Total (items, offer and delivery beside it), the total in words, and the "Sale @0% = … | Sale @18% = …, CGST = …, SGST = … | Total taxable = …, Tax = …" line from `inclusiveTax`. Then the savings line when MRP is switched on, the notes about unavailable items and refunds, and the legal line.
+  - Foot boxes: terms ("E. & O.E." plus the shop terms), bank and UPI, and "For <shop>" with the signature line.
+- **The styles:**
+  - **Ledger:** khaki paper, serif headings and a round logo box.
+  - **Marathi and English:** cream paper with saffron lines. It shows:
+    - every label in both languages, from a map in the same file
+    - each item's Marathi name from the product (`lineFacts` now returns `nameMr`)
+    - the total in Marathi words (`rupeesInMarathiWords` in `src/lib/money-words.ts`: one word for each number up to 99, then शंभर/-शे, हजार, लाख and कोटी)
+    - the shop's Marathi name, from a new Bills setting
+  - **Shree festive:** a marigold toran, ॥ श्री ॥, शुभ / लाभ beside the name, a maroon frame, and an optional greeting at the foot (a new Bills setting, to change by season).
+- **Paper:** the page size follows the Paper setting.
+  - A4 and A5 print one page for a usual order, with "Page n of N" in the bottom margin (Chrome 131 or later) and the header repeated on later pages.
+  - Receipt paper always uses the narrow receipt layout.
+  - Paper colours are printed exactly (`print-color-adjust: exact`).
+- **Bank and UPI** (Bills → "Bank and UPI details", off by default): the account name, bank, account number, IFSC and UPI ID filled in under School quotations, so they are entered once. Shown on Modern bills too; never on a kaccha bill.
+- **Previews:** Customize → Bills shows a **Bill styles** panel (`_settings/bill-styles.tsx`). Each style, and the kaccha bill, is a live thumbnail drawn from a sample order by the real bill code, in a sandboxed `srcdoc` iframe. The style in use is framed. Each card opens its full-size preview (`/api/invoices/sample?style=<style>`, or `?kind=estimate`), and **Use this style** saves that style alone (`billStyleAction` → `saveBillStyle`, audited as `customize.bill`). The main button, "Preview the bill in use", opens the saved style. The sample order is built once in `src/lib/documents/sample-bill.ts` for the thumbnails and the preview route. Before this panel, the only preview button showed the saved style (Modern), so the new styles were easy to miss.
+- **Checks:**
+  - `tests/invoice.test.ts`: each style, the cash memo, the kaccha bill, bank details only when filled in, escaping, receipt paper.
+  - `tests/money-words.test.ts`: Marathi words. `tests/shop-settings.test.ts`: the new defaults.
+  - Every style was printed to PDF in Chromium. A4 and A5 bills of five lines fill exactly one page, and a 45-line bill runs to three.
+- **Still to check:** the Marathi labels and number words, by a Marathi speaker.
