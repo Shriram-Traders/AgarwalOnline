@@ -21,7 +21,7 @@ import { recommendationsFor } from "@/lib/catalog/recommendations";
 import { liveOffers, runningAt } from "@/lib/promotions/service";
 import { discountPercent, formatPrice, minutesUntilCutoff } from "@/lib/display";
 import { taxProfile } from "@/lib/tax/profile";
-import { jsonLd, storeJsonLd } from "@/lib/seo";
+import { jsonLd, storeJsonLd, websiteJsonLd } from "@/lib/seo";
 import { getEnv } from "@/lib/env";
 import { paymentsEnabled } from "@/lib/payments/provider";
 import { fill, frontWords, shopSettings } from "@/lib/settings/shop";
@@ -318,7 +318,7 @@ export default async function Home() {
     <>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: jsonLd(storeJsonLd(shop, areaDocs, getEnv().APP_ORIGIN)) }}
+        dangerouslySetInnerHTML={{ __html: jsonLd([websiteJsonLd(getEnv().APP_ORIGIN), storeJsonLd(shop, areaDocs, getEnv().APP_ORIGIN)]) }}
       />
       <section className="hero" aria-labelledby="welcome-title">
         <div className="hero-card">

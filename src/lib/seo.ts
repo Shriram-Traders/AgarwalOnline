@@ -1,5 +1,6 @@
 import type { CatalogItem } from "./catalog/queries";
 import type { TaxProfile } from "./tax/gst";
+import { formatPrice } from "./display";
 
 const STORE = "Agarwal Online";
 
@@ -57,6 +58,16 @@ export function storeJsonLd(
     "@context": "https://schema.org",
     "@type": "Store",
     name: profile.legalName,
+    // the shop's name on Google Maps and the spellings people type (JustDial has "Agrawal"), so Google
+    // ties the website to the Maps listing; the same spellings are written on the home page
+    alternateName: [
+      "Agarwal General Store",
+      "Agarwal General Stores",
+      "Agarwal Store",
+      "Agarwal Stores",
+      "Agrawal General Store",
+      "Aggarwal General Store",
+    ],
     url: origin,
     logo: `${origin}/icons/icon-512.png`,
     image: `${origin}/icons/icon-512.png`,
@@ -72,3 +83,53 @@ export function storeJsonLd(
     areaServed: areas.map((name) => ({ "@type": "Place", name })),
   };
 }
+
+/** Cut to fit Google's snippet (about 160 characters) at a word, with "…" when anything was cut. */
+export function clip(text: string, max = 160) {
+  const flat = text.replace(/\s+/g, " ").trim();
+  if (flat.length <= max) return flat;
+  const cut = flat.slice(0, max - 1);
+  const word = cut.lastIndexOf(" ");
+  return `${(word > max * 0.6 ? cut.slice(0, word) : cut).replace(/[\s,;:·–-]+$/, "")}…`;
+}
+
+/** A snippet that always ends with the local promise: the text gives way, never the delivery line. */
+export const snippet = (text: string, tail = " Same-day home delivery in Nagothane.") => clip(text, 160 - tail.length) + tail;
+
+const listed = (names: string[]) =>
+  names.length < 2 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
+
+/** Product page snippet: what it is and costs first, the description next, local delivery always last. */
+export function productDescription(p: Pick<CatalogItem, "name" | "description" | "variants">) {
+  const v = p.variants[0];
+  return snippet(`${p.name.en} (${v.label}), ${formatPrice(v.pricePaise)}. ${p.description.en}`);
+}
+
+/** An aisle in one line, from its products: the brands it stocks most (up to four) and its price range. */
+export function aisleSummary(products: Pick<CatalogItem, "brand" | "variants">[]) {
+  const counts = new Map<string, number>();
+  for (const p of products) if (p.brand) counts.set(p.brand, (counts.get(p.brand) ?? 0) + 1);
+  const brands = [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([brand]) => brand);
+  const prices = products.flatMap((p) => p.variants.map((v) => v.pricePaise));
+  const low = Math.min(...prices);
+  const high = Math.max(...prices);
+  const range = prices.length ? (low === high ? formatPrice(low) : `${formatPrice(low)}–${formatPrice(high)}`) : "";
+  return { count: products.length, brands, range };
+}
+
+/** The aisle's search snippet: its name, how many products, whose, at what prices, and same-day delivery. */
+export function aisleDescription(name: string, products: Pick<CatalogItem, "brand" | "variants">[]) {
+  const { count, brands, range } = aisleSummary(products);
+  const from = brands.length ? `from ${listed(brands.length > 4 ? [...brands.slice(0, 4), "more"] : brands)}` : "";
+  const what = [`${count} ${count === 1 ? "product" : "products"}`, from].filter(Boolean).join(" ");
+  return snippet(`${name} at ${STORE}: ${what}${range ? `, ${range}` : ""}.`);
+}
+
+/** The site's own name, which Google shows above each result instead of guessing one from the domain. Home page only. */
+export const websiteJsonLd = (origin: string) => ({
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  name: STORE,
+  alternateName: "agarwalonline.in",
+  url: `${origin}/`,
+});

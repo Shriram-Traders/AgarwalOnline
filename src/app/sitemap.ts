@@ -2,6 +2,8 @@ import type { MetadataRoute } from "next";
 import { getEnv } from "@/lib/env";
 import { catalog, catalogCategories } from "@/lib/catalog/queries";
 import { LEGAL_PAGES, POLICIES_HOME } from "@/lib/legal/pages";
+import { orderedPhotos } from "@/lib/catalog/photos";
+import { productImages } from "@/lib/catalog/images";
 
 // built per request: the catalog changes without a deploy, and builds should not need the database
 export const dynamic = "force-dynamic";
@@ -25,10 +27,18 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: "weekly" as const,
       priority: 0.7,
     })),
-    ...products.map((product) => ({
-      url: `${origin}/products/${product.slug}`,
-      changeFrequency: "weekly" as const,
-      priority: 0.6,
-    })),
+    ...products.map((product) => {
+      const photos = orderedPhotos(product);
+      const fallback = productImages[product.slug];
+      return {
+        url: `${origin}/products/${product.slug}`,
+        changeFrequency: "weekly" as const,
+        priority: 0.6,
+        // its photos, for Google Images; Next writes these into the XML as they are, so & is escaped here
+        images: (photos.length ? photos : fallback ? [fallback] : []).map((src) =>
+          new URL(src, origin).href.replaceAll("&", "&amp;"),
+        ),
+      };
+    }),
   ];
 }

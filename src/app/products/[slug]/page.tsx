@@ -21,7 +21,7 @@ import { ProductQuantity } from "@/components/quick-add";
 import { orderedPhotos } from "@/lib/catalog/photos";
 import { discountPercent, formatPrice, minutesUntilCutoff } from "@/lib/display";
 import { getEnv } from "@/lib/env";
-import { jsonLd, productJsonLd } from "@/lib/seo";
+import { jsonLd, productDescription, productJsonLd } from "@/lib/seo";
 import { listsFor } from "@/lib/lists/service";
 import { AddToList } from "@/components/add-to-list";
 import { SaveToBoard } from "@/components/save-to-board";
@@ -32,9 +32,11 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   if (!p) return { title: "Product not found" };
   const v = p.variants[0];
   const photo = orderedPhotos(p)[0] ?? productImages[p.slug];
+  const title = `${p.name.en} – ${formatPrice(v.pricePaise)}`;
   return {
-    title: `${p.name.en} – ${formatPrice(v.pricePaise)}`,
-    description: `${p.name.en} (${v.label}) from Agarwal Online, delivered across Nagothane and nearby areas. ${p.description.en}`.slice(0, 300),
+    // Google shows about 60 characters: a long name keeps its price and loses the shop's name
+    title: `${title} | Agarwal Online`.length > 60 ? { absolute: title } : title,
+    description: productDescription(p),
     // ?lang= and the cookie only change the language; search engines should list one address
     alternates: { canonical: `/products/${p.slug}` },
     ...(photo ? { openGraph: { images: [photo] } } : {}),
