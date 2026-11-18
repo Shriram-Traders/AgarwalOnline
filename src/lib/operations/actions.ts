@@ -9,8 +9,9 @@ import {
   savePacking,
   assignDelivery,
   partnerTransition,
-  requestDeliveryOTP,
+  sendDeliveryCodeForRider,
   completeDelivery,
+  confirmDeliveryByOwner,
   reconcileCOD,
   resolveCODDiscrepancy,
   cancelByStore,
@@ -20,6 +21,7 @@ import {
   removeRider,
   type PackingResult,
 } from "./service";
+import { confirmHandover, startHandover } from "./handover";
 import { hasPermission } from "../auth/permissions";
 import { NONE_LEFT } from "./packing";
 import { formatPrice, paiseFromRupees } from "../display";
@@ -75,7 +77,6 @@ export async function operationAction(
   _state: MutationState,
   form: FormData,
 ): Promise<MutationState> {
-  let delivered = false;
   // where the order page opens after a step whose panel goes away with it (and its message too)
   let landing: string | null = null;
   let result: MutationState = {};
@@ -87,8 +88,11 @@ export async function operationAction(
         "packing",
         "assign",
         "delivery-status",
-        "delivery-otp",
+        "send-delivery-code",
         "deliver",
+        "confirm-delivery",
+        "start-handover",
+        "confirm-handover",
         "reconcile",
         "resolve-discrepancy",
         "cancel",
@@ -136,15 +140,23 @@ export async function operationAction(
           partnerId: form.get("partnerId"),
         });
         break;
-      case "delivery-status":
+      case "delivery-status": {
+        const next = form.get("next");
         await partnerTransition(user.id, {
           orderId,
-          next: form.get("next"),
+          next,
           reason: form.get("reason") ?? "",
         });
+        success =
+          next === "out-for-delivery"
+            ? "On the way: the customer has been told."
+            : "Attempt recorded, and the customer has been told why.";
+        // a closed stop leaves the rider's list: the list says it went through
+        if (next === "failed") landing = `/delivery?closed=${encodeURIComponent(String(orderId))}`;
         break;
-      case "delivery-otp":
-        success = await requestDeliveryOTP(user.id, orderId);
+      }
+      case "send-delivery-code":
+        success = await sendDeliveryCodeForRider(user.id, orderId);
         break;
       case "deliver":
         await completeDelivery(user.id, {
@@ -152,6 +164,17 @@ export async function operationAction(
           code: form.get("code"),
           cashPaise: paiseFromRupees(form.get("cashRupees")) ?? null,
         });
+        landing = `/delivery?done=${encodeURIComponent(String(orderId))}`;
+        break;
+      case "confirm-delivery":
+        await confirmDeliveryByOwner(user.id, { orderId, reason: form.get("reason") ?? "" });
+        success = "Delivered: confirmed without the code, and noted on the order.";
+        break;
+      case "start-handover":
+        success = await startHandover(user.id);
+        break;
+      case "confirm-handover":
+        success = await confirmHandover(user.id, { handoverId: form.get("handoverId") });
         break;
       case "reconcile":
         await reconcileCOD(user.id, {
@@ -197,19 +220,19 @@ export async function operationAction(
     }
     for (const path of [
       "/admin",
+      "/admin/cod",
       "/delivery",
       `/admin/orders/${orderId}`,
       `/delivery/orders/${orderId}`,
       `/account/orders/${orderId}`,
     ])
       revalidatePath(path);
-    delivered = operation === "deliver";
     result = { success };
   } catch (error) {
     if (error instanceof z.ZodError) return { error: plainMessage(error) };
     const message = error instanceof Error ? error.message : "";
     if (
-      /^(This|Select|Complete|Confirm|Check |Packed|Nothing is packed|Delivery must|Enter the|A delivery|SMS delivery|Unable to send|The collected|Invalid or expired|Delivery code|Explain)/.test(
+      /^(This|Select|Complete|Confirm|Check |Packed|Nothing is packed|Delivery must|Enter the|A delivery|SMS|Unable to send|The collected|Invalid or expired|That code|Too many attempts|Delivery code|Explain|There is no cash)/.test(
         message,
       )
     )
@@ -221,7 +244,6 @@ export async function operationAction(
     log("error", "operations.unexpected-error", { error });
     return { error: "Unable to complete this operation. Please refresh and try again." };
   }
-  if (delivered) redirect("/delivery");
   // replace: Back should leave the order, not show the same order again
   if (landing) redirect(landing, RedirectType.replace);
   return result;

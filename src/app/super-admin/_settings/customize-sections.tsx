@@ -13,6 +13,7 @@ export const CUSTOMIZE_TITLES: Record<SectionKey, string> = {
   numbers: "Order and quotation numbers",
   defaults: "Form defaults",
   queues: "Work queue timings",
+  team: "Developer and team",
 };
 
 function Section({
@@ -46,7 +47,7 @@ function Section({
 }
 
 /** What used to be the Customize page: how bills, slips and the shop front look, and staff defaults. */
-export function CustomizeSections({ saved }: { saved: Record<SectionKey, Record<string, unknown>> }) {
+export function CustomizeSections({ saved, tech }: { saved: Record<SectionKey, Record<string, unknown>>; tech: boolean }) {
   return (
     <>
       <Section id="storefront" values={saved.storefront} submit="Save shop front">
@@ -93,6 +94,14 @@ export function CustomizeSections({ saved }: { saved: Record<SectionKey, Record<
           When an item in the <Link href="/admin">Overview</Link> work queue counts as late and moves up the list.
         </p>
       </Section>
+      {tech && (
+        <Section id="team" values={saved.team} submit="Save developer and team">
+          <p>
+            The &ldquo;Developed by&rdquo; card at the bottom of every shop page and the <a href="/p/team">team page</a>, with the
+            ways people can reach you. A contact left blank is left off. Only Tech can change this.
+          </p>
+        </Section>
+      )}
     </>
   );
 }

@@ -15,6 +15,7 @@ import { assertPermission, hasPermission, type Permission, type Role } from "../
 import { notify } from "../engagement/service";
 import { log } from "../logger";
 import { ApprovalRequest, ApprovalHistory } from "./models";
+import { FIELD_LABELS } from "./labels";
 import { gstRateField, hsnField, optionalField } from "../tax/gst";
 import { UploadedEvidence } from "../evidence/models";
 import { photoFields, photoList } from "../catalog/photos";
@@ -31,6 +32,17 @@ const PENDING_PHOTO_DAYS = 60;
 const schoolPriceField = optionalField(z.coerce.number().int().min(1).max(10000000));
 /** What the shop paid for one pack: owners only, optional. */
 const costField = optionalField(z.coerce.number().int().min(0).max(10000000));
+/** A new price for a pack, as staff ask for it and as an owner may change it before approving. */
+const priceChange = z
+  .object({ pricePaise: z.coerce.number().int().positive(), mrpPaise: z.coerce.number().int().positive() })
+  .refine((d) => d.pricePaise <= d.mrpPaise, { message: "Price must not exceed MRP.", path: ["pricePaise"] });
+/** Stock added (12) or taken off (-3). */
+const stockDelta = z.coerce
+  .number()
+  .int()
+  .min(-100000)
+  .max(100000)
+  .refine((n) => n !== 0);
 async function authorize(id: string, permission: Permission) {
   await connectDB();
   const user = await User.findOne({ _id: objectId.parse(id), active: true });
@@ -54,10 +66,12 @@ export const productInput = z
     // another shop that supplies it ("Provided by …"); none means our own stock
     providerId: objectId.optional(),
     aliases: z.string().max(1000),
+    // nobody types one any more: the pack gets one when it is made (`freeSku`)
     sku: z
       .string()
       .regex(/^[A-Za-z\d-]+$/)
-      .max(60),
+      .max(60)
+      .optional(),
     label: z.string().min(1).max(40),
     unit: z.enum(["piece", "kg", "g", "l", "ml"]),
     packQuantity: z.coerce.number().positive().max(100000),
@@ -87,7 +101,8 @@ export const variantInput = z
       .string()
       .trim()
       .regex(/^[A-Za-z\d-]+$/)
-      .max(60),
+      .max(60)
+      .optional(),
     label: z.string().trim().min(1).max(40),
     unit: z.enum(["piece", "kg", "g", "l", "ml"]),
     packQuantity: z.coerce.number().positive().max(100000),
@@ -153,16 +168,24 @@ async function assertFree(fields: { slug?: string; sku?: string }, session: mong
       (await ApprovalRequest.exists({ kind: "product", state: "pending", "after.slug": fields.slug }).session(session));
     if (taken) throw Error(`That web address (${fields.slug}) is already used. Pick another one.`);
   }
-  if (fields.sku) {
-    const taken =
-      (await ProductVariant.exists({ sku: fields.sku }).session(session)) ||
-      (await ApprovalRequest.exists({
-        kind: { $in: ["product", "variant"] },
-        state: "pending",
-        "after.sku": fields.sku,
-      }).session(session));
-    if (taken) throw Error(`That SKU (${fields.sku}) is already used. Pick another one.`);
-  }
+  if (fields.sku && (await skuTaken(fields.sku, session))) throw Error(`That SKU (${fields.sku}) is already used. Pick another one.`);
+}
+
+async function skuTaken(sku: string, session: mongoose.ClientSession) {
+  return Boolean(
+    (await ProductVariant.exists({ sku }).session(session)) ||
+      (await ApprovalRequest.exists({ kind: { $in: ["product", "variant"] }, state: "pending", "after.sku": sku }).session(session)),
+  );
+}
+
+/**
+ * The owners asked not to be asked for a SKU, so a new pack gets one from its product's web
+ * address: gel-pen-set-1, gel-pen-set-2. Only the stock sheet shows it, to match rows to packs.
+ */
+async function freeSku(productId: unknown, session: mongoose.ClientSession) {
+  const product = await Product.findById(productId).select("slug").session(session);
+  const base = String(product?.slug ?? "pack").slice(0, 50).replace(/-+$/, "");
+  for (let n = 1; ; n++) if (!(await skuTaken(`${base}-${n}`, session))) return `${base}-${n}`;
 }
 
 /** Only an owner prices for schools or knows purchase prices, so only an owner can put them on a new pack. */
@@ -220,17 +243,7 @@ export async function submitVariant(actorId: string, input: unknown) {
 }
 export async function requestPrice(actorId: string, input: unknown) {
   await authorize(actorId, "approval:request");
-  const data = z
-    .object({
-      variantId: objectId,
-      pricePaise: z.coerce.number().int().positive(),
-      mrpPaise: z.coerce.number().int().positive(),
-    })
-    .refine((d) => d.pricePaise <= d.mrpPaise, {
-      message: "Price must not exceed MRP.",
-      path: ["pricePaise"],
-    })
-    .parse(input);
+  const data = { variantId: objectId.parse((input as { variantId?: unknown } | null)?.variantId), ...priceChange.parse(input) };
   let live = false;
   await mongoose.connection.transaction(async (session) => {
     const variant = await ProductVariant.findOne({ _id: data.variantId, ...notDeleted }).session(session);
@@ -276,12 +289,7 @@ export async function adjustStock(actorId: string, input: unknown) {
   const data = z
     .object({
       variantId: objectId,
-      delta: z.coerce
-        .number()
-        .int()
-        .min(-100000)
-        .max(100000)
-        .refine((n) => n !== 0),
+      delta: stockDelta,
       reason: z.string().trim().min(5).max(500),
     })
     .parse(input);
@@ -450,7 +458,8 @@ async function createPack(
       {
         _id: variantId,
         productId,
-        sku: data.sku,
+        // requests made before SKUs were dropped from the forms still carry the one typed then
+        sku: data.sku ?? (await freeSku(productId, session)),
         label: data.label,
         unit: data.unit,
         packQuantity: data.packQuantity,
@@ -590,6 +599,61 @@ function describe(request: { kind: string; after: Record<string, unknown> }) {
     ? `${what} “${String(request.after.nameEn)}”`
     : what;
 }
+/**
+ * What an owner may change in a waiting request before approving it, checked by the same rules as
+ * when it was asked for. Photos, the provider and why stock changed stay as asked.
+ */
+const EDITS: Record<string, { fields: readonly string[]; schema: { parse(input: unknown): Record<string, unknown> } }> = {
+  product: {
+    fields: [
+      "nameEn",
+      "descriptionEn",
+      "categoryId",
+      "brand",
+      "slug",
+      "aliases",
+      "label",
+      "unit",
+      "packQuantity",
+      "pricePaise",
+      "mrpPaise",
+      "stock",
+      "showToCustomers",
+      "showToSchools",
+      "gstRatePercent",
+      "hsnCode",
+      "schoolPricePaise",
+      "costPaise",
+    ],
+    schema: productInput,
+  },
+  variant: {
+    fields: ["label", "unit", "packQuantity", "pricePaise", "mrpPaise", "maxQuantity", "stock", "schoolPricePaise", "costPaise"],
+    schema: variantInput,
+  },
+  price: { fields: ["pricePaise", "mrpPaise"], schema: priceChange },
+  stock: { fields: ["delta"], schema: z.object({ delta: stockDelta }) },
+};
+
+/** Puts an owner's changes into a waiting request before it goes live; returns the fields that changed. */
+async function applyEdits(
+  request: { kind: string; after: Record<string, unknown>; markModified(path: string): void },
+  input: Record<string, unknown>,
+  session: mongoose.ClientSession,
+) {
+  const edit = EDITS[request.kind];
+  if (!edit) return [];
+  const after = request.after;
+  const edited = edit.schema.parse({ ...after, ...Object.fromEntries(edit.fields.filter((key) => key in input).map((key) => [key, input[key]])) });
+  const changed = edit.fields.filter((key) => String(edited[key] ?? "") !== String(after[key] ?? ""));
+  if (!changed.length) return [];
+  if (changed.includes("slug")) await assertFree({ slug: String(edited.slug) }, session);
+  // a box left empty (no purchase price) leaves the field out, rather than storing an empty one
+  request.after = Object.fromEntries(Object.entries({ ...after, ...edited }).filter(([, value]) => value !== undefined));
+  request.markModified("after");
+  return changed;
+}
+
 export async function reviewApproval(actorId: string, input: unknown) {
   await authorize(actorId, "approval:review");
   const data = z
@@ -598,6 +662,8 @@ export async function reviewApproval(actorId: string, input: unknown) {
       decision: z.enum(["approved", "rejected"]),
       comment: z.string().trim().max(500),
       scheduledAt: z.string().optional(),
+      // the review form sends the request's fields, maybe changed, along with the decision
+      edit: z.literal("1").optional(),
     })
     .parse(input);
   if (data.decision === "rejected" && data.comment.length < 5)
@@ -606,12 +672,27 @@ export async function reviewApproval(actorId: string, input: unknown) {
     ? z.coerce.date().parse(data.scheduledAt)
     : undefined;
   let decided: { requesterId: unknown; kind: string; after: Record<string, unknown> } | null = null;
+  let changed: string[] = [];
   await mongoose.connection.transaction(async (session) => {
     const request = await ApprovalRequest.findOne({
       _id: data.requestId,
       state: "pending",
     }).session(session);
     if (!request) throw Error("This request has already been reviewed.");
+    // a rejection leaves the request as it was asked for
+    changed = data.decision === "approved" && data.edit ? await applyEdits(request, input as Record<string, unknown>, session) : [];
+    if (changed.length)
+      await AuditLog.create(
+        [
+          {
+            actorId,
+            action: "approval.edit",
+            target: String(request._id),
+            details: { fields: changed, after: Object.fromEntries(changed.map((key) => [key, request.after[key] ?? null])) },
+          },
+        ],
+        { session },
+      );
     request.state = data.decision;
     request.reviewerId = actorId;
     request.reviewedAt = new Date();
@@ -625,7 +706,10 @@ export async function reviewApproval(actorId: string, input: unknown) {
           actorId,
           previous: "pending",
           next: data.decision,
-          comment: data.comment,
+          // owners only read this; the person who asked is told only that something changed
+          comment: [data.comment, changed.length && `Changed before approving: ${changed.map((key) => FIELD_LABELS[key] ?? key).join(", ")}`]
+            .filter(Boolean)
+            .join(" · "),
         },
       ],
       { session },
@@ -655,7 +739,8 @@ export async function reviewApproval(actorId: string, input: unknown) {
       body:
         data.decision === "rejected"
           ? `Reason: ${data.comment}`
-          : data.comment || "An owner approved it.",
+          : // never which fields: a purchase price is an owner's alone
+            [data.comment || "An owner approved it.", changed.length ? "They changed some details first." : ""].filter(Boolean).join(" "),
       href: result.kind === "stock" ? "/admin/inventory" : result.kind === "provider-billing" ? "/admin/providers" : "/admin/products",
     }).catch((error) => log("warn", "approval.notify-failed", { error }));
   }

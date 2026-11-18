@@ -250,8 +250,8 @@ test("the Stock page has Remove, Add and a menu; on phones the counts sit side b
   const owner = await signedIn(browser, page, OWNER);
   await owner.goto("/admin/inventory");
   // the stock table, not Recent changes below it, which names packs too
-  const stockRow = (sku: string) => owner.locator(".stock-table").getByRole("row").filter({ hasText: sku });
-  const first = stockRow("SHEET-0");
+  const stockRow = (label: string) => owner.locator(".stock-table").getByRole("row").filter({ hasText: label });
+  const first = stockRow("100 pages");
   await expect(first.getByRole("link", { name: "Remove stock of sheet book 100 pages" })).toBeVisible();
   await expect(first.getByRole("link", { name: "Add stock of sheet book 100 pages" })).toBeVisible();
   const look = await first.getByRole("link", { name: "Add stock of sheet book 100 pages" }).evaluate((el) => getComputedStyle(el).textDecorationLine);
@@ -266,7 +266,7 @@ test("the Stock page has Remove, Add and a menu; on phones the counts sit side b
     expect(button.width).toBeLessThan(width);
   }
   // a closed menu takes up no room, even on the table's last row
-  expect(await stockRow("SHEET-1").locator(".pack-delete-form button").boundingBox()).toBeNull();
+  expect(await stockRow("200 pages").locator(".pack-delete-form button").boundingBox()).toBeNull();
   await shot(first, "stock-row");
   await shot(owner.locator(".stock-table"), "stock-page");
   // every button fits inside the table, at both widths
@@ -283,8 +283,8 @@ test("the Stock page has Remove, Add and a menu; on phones the counts sit side b
   await expect(first.locator('td[data-label="On the shelf"]')).toHaveText("29");
   // closing it leaves the page as it was: a filter like ?stock=low stays, the dialog doesn't come back
   await owner.goto("/admin/inventory?stock=low");
-  await expect(stockRow("SHEET-0")).toHaveCount(0);
-  await stockRow("SHEET-1").getByRole("link", { name: /^Add stock/ }).click();
+  await expect(stockRow("100 pages")).toHaveCount(0);
+  await stockRow("200 pages").getByRole("link", { name: /^Add stock/ }).click();
   await expect(owner.getByRole("dialog").getByRole("heading", { name: "Add stock" })).toBeVisible();
   await expect(owner).toHaveURL(/stock=low/);
   await owner.getByRole("dialog").getByRole("button", { name: "Close" }).click();
@@ -302,10 +302,10 @@ test("the Stock page has Remove, Add and a menu; on phones the counts sit side b
   await shot(first, "stock-menu");
   await first.getByRole("button", { name: "Delete this pack" }).click();
   await owner.getByRole("alertdialog").getByRole("button", { name: "Yes, delete this pack" }).click();
-  await expect(stockRow("SHEET-0")).toHaveCount(0);
-  await expect(stockRow("SHEET-1")).toBeVisible();
-  // its removal stays in the history, under the SKU people knew
-  await expect(owner.locator(".data-table").last()).toContainText("SHEET-0");
+  await expect(stockRow("100 pages")).toHaveCount(0);
+  await expect(stockRow("200 pages")).toBeVisible();
+  // its removal stays in the history, under its product and pack name
+  await expect(owner.locator(".data-table").last()).toContainText("sheet book · 100 pages");
   expect(await InventoryItem.countDocuments({ variantId: made.packs[0], onHand: 0 })).toBe(1);
 
   // the old address still opens the dialog
@@ -332,9 +332,9 @@ test("an owner deletes a whole product; it leaves the shop and the lists", async
   await expect(owner.getByRole("button", { name: /Add to basket/ })).toHaveCount(0);
   await expect(owner.locator("main")).not.toContainText("whole book");
   await owner.goto("/admin/inventory");
-  await expect(owner.locator(".stock-table")).not.toContainText("WHOLE-0");
-  // its write-off stays in the history, under the SKU people knew
-  await expect(owner.locator("main")).toContainText("100 pages · WHOLE-0");
+  await expect(owner.locator(".stock-table")).not.toContainText("whole book");
+  // its write-off stays in the history, under its product and pack name
+  await expect(owner.locator("main")).toContainText("whole book · 100 pages");
 });
 
 test("staff ask for a product to go too", async ({ browser, page }) => {

@@ -1,7 +1,10 @@
-export const roles = ["customer", "delivery", "admin", "super-admin"] as const;
+export const roles = ["customer", "delivery", "admin", "super-admin", "tech"] as const;
 export type Role = (typeof roles)[number];
-/** Everyone holds "customer"; at most one of these is added on top. */
-export const staffRoles = ["delivery", "admin", "super-admin"] as const;
+/**
+ * Everyone holds "customer"; at most one of these is added on top. "tech" is an owner who also looks
+ * after the site's own settings (the developer credits), so it always comes with "super-admin".
+ */
+export const staffRoles = ["delivery", "admin", "super-admin", "tech"] as const;
 export type StaffRole = (typeof staffRoles)[number];
 /** Every role an account can be given, in the order the owner's pickers list them. */
 export const accountRoles = ["customer", ...staffRoles] as const;
@@ -46,9 +49,13 @@ export const grants = {
     "staff:manage",
     "audit:read",
     "refund:write",
+    // a delivery the customer's code can't confirm (no phone, no internet): only the owner closes it
+    "delivery:confirm",
     "promotion:write",
     "review:moderate",
   ],
+  // also holds super-admin (rolesFor), so this only adds what the owner can't do
+  tech: ["tech:write"],
 } as const satisfies Record<Role, readonly string[]>;
 export type Permission = (typeof grants)[Role][number];
 export function hasPermission(userRoles: readonly Role[], permission: Permission) {
@@ -59,7 +66,7 @@ export function hasPermission(userRoles: readonly Role[], permission: Permission
 export function assertPermission(userRoles: readonly Role[], permission: Permission) {
   if (!hasPermission(userRoles, permission)) throw new Error("FORBIDDEN");
 }
-/** The staff role a user holds, if any. */
+/** The workspace a user works in, if any: Tech works as an owner, so this says "super-admin" for them. */
 export function staffRoleOf(userRoles: readonly Role[]): StaffRole | null {
   return (
     (["super-admin", "admin", "delivery"] as const).find((role) =>
@@ -67,6 +74,12 @@ export function staffRoleOf(userRoles: readonly Role[]): StaffRole | null {
     ) ?? null
   );
 }
+/** The role as the Staff page names and picks it: "tech" for Tech, otherwise the workspace role. */
+export function pickedRole(userRoles: readonly Role[]): StaffRole | null {
+  return userRoles.includes("tech") ? "tech" : staffRoleOf(userRoles);
+}
+/** Owner or Tech: both run the whole shop. */
+export const ownerLevel = (role: string | null) => role === "super-admin" || role === "tech";
 /** Where a staff member's workspace opens, or null for a plain customer. Owners start on the day's orders too. */
 export function staffHome(userRoles: readonly Role[]) {
   const role = staffRoleOf(userRoles);
@@ -78,5 +91,5 @@ export function rolesWith(permission: Permission): Role[] {
 }
 /** The full roles array for a person with this staff role (or none). */
 export function rolesFor(staffRole: StaffRole | null): Role[] {
-  return staffRole ? ["customer", staffRole] : ["customer"];
+  return staffRole === "tech" ? ["customer", "super-admin", "tech"] : staffRole ? ["customer", staffRole] : ["customer"];
 }

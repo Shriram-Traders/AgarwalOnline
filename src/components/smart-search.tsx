@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { ArrowRight, Clock, Mic, Search, TrendingUp, X } from "lucide-react";
@@ -11,6 +12,8 @@ type Suggestion = {
   name: { en: string; mr: string };
   brand: string;
   pricePaise: number;
+  /** The product's photo, beside its name in the list (the school marketplace's has none). */
+  image?: string;
   /** Said instead of the price, e.g. "₹42.50 + GST" in the school marketplace. */
   priceText?: string;
 };
@@ -139,7 +142,9 @@ export function SmartSearch({
         if (!(error instanceof DOMException && error.name === "AbortError"))
           setResults([]);
       }
-    }, 220);
+      // the server answers in about 40 ms; most of the wait was this pause, now just long enough to skip
+      // a request per letter while someone types quickly
+    }, 100);
     return () => {
       window.clearTimeout(timer);
       controller.abort();
@@ -305,6 +310,7 @@ export function SmartSearch({
                 setOpen(false);
               }}
             >
+              {result.image ? <Image src={result.image} alt="" width={40} height={40} className="search-thumb" loading="eager" /> : null}
               <span>
                 <strong>{result.name.en}</strong>
                 {result.brand && <small>{result.brand}</small>}

@@ -33,13 +33,14 @@ export function mongoClient(uri = getEnv().MONGODB_URI): MongoClient {
     // Mongoose's own driver class: `setClient` only accepts that one
     client = new mongoose.mongo.MongoClient(uri, {
       serverSelectionTimeoutMS: 5000,
-      // the driver's own default is to wait for ever: a query sent down a connection that died while
-      // this copy slept never came back, and the page stayed on its skeleton until a refresh. Now it
-      // fails after 15 s (a read is then retried once on a fresh connection), and a page waiting for
-      // a free connection gives up after 10 s and shows "Try again". Only a query in flight is timed.
-      connectTimeoutMS: 10_000,
-      socketTimeoutMS: 15_000,
-      waitQueueTimeoutMS: 10_000,
+      // The driver's own default is to wait for ever: on Vercel a query sent down a connection that
+      // died while the copy slept never came back, and the page stayed on its skeleton until a
+      // refresh. There it now fails after 15 s (a read is then retried once on a fresh connection),
+      // and a page waiting for a free connection gives up after 10 s and shows "Try again". Only a
+      // query in flight is timed. Not elsewhere: a migration or an index build from a script may
+      // rightly take minutes, and the test server shares a laptop database that other suites keep
+      // dropping and rebuilding, which held its pages past 10 s (2026-11-17).
+      ...(DEPLOY ? { connectTimeoutMS: 10_000, socketTimeoutMS: 15_000, waitQueueTimeoutMS: 10_000 } : {}),
       // 5, not 10: under a rush Vercel runs many copies, and at 10 each about 50 copies filled the free
       // cluster's 500 connections; then every page failed for ~5 minutes (load test 2026-10-24). A guest
       // page needs 0–3 queries and a signed-in one ~13 short ones, so 5 at a time is plenty per copy.

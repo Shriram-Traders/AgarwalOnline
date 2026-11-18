@@ -289,20 +289,3 @@
   border-radius: 14px;
   box-shadow: 0 14px 28px -12px rgba(15, 23, 42, 0.55);
 }
-
-/* the look switch for comparing while developing (never rendered in production) */
-.fx-switch {
-  position: fixed;
-  right: 12px;
-  bottom: calc(16px + env(safe-area-inset-bottom));
-  z-index: 90;
-  min-height: 36px;
-  padding: 6px 14px;
-  border: 1px solid #0f172a;
-  border-radius: 999px;
-  background: #0f172a;
-  color: #fff;
-  font: 600 0.8rem/1.2 var(--font-sans);
-  box-shadow: 0 10px 24px -12px rgba(15, 23, 42, 0.6);
-}
-@media (max-width: 760px) { .fx-switch { bottom: calc(var(--bottom-nav-h) + 96px + env(safe-area-inset-bottom)); } }

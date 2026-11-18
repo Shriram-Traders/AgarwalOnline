@@ -13,7 +13,6 @@ import {
 } from "lucide-react";
 import { conversationAction } from "@/lib/chat/actions";
 import { PageHeading } from "@/components/page-heading";
-import { operationAction } from "@/lib/operations/actions";
 import { PayButton } from "@/components/pay-button";
 import { Payment } from "@/lib/payments/models";
 import { Refund } from "@/lib/payments/models";
@@ -38,6 +37,7 @@ import { PushSettings } from "@/components/push-settings";
 import { pushPublicKey } from "@/lib/push/service";
 import { OrderBills } from "@/components/order-bills";
 import { taxProfile } from "@/lib/tax/profile";
+import { deliveryCode } from "@/lib/operations/delivery-code";
 export const metadata = { title: "Order details", robots: { index: false } };
 
 const STAGE_ICONS: Record<string, LucideIcon> = {
@@ -208,16 +208,19 @@ export default async function OrderDetail({
               feedback={feedback}
             />
           )}
-          {o.deliveryStatus === "out-for-delivery" && (
+          {/* the order's one delivery code, from the moment it's placed: the same digits MiniMoth sends */}
+          {onItsWay && (
             <section className="panel order-card handover-card" aria-labelledby="handover-title">
-              <h2 id="handover-title">Your order is on the way</h2>
-              <ActionForm action={operationAction} submit="Request delivery confirmation code">
-                <input type="hidden" name="orderId" value={id} />
-                <input type="hidden" name="operation" value="delivery-otp" />
-                <p className="muted">
-                  Share this code with the delivery partner only after receiving your complete order.
-                </p>
-              </ActionForm>
+              {/* the tracker above already says where the order is */}
+              <h2 id="handover-title">Your delivery code</h2>
+              <p className="delivery-code" aria-label={`Delivery code ${deliveryCode(id).split("").join(" ")}`}>
+                {deliveryCode(id)}
+              </p>
+              <p className="muted">
+                Give this code to the delivery partner only once you have your complete order.
+                {o.address?.phone &&
+                  ` We also send it to the phone ending ${String(o.address.phone).slice(-4)} on WhatsApp (or SMS) when your order leaves the shop.`}
+              </p>
             </section>
           )}
 

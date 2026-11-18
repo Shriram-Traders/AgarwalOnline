@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useSyncExternalStore } from "react";
+import { useEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
 
 /* The playful look's moving parts; styles in src/app/playful.css. */
@@ -88,15 +88,8 @@ function burst(x: number, y: number, hearts: boolean, count = hearts ? 5 : 10, r
 const moving = () =>
   document.documentElement.dataset.look === "playful" && !matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-function watchLook(onChange: () => void) {
-  const observer = new MutationObserver(onChange);
-  observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-look"] });
-  return () => observer.disconnect();
-}
-
 /** A small sparkle and a photo flying into the basket on ADD, hearts on save, a light and a tilt that follow the mouse. */
 export function PlayfulFx() {
-  const look = useSyncExternalStore(watchLook, () => document.documentElement.dataset.look ?? null, () => null);
   const pathname = usePathname();
   const previous = useRef(pathname);
 
@@ -121,9 +114,6 @@ export function PlayfulFx() {
 
   useEffect(() => {
     const root = document.documentElement;
-    try {
-      if (localStorage.getItem("look") === "classic") root.dataset.look = "classic";
-    } catch {}
     // capture: runs before React swaps the ADD button for the stepper
     const onClick = (event: MouseEvent) => {
       if (!moving()) return;
@@ -156,21 +146,5 @@ export function PlayfulFx() {
     };
   }, []);
 
-  // ponytail: a switch to compare the two looks while deciding; never in production or tests
-  if (process.env.NODE_ENV === "production" || look === null || navigator.webdriver) return null;
-  return (
-    <button
-      type="button"
-      className="fx-switch"
-      onClick={() => {
-        const next = look === "playful" ? "classic" : "playful";
-        document.documentElement.dataset.look = next;
-        try {
-          localStorage.setItem("look", next);
-        } catch {}
-      }}
-    >
-      {look === "playful" ? "Try the classic look" : "Try the new look"}
-    </button>
-  );
+  return null;
 }

@@ -7,6 +7,7 @@ import {
   Product,
   ProductVariant,
   InventoryItem,
+  AuditLog,
 } from "../src/lib/db/models";
 import { ApprovalRequest, ApprovalHistory } from "../src/lib/governance/models";
 import { Notification } from "../src/lib/engagement/models";
@@ -240,6 +241,60 @@ describe.skipIf(!uri)("Catalog governance", () => {
     await expect(requestPrice(admin, { variantId: String(v._id), pricePaise: 8000, mrpPaise: 12000 })).rejects.toThrow(
       "already waiting",
     );
+  });
+  it("makes each new pack a SKU from the web address, since nobody types one", async () => {
+    await submitProduct(reviewer, { ...input(), sku: undefined });
+    const product = await Product.findOne({});
+    const pack = { productId: String(product._id), unit: "kg", packQuantity: 5, pricePaise: 45000, mrpPaise: 50000, maxQuantity: 5, stock: 20 };
+    await submitVariant(reviewer, { ...pack, label: "5 kg" });
+    // a member of staff's pack gets its SKU when an owner approves it
+    await submitVariant(admin, { ...pack, label: "10 kg" });
+    const waiting = await ApprovalRequest.findOne({ kind: "variant", state: "pending" });
+    await reviewApproval(reviewer, { requestId: String(waiting._id), decision: "approved", comment: "Checked" });
+    const packs = await ProductVariant.find({}).sort({ sku: 1 });
+    expect(packs.map((v) => [v.label, v.sku])).toEqual([
+      ["1 kg", "test-rice-1"],
+      ["5 kg", "test-rice-2"],
+      ["10 kg", "test-rice-3"],
+    ]);
+  });
+  it("lets an owner change a staff member's product before approving, purchase price too, and tells staff no prices", async () => {
+    await submitProduct(admin, input());
+    const request = await ApprovalRequest.findOne({ kind: "product" });
+    const review = (fields: Record<string, unknown>, decision = "approved") =>
+      reviewApproval(reviewer, { requestId: String(request._id), decision, comment: decision === "rejected" ? "Wrong photos" : "", edit: "1", ...input(), showToCustomers: true, showToSchools: false, ...fields });
+    // checked like the staff member's own form: a price above the MRP is refused and nothing changes
+    await expect(review({ pricePaise: 13000 })).rejects.toThrow("Price must not exceed MRP");
+    expect((await ApprovalRequest.findById(request._id)).state).toBe("pending");
+    await review({ nameEn: "Better rice", pricePaise: 9000, costPaise: 6000, showToSchools: true, hsnCode: "1006" });
+    const product = await Product.findOne({});
+    expect(product.name.en).toBe("Better rice");
+    expect(product.showToSchools).toBe(true);
+    expect(product.hsnCode).toBe("1006");
+    const pack = await ProductVariant.findOne({}).select("+costPaise");
+    expect([pack.pricePaise, pack.costPaise]).toEqual([9000, 6000]);
+    const history = await ApprovalHistory.findOne({ requestId: request._id, next: "approved" });
+    expect(history.comment).toBe("Changed before approving: Name, Selling price, Schools see it, HSN code, Purchase price");
+    expect(await AuditLog.exists({ action: "approval.edit", target: String(request._id) })).toBeTruthy();
+    const note = await Notification.findOne({ userId: admin, title: /is live/ });
+    expect(note.body).toBe("An owner approved it. They changed some details first.");
+  });
+  it("keeps a rejected request as it was asked for, and lets an owner change a price or stock request", async () => {
+    const v = await publishProduct();
+    const other = { ...input(), slug: "other-rice", sku: "OTHER-RICE" };
+    await submitProduct(admin, other);
+    const asked = await ApprovalRequest.findOne({ kind: "product", state: "pending" });
+    await reviewApproval(reviewer, { requestId: String(asked._id), decision: "rejected", comment: "Wrong photos", edit: "1", ...other, pricePaise: 5000 });
+    expect((await ApprovalRequest.findById(asked._id)).after.pricePaise).toBe(10000);
+    await requestPrice(admin, { variantId: String(v._id), pricePaise: 9000, mrpPaise: 12000 });
+    const price = await ApprovalRequest.findOne({ kind: "price" });
+    await reviewApproval(reviewer, { requestId: String(price._id), decision: "approved", comment: "", edit: "1", pricePaise: 9500, mrpPaise: 12000 });
+    expect((await ProductVariant.findById(v._id)).pricePaise).toBe(9500);
+    // 100 is a large delivery, so it waits; the owner counts 50
+    await adjustStock(admin, { variantId: String(v._id), delta: 100, reason: "New shipment" });
+    const stock = await ApprovalRequest.findOne({ kind: "stock" });
+    await reviewApproval(reviewer, { requestId: String(stock._id), decision: "approved", comment: "", edit: "1", delta: "50" });
+    expect((await InventoryItem.findOne({ variantId: v._id })).onHand).toBe(60);
   });
   it("lets the person who asked withdraw a waiting change, and tells them decisions", async () => {
     const v = await publishProduct();

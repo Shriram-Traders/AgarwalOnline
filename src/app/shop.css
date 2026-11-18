@@ -409,3 +409,12 @@ body:has(.cart-bar) .shelf-rail { max-height: calc(100dvh - var(--rail-top) - va
 :root[data-fill] :is(.primary-button, .add-button, .qty-stepper.compact, .kit-slot .slot-cta, .in-basket) { border-color: var(--action); background: var(--action); color: var(--on-action); }
 :root[data-fill] :is(.primary-button, .add-button):hover:not(:disabled), :root[data-fill] .qty-stepper.compact button:hover:not(:disabled) { background: color-mix(in oklab, var(--action) 86%, #000); color: var(--on-action); }
 :root[data-fill] :is(.primary-button, .add-button):disabled { border-color: var(--line-strong); background: var(--paper); color: var(--muted); }
+
+/* The header search's suggestions show each product's photo beside its name */
+.search-popover a > span { flex: 1 1 auto; }
+.search-thumb { flex: none; width: 40px; height: 40px; border-radius: var(--r-sm); background: var(--paper); object-fit: contain; }
+
+/* While the next lot of products is on its way (Filter & sort applies as you type), the current ones dim a little */
+.shelves .product-grid { transition: opacity var(--fast); }
+.shelves:has(.catalog-filters[data-pending]) .product-grid { opacity: 0.55; }
+@media (prefers-reduced-motion: reduce) { .shelves .product-grid { transition: none; } }

@@ -17,6 +17,14 @@ export function clock(minutes: number) {
 }
 /** "4:00 PM – 7:00 PM", the same form the seeded and hand-typed slots use. */
 export const windowLabel = (start: number, end: number) => `${clock(start)} – ${clock(end)}`;
+/** Minutes after midnight that a window such as "4:00 PM – 7:00 PM" opens; one that can't be read sorts last. */
+export function windowStart(label = "") {
+  const time = /^\s*(\d{1,2})(?::(\d{2}))?\s*(AM|PM)?/i.exec(label);
+  if (!time) return Infinity;
+  const hour = Number(time[1]);
+  const meridiem = time[3]?.toUpperCase();
+  return (meridiem ? (hour % 12) + (meridiem === "PM" ? 12 : 0) : hour) * 60 + Number(time[2] ?? 0);
+}
 
 export const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 

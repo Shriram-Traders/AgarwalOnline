@@ -8,15 +8,7 @@ import {
   Category,
   parentsOf,
 } from "../db/models";
-import {
-  normalizeSearch,
-  defaultSynonyms,
-  fuzzyPattern,
-  patternRelevance,
-  relevance,
-  searchWords,
-  wordPattern,
-} from "./search";
+import { normalizeSearch } from "./search";
 import { log } from "../logger";
 import { z } from "zod";
 import type { PipelineStage } from "mongoose";
@@ -90,48 +82,9 @@ export async function catalog(
 export async function catalogForSchools(input: { q?: string; category?: string } = {}) {
   return catalogFor("schools", { q: input.q, category: input.category });
 }
-/** The shop's sections, then its aisles, in display order: menus, the aisle tiles and browsing follow it; unlisted ones come after, by name. */
-const AISLE_ORDER = [
-  // the categories that subcategories are grouped under (src/lib/catalog/sections.ts)
-  "stationery",
-  "office",
-  "toys-games",
-  "gifts-party",
-  "food",
-  "home-pooja",
-  "pens",
-  "pencils",
-  "colours-markers",
-  "long-books",
-  "notebooks",
-  "diaries",
-  "project-paper",
-  "school-essentials",
-  "art-craft",
-  "office-supplies",
-  // toys and games (Ratna's catalogue, 2026-10-16)
-  "games-puzzles",
-  "learning-toys",
-  "building-sets",
-  "outdoor-play",
-  "pretend-play",
-  "baby-toddler",
-  // everyday things beside the stationery (the owner's photos, 2026-10-19)
-  "chocolates-sweets",
-  // packaged foods (the owner's pack photos, 2026-11-13)
-  "namkeen-papad",
-  "instant-mixes",
-  "pooja-needs",
-  "home-essentials",
-  "party-gifting",
-];
-const aisleRank = (slug: string) => (AISLE_ORDER.indexOf(slug) + 1 || 99);
-/** Every shelf a product shows on: its own first, then the extra ones. */
-const shelvesOf = (product: Doc): string[] => [product.categorySlug, ...(product.alsoOn ?? [])];
+import { aisleRank, browseCatalog, type BrowseFields } from "./browse";
 /** Far more than the shop lists today. */
 const SHELF_LIMIT = 2000;
-/** A search returns its best matches, up to this many. */
-const SEARCH_LIMIT = 500;
 
 type Doc = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 type Shelf = {
@@ -219,69 +172,83 @@ const searchSynonyms = () =>
   );
 
 /**
- * The products matching a search, best match first, or null when there's no search. `listed` is
- * what the shelf shows for the page's aisle, in the page's order: the built-in search looks
- * through it in memory instead of asking the database again.
+ * Ids of the products Atlas Search finds, best first, when it is switched on (ATLAS_SEARCH_ENABLED);
+ * null when it is off, fails or finds nothing, and the built-in search (browse.ts) answers instead.
  */
-async function searchMatches(query: string, match: Record<string, unknown>, listed: Doc[]) {
-  if (!query) return null;
-  let products: Doc[] | null = null;
-  if (process.env.ATLAS_SEARCH_ENABLED === "true") {
-    const pipeline: PipelineStage[] = [
-      {
-        $search: {
-          index: "products",
-          text: {
-            query,
-            path: ["name.en", "name.mr", "brand", "aliases"],
-            synonyms: "grocery-synonyms",
-            matchCriteria: "any",
-          },
+async function atlasMatches(query: string, match: Record<string, unknown>): Promise<string[] | null> {
+  if (!query || process.env.ATLAS_SEARCH_ENABLED !== "true") return null;
+  const pipeline: PipelineStage[] = [
+    {
+      $search: {
+        index: "products",
+        text: {
+          query,
+          path: ["name.en", "name.mr", "brand", "aliases"],
+          synonyms: "grocery-synonyms",
+          matchCriteria: "any",
         },
       },
-      { $match: match },
-      { $limit: 100 },
-    ];
-    // a missing or broken index must not take search down: fall through to the built-in search
-    products = await Product.aggregate(pipeline).catch((error: unknown) => {
-      log("warn", "catalog.atlas_search_failed", {
-        message: error instanceof Error ? error.message : String(error),
-      });
-      return null;
+    },
+    { $match: match },
+    { $limit: 100 },
+  ];
+  // a missing or broken index must not take search down: fall through to the built-in search
+  const products = await Product.aggregate<{ _id: unknown }>(pipeline).catch((error: unknown) => {
+    log("warn", "catalog.atlas_search_failed", {
+      message: error instanceof Error ? error.message : String(error),
     });
-  }
-  if (products?.length) return products;
-  // built-in search (also the fallback when Atlas finds nothing): every word must match the name,
-  // brand, an alias or the aisle's name
-  const [groups, aisles] = await Promise.all([searchSynonyms(), catalogCategories()]);
-  const words = searchWords(query, [...defaultSynonyms, ...groups]);
-  const clause = (pattern: string) => {
-    const regex = new RegExp(pattern, "i");
-    const slugs = new Set(aisles.filter((aisle) => regex.test(aisle.en) || regex.test(aisle.mr)).map((aisle) => aisle.slug));
-    return (product: Doc) =>
-      shelvesOf(product).some((slug) => slugs.has(slug)) ||
-      [product.name?.en, product.name?.mr, product.brand, ...(product.aliases ?? [])].some(
-        (text) => typeof text === "string" && regex.test(text),
-      );
-  };
-  const find = (patterns: string[]) => {
-    const tests = patterns.map(clause);
-    return listed.filter((product) => tests.every((test) => test(product))).slice(0, SEARCH_LIMIT);
-  };
-  let found = find(words.map(wordPattern));
-  // nothing at all: allow one wrong, missing or extra letter per word ("notbook", "pencel")
-  const fuzzy = found.length
-    ? null
-    : words.map((alternatives) => [...new Set(alternatives.slice(0, 2))].map(fuzzyPattern).join("|"));
-  if (fuzzy) found = find(fuzzy);
-  type Scored = Parameters<typeof relevance>[0];
-  const scored = new Map(
-    found.map((product) => [
-      String(product._id),
-      fuzzy ? patternRelevance(product as Scored, fuzzy) : relevance(product as Scored, query, words),
-    ]),
-  );
-  return found.sort((a, b) => scored.get(String(b._id))! - scored.get(String(a._id))!);
+    return null;
+  });
+  return products?.length ? products.map((product) => String(product._id)) : null;
+}
+
+/** A catalogue product with what browsing reads besides: its aliases and when it was added. */
+export type BrowseItem = CatalogItem & Pick<BrowseFields, "aliases" | "createdAt">;
+
+/** Every product on the shelf as the shop lists them, in the shelf's own order. */
+function shelfItems(shelf: Shelf, forSchools: boolean): BrowseItem[] {
+  return shelf.products.map((p) => {
+    const reviews = shelf.reviews.get(String(p._id));
+    return {
+      id: String(p._id),
+      slug: p.slug,
+      name: { en: p.name.en, mr: p.name.mr },
+      description: { en: p.description.en, mr: p.description.mr },
+      brand: p.brand ?? "",
+      image: p.image,
+      images: p.images ?? [],
+      highlights: p.highlights ?? [],
+      dietaryTags: p.dietaryTags ?? [],
+      specifications: p.specifications ?? [],
+      featured: Boolean(p.featured),
+      bestseller: Boolean(p.bestseller),
+      categorySlug: p.categorySlug,
+      alsoOn: p.alsoOn ?? [],
+      aliases: p.aliases ?? [],
+      createdAt: new Date(p.createdAt ?? 0).getTime(),
+      ...(p.providerId && shelf.providers.has(String(p.providerId)) ? { provider: shelf.providers.get(String(p.providerId)) } : {}),
+      ...(forSchools && p.gstRatePercent != null ? { gstRatePercent: p.gstRatePercent } : {}),
+      rating: reviews?.rating ?? 0,
+      reviewCount: reviews?.reviewCount ?? 0,
+      variants: (shelf.variants.get(String(p._id)) ?? []).map((v) => ({
+        id: String(v._id),
+        sku: v.sku,
+        label: v.label,
+        pricePaise: v.pricePaise,
+        mrpPaise: v.mrpPaise,
+        maxQuantity: v.maxQuantity ?? 10,
+        ...(forSchools && v.schoolPricePaise != null ? { schoolPricePaise: v.schoolPricePaise } : {}),
+        available: shelf.available.get(String(v._id)) ?? 0,
+      })),
+    };
+  });
+}
+
+/** The whole shop for a shopper's phone to browse: every product, the shelves' names and the owner's synonyms. */
+export async function shopCatalogue() {
+  const shelf = await shelfFor("customers");
+  const [synonyms, aisles] = await Promise.all([searchSynonyms(), catalogCategories()]);
+  return { items: shelfItems(shelf, false).filter((item) => item.variants.length > 0), aisles: aisles.map(({ slug, en, mr }) => ({ slug, en, mr })), synonyms };
 }
 
 async function catalogFor(
@@ -297,85 +264,13 @@ async function catalogFor(
   };
   const query = normalizeSearch(filters.q);
   const shelf = await shelfFor(audience);
-  let listed = shelf.products.filter(
-    (p) => (!filters.slug || p.slug === filters.slug) && (!filters.category || shelvesOf(p).includes(filters.category)),
-  );
-  if (filters.sort === "new")
-    listed = listed.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  const matches = await searchMatches(query, match, listed);
-  const products = matches
-    ? matches.map((found) => shelf.byId.get(String(found._id))).filter((p): p is Doc => Boolean(p))
-    : listed;
-  let result: CatalogItem[] = products
-    .map((p) => {
-      const reviews = shelf.reviews.get(String(p._id));
-      return {
-        id: String(p._id),
-        slug: p.slug,
-        name: { en: p.name.en, mr: p.name.mr },
-        description: { en: p.description.en, mr: p.description.mr },
-        brand: p.brand ?? "",
-        image: p.image,
-        images: p.images ?? [],
-        highlights: p.highlights ?? [],
-        dietaryTags: p.dietaryTags ?? [],
-        specifications: p.specifications ?? [],
-        featured: Boolean(p.featured),
-        bestseller: Boolean(p.bestseller),
-        categorySlug: p.categorySlug,
-        alsoOn: p.alsoOn ?? [],
-        ...(p.providerId && shelf.providers.has(String(p.providerId))
-          ? { provider: shelf.providers.get(String(p.providerId)) }
-          : {}),
-        ...(forSchools && p.gstRatePercent != null ? { gstRatePercent: p.gstRatePercent } : {}),
-        rating: reviews?.rating ?? 0,
-        reviewCount: reviews?.reviewCount ?? 0,
-        variants: (shelf.variants.get(String(p._id)) ?? []).map((v) => ({
-          id: String(v._id),
-          sku: v.sku,
-          label: v.label,
-          pricePaise: v.pricePaise,
-          mrpPaise: v.mrpPaise,
-          maxQuantity: v.maxQuantity ?? 10,
-          ...(forSchools && v.schoolPricePaise != null ? { schoolPricePaise: v.schoolPricePaise } : {}),
-          available: shelf.available.get(String(v._id)) ?? 0,
-        })),
-      };
-    })
-    .filter((p) => p.variants.length > 0);
-  if (filters.inStock === "true")
-    result = result.filter((p) => p.variants.some((v) => v.available > 0));
-  if (filters.rating)
-    result = result.filter((product) => product.rating >= filters.rating!);
-  if (filters.sort === "price-asc")
-    result.sort((a, b) => a.variants[0].pricePaise - b.variants[0].pricePaise);
-  if (filters.sort === "price-desc")
-    result.sort((a, b) => b.variants[0].pricePaise - a.variants[0].pricePaise);
-  if (filters.sort === "discount")
-    result.sort(
-      (a, b) =>
-        1 -
-        b.variants[0].pricePaise / b.variants[0].mrpPaise -
-        (1 - a.variants[0].pricePaise / a.variants[0].mrpPaise),
-    );
-  // a search keeps its best-match order; browsing goes aisle by aisle, bestsellers first, then by
-  // name with numbers read as numbers: one brand's books sit together, 72 pages before 172. Import
-  // order used to show through (172, 72, 280, 380). On one shelf the aisle is left out of it, or a
-  // product that is only also shown there would jump ahead of the shelf's own.
-  if (filters.sort === "featured" && !query)
-    result.sort(
-      (a, b) =>
-        (filters.category
-          ? 0
-          : aisleRank(a.categorySlug) - aisleRank(b.categorySlug) || a.categorySlug.localeCompare(b.categorySlug)) ||
-        Number(b.bestseller) - Number(a.bestseller) ||
-        a.name.en.localeCompare(b.name.en, "en", { numeric: true }),
-    );
-  // what can be bought now comes first, in the order the list already has (the sort keeps ties as
-  // they were); sold-out products stay listed after it. Shoppers only: a school asks for a quotation.
-  const buyable = (product: CatalogItem) => product.variants.some((variant) => variant.available > 0);
-  if (!forSchools) result.sort((a, b) => Number(buyable(b)) - Number(buyable(a)));
-  return result;
+  const [matched, synonyms, aisles] = await Promise.all([
+    atlasMatches(query, match),
+    query ? searchSynonyms() : Promise.resolve([] as string[][]),
+    query ? catalogCategories() : Promise.resolve([]),
+  ]);
+  // the same browsing a shopper's phone does on the whole catalogue (browse.ts)
+  return browseCatalog(shelfItems(shelf, forSchools), filters, { aisles, synonyms, forSchools, matched });
 }
 /** Memoised per request: the page and its metadata both ask. */
 export const productBySlug = cache(async (slug: string) => {

@@ -13,7 +13,6 @@ import { DEFAULT_ALERT_BELOW, isLow } from "@/lib/inventory/low-stock";
 type Pack = {
   _id: unknown;
   label: string;
-  sku: string;
   pricePaise: number;
   mrpPaise: number;
   costPaise?: number;
@@ -83,10 +82,7 @@ export function PackCard({
       <div className="pack-row">
         <span>
           <strong>{pack.label}</strong>
-          <small>
-            SKU {pack.sku}
-            {hidden ? " · hidden" : ""}
-          </small>
+          {hidden && <small>Hidden</small>}
         </span>
         <span className="pack-price">
           {formatPrice(pack.pricePaise)}

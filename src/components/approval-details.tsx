@@ -1,43 +1,6 @@
 import Image from "next/image";
+import { FIELD_LABELS as labels } from "@/lib/governance/labels";
 
-const labels: Record<string, string> = {
-  slug: "Web address",
-  nameEn: "Name",
-  nameMr: "Marathi name",
-  descriptionEn: "Description",
-  descriptionMr: "Marathi description",
-  brand: "Brand",
-  categoryId: "Category",
-  providerId: "Provided by",
-  aliases: "Search terms",
-  sku: "SKU",
-  label: "Pack",
-  unit: "Unit",
-  packQuantity: "Pack quantity",
-  pricePaise: "Selling price",
-  mrpPaise: "MRP",
-  stock: "Opening stock",
-  onHand: "Stock on hand",
-  delta: "Stock adjustment",
-  deleted: "Deleted",
-  packs: "Packs",
-  maxQuantity: "Most one shopper can buy",
-  showToCustomers: "Shoppers see it",
-  showToSchools: "Schools see it",
-  gstRatePercent: "GST rate (%)",
-  hsnCode: "HSN code",
-  schoolPricePaise: "School price (before GST)",
-  images: "Photos (the first is the cover)",
-  // a provider's tax and billing details
-  ownBills: "Bills its items in its own name",
-  legalName: "Legal name on its bills",
-  registration: "GST registration",
-  gstin: "GSTIN",
-  address: "Address on its bills",
-  prefix: "Bill number prefix",
-  style: "Bill style",
-  agreement: "Agreed in writing to bills in its name",
-};
 /** Values shown in words rather than as stored. */
 const VALUE_WORDS: Record<string, Record<string, string>> = {
   registration: { regular: "Regular", composition: "Composition", unregistered: "Not registered" },
@@ -50,7 +13,8 @@ const VALUE_WORDS: Record<string, Record<string, string>> = {
   },
 };
 /** Keys the reviewer doesn't need to read (the product is already named in the title). */
-const HIDDEN = new Set(["productId"]);
+// a pack's SKU is made for it and only the stock sheet uses it
+const HIDDEN = new Set(["productId", "sku"]);
 export function ApprovalDetails({
   values,
   categoryName,

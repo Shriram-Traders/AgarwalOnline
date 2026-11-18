@@ -5,7 +5,8 @@
  * page give way to the small offline notice saved at install.
  * It also shows push notifications (src/lib/push), and opens the right page when one is tapped.
  */
-const CACHE = "ags-offline-v1";
+// a new name whenever offline.html changes: phones keep the copy saved at install until this does
+const CACHE = "ags-offline-v2";
 const OFFLINE = "/offline.html";
 // sign-in and its callbacks never pass through here at all
 const UNTOUCHED = /^\/(api|auth|login|signup|staff\/login)(\/|$)/;

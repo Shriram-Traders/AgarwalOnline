@@ -1,19 +1,21 @@
 "use client";
 
 import { SlidersHorizontal, X } from "lucide-react";
-import { useState } from "react";
+import { Suspense, useState } from "react";
+import { LiveFilter } from "./filter-live";
 
 export function CatalogFilterPanel({
   locale,
   params,
+  navigate,
 }: {
   locale: "en" | "mr";
   params: Record<string, string | undefined>;
+  /** Changes the list in the browser when it can (catalog-browser.tsx); false leaves it to the server. */
+  navigate?: (href: string) => boolean;
 }) {
   const [open, setOpen] = useState(false);
   const activeCount = [params.inStock, params.sort && params.sort !== "featured"].filter(Boolean).length;
-  // every control applies itself; there is no button to find
-  const submit = (event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => event.currentTarget.form?.requestSubmit();
 
   return (
     <>
@@ -45,13 +47,18 @@ export function CatalogFilterPanel({
             placeholder={locale === "mr" ? "वही, पेन, खेळ…" : "Notebook, pen, puzzle…"}
           />
         </label>
+        {/* every control applies itself as you type or pick, without reloading the page */}
+        <Suspense fallback={null}>
+          <LiveFilter navigate={navigate} />
+        </Suspense>
         {params.category && <input type="hidden" name="category" value={params.category} />}
         {/* the section the shelf was opened from: its rail stays */}
         {params.in && <input type="hidden" name="in" value={params.in} />}
         <label>
           {locale === "mr" ? "क्रमवारी" : "Sort by"}
-          <select name="sort" defaultValue={params.sort ?? "featured"} onChange={submit}>
-            <option value="featured">{locale === "mr" ? "लोकप्रिय" : "Featured"}</option>
+          <select name="sort" defaultValue={params.sort && params.sort !== "featured" ? params.sort : ""}>
+            {/* empty: the shop's own order, so it never lands in the address as a filter */}
+            <option value="">{locale === "mr" ? "लोकप्रिय" : "Featured"}</option>
             <option value="price-asc">{locale === "mr" ? "किंमत: कमी ते जास्त" : "Price: low to high"}</option>
             <option value="price-desc">{locale === "mr" ? "किंमत: जास्त ते कमी" : "Price: high to low"}</option>
             <option value="discount">{locale === "mr" ? "सर्वात मोठी बचत" : "Biggest savings"}</option>
@@ -59,7 +66,7 @@ export function CatalogFilterPanel({
           </select>
         </label>
         <label className="checkbox-label">
-          <input type="checkbox" name="inStock" value="true" defaultChecked={params.inStock === "true"} onChange={submit} />
+          <input type="checkbox" name="inStock" value="true" defaultChecked={params.inStock === "true"} />
           {locale === "mr" ? "फक्त उपलब्ध" : "In stock only"}
         </label>
       </form>

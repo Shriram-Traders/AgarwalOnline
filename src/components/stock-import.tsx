@@ -18,7 +18,8 @@ const OUTCOME: Record<ImportRow["outcome"], string> = {
  * Change for the packs that moved, upload it, check what each row will do, then apply. Every row
  * goes through the same change as the Add and Remove buttons, so what needs an owner still waits for one.
  */
-export function StockImport() {
+/** `owner`: their sheet has a purchase_price column too; staff aren't told it exists. */
+export function StockImport({ owner }: { owner: boolean }) {
   const router = useRouter();
   const [file, setFile] = useState<{ name: string; text: string } | null>(null);
   const [reason, setReason] = useState("");
@@ -69,8 +70,14 @@ export function StockImport() {
           <span>
             For each pack that changed, fill in <strong>count</strong> (how many are on the shelf now) <em>or</em>{" "}
             <strong>change</strong> (12 to add, -3 to take off). Leave the rest empty. You can also change{" "}
-            <strong>alert_below</strong> (warn when fewer than this can be sold) and, for owners,{" "}
-            <strong>purchase_price</strong> (₹ paid for one pack).
+            <strong>alert_below</strong> (warn when fewer than this can be sold)
+            {owner && (
+              <>
+                {" "}
+                and <strong>purchase_price</strong> (₹ paid for one pack)
+              </>
+            )}
+            .
           </span>
         </li>
         <li className="stock-import-upload">

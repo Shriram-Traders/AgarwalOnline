@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 import { z } from "zod";
 import { connectDB } from "../db/connect";
-import { User, OTPChallenge, InventoryItem, AuditLog } from "../db/models";
+import { User, InventoryItem, AuditLog } from "../db/models";
 import {
   Order,
   OrderTimelineEvent,
@@ -29,7 +29,9 @@ import {
   riderChangeable,
   type Dimension,
 } from "./transitions";
-import { digest, otpCode, otpDigest, equalHash } from "../auth/crypto";
+import { equalHash } from "../auth/crypto";
+import { deliveryCode } from "./delivery-code";
+import { log } from "../logger";
 import { getEnv } from "../env";
 import { rateLimit } from "../auth/rate-limit";
 import { sendCode } from "../auth/sms";
@@ -690,6 +692,20 @@ export async function assignDelivery(actorId: string, input: unknown) {
   });
 }
 export async function partnerTransition(actorId: string, input: unknown) {
+  await moveDelivery(actorId, input);
+  const data = z.object({ orderId: objectId, next: z.string() }).parse(input);
+  if (data.next !== "out-for-delivery") return;
+  // on its way: the customer's code goes to the order's phone. It is on their order page too, so a
+  // message that doesn't go through never holds up the round: the rider can send it again.
+  const order = await Order.findById(data.orderId);
+  if (!order?.address?.phone) return;
+  try {
+    await sendDeliveryCode(order);
+  } catch (error) {
+    log("warn", "delivery.code-not-sent", { orderId: data.orderId, error });
+  }
+}
+async function moveDelivery(actorId: string, input: unknown) {
   await actor(actorId, "delivery:assigned");
   const data = z
     .object({
@@ -1122,45 +1138,33 @@ export async function resolveCODDiscrepancy(actorId: string, input: unknown) {
     );
   });
 }
-export async function requestDeliveryOTP(
-  customerId: string,
-  orderInput: unknown,
-) {
-  await actor(customerId, "order:own");
-  const id = objectId.parse(orderInput);
+/**
+ * The rider sends the code again from the doorstep: the same code the customer sees on their order
+ * page, to the order's own phone number, for when they can't find it.
+ */
+export async function sendDeliveryCodeForRider(actorId: string, orderInput: unknown) {
+  await actor(actorId, "delivery:assigned");
   const order = await Order.findOne({
-    _id: id,
-    customerId,
+    _id: objectId.parse(orderInput),
+    assignedTo: actorId,
     orderStatus: "confirmed",
     deliveryStatus: "out-for-delivery",
   });
-  if (!order)
-    throw Error(
-      "A delivery code is available when your order is out for delivery.",
-    );
-  await rateLimit(`delivery-code:${id}`, 3);
-  const env = getEnv();
-  const code = env.MOCK_OTP === "true" ? env.MOCK_OTP_CODE : otpCode();
-  const subjectHash = digest(`delivery:${id}`);
-  await OTPChallenge.updateMany(
-    { subjectHash, purpose: "delivery", consumedAt: null },
-    { $set: { consumedAt: new Date() } },
+  if (!order) throw Error("This delivery is not assigned to you or has already closed.");
+  return (
+    (await sendDeliveryCode(order)) ??
+    `Code sent again to the phone ending ${String(order.address.phone).slice(-4)}, on WhatsApp (or SMS): the same code the customer sees on their order page.`
   );
-  const challenge = await OTPChallenge.create({
-    subjectHash,
-    purpose: "delivery",
-    codeHash: otpDigest(subjectHash, code, env.AUTH_SECRET),
-    expiresAt: new Date(Date.now() + 5 * 60000),
-  });
-  try {
-    await sendCode(order.address.phone, code);
-  } catch (error) {
-    await OTPChallenge.deleteOne({ _id: challenge._id });
-    throw error;
-  }
-  return env.MOCK_OTP === "true"
-    ? `Development delivery code: ${code}`
-    : "Delivery code sent on WhatsApp (or SMS) from MiniMoth to your address contact number.";
+}
+/** The order's code to its phone, by MiniMoth; in development, the code itself to show (nothing is sent). */
+async function sendDeliveryCode(order: OrderDoc) {
+  if (!order.address?.phone)
+    throw Error("This order has no phone number to send a code to. The customer has it on their order page.");
+  const id = String(order._id);
+  await rateLimit(`delivery-code:${id}`, 3);
+  const code = deliveryCode(id);
+  await sendCode(order.address.phone, code);
+  return getEnv().MOCK_OTP === "true" ? `Development delivery code: ${code}` : null;
 }
 export async function completeDelivery(actorId: string, input: unknown) {
   await actor(actorId, "delivery:assigned");
@@ -1181,26 +1185,10 @@ export async function completeDelivery(actorId: string, input: unknown) {
     throw Error("This delivery is not assigned to you or has already closed.");
   if (data.cashPaise !== (order.paymentMethod === "cod" ? order.totalPaise : 0))
     throw Error("The collected amount must match the amount due.");
-  const subjectHash = digest(`delivery:${data.orderId}`);
-  const challenge = await OTPChallenge.findOneAndUpdate(
-    {
-      subjectHash,
-      purpose: "delivery",
-      consumedAt: null,
-      expiresAt: { $gt: new Date() },
-      attempts: { $lt: 5 },
-    },
-    { $inc: { attempts: 1 } },
-    { returnDocument: "after", sort: { createdAt: -1 } },
-  ).select("+codeHash");
-  if (
-    !challenge ||
-    !equalHash(
-      challenge.codeHash,
-      otpDigest(subjectHash, data.code, getEnv().AUTH_SECRET),
-    )
-  )
-    throw Error("Invalid or expired delivery code.");
+  // five tries in 15 minutes: guessing six digits would take years
+  await rateLimit(`delivery-code-try:${data.orderId}`, 5);
+  if (!equalHash(data.code, deliveryCode(String(order._id))))
+    throw Error("That code doesn’t match. Ask the customer to read it from their order page or the message we sent.");
   await mongoose.connection.transaction(async (session) => {
     const current = await Order.findOne({
       _id: order._id,
@@ -1209,113 +1197,132 @@ export async function completeDelivery(actorId: string, input: unknown) {
       deliveryStatus: "out-for-delivery",
     }).session(session);
     if (!current) throw Error("This delivery has already changed.");
-    const claimed = await OTPChallenge.updateOne(
-      { _id: challenge._id, consumedAt: null, expiresAt: { $gt: new Date() } },
-      { $set: { consumedAt: new Date() } },
-      { session },
-    );
-    if (claimed.modifiedCount !== 1)
-      throw Error("Delivery code was already used.");
-    const reservations = await InventoryReservation.find({
-      orderId: order._id,
-      status: "active",
+    await finishDelivery(current, { actorId, riderId: actorId, cashPaise: data.cashPaise }, session);
+  });
+}
+/**
+ * The owner confirms a delivery the customer's code can't (no phone, no internet), on the rider's
+ * word that the order was handed over and, for cash on delivery, the cash collected: that cash is
+ * then with the rider like any other. The reason goes on the order's history and the audit log.
+ */
+export async function confirmDeliveryByOwner(actorId: string, input: unknown) {
+  await actor(actorId, "delivery:confirm");
+  const data = z
+    .object({ orderId: objectId, reason: z.string().trim().min(5, "Explain why the code couldn’t be used.").max(500) })
+    .parse(input);
+  await mongoose.connection.transaction(async (session) => {
+    const current = await Order.findOne({
+      _id: data.orderId,
+      orderStatus: "confirmed",
+      deliveryStatus: { $in: ["out-for-delivery", "attempted"] },
+      assignedTo: { $ne: null },
     }).session(session);
-    // a line none of whose own item went in (not available, or all swapped) holds no stock any more
-    const holding = (current.items as OrderLine[]).filter((line) => packedOf(line) > 0);
-    if (reservations.length !== holding.length)
-      throw Error("Inventory reservation mismatch");
-    for (const r of reservations) {
-      const sold = await InventoryItem.updateOne(
-        {
-          variantId: r.variantId,
-          reserved: { $gte: r.quantity },
-          onHand: { $gte: r.quantity },
-        },
-        { $inc: { reserved: -r.quantity, onHand: -r.quantity } },
-        { session },
-      );
-      if (sold.modifiedCount !== 1)
-        throw Error("Inventory invariant violation");
-      r.status = "consumed";
-      await r.save({ session });
-      await InventoryMovement.create(
-        [
-          {
-            orderId: current._id,
-            variantId: r.variantId,
-            actorId,
-            quantity: r.quantity,
-            kind: "sale",
-          },
-        ],
-        { session },
-      );
-    }
-    if (current.paymentMethod === "cod") {
-      await CODCollection.create(
-        [
-          {
-            orderId: current._id,
-            collectorId: actorId,
-            expectedPaise: current.totalPaise,
-            collectedPaise: data.cashPaise,
-            collectedAt: new Date(),
-          },
-        ],
-        { session },
-      );
-      current.codStatus = "collected";
-      current.paymentStatus = "paid";
-      await timeline(
-        current._id,
-        actorId,
-        "cod",
-        "uncollected",
-        "collected",
-        session,
-      );
-      await timeline(
-        current._id,
-        actorId,
-        "payment",
-        "pending",
-        "paid",
-        session,
-      );
-    }
-    current.deliveryStatus = "delivered";
-    // the bill is issued now: it keeps the shop's details as they are today, whatever the shop is called later
-    current.set("bill.issuedAt", new Date());
-    current.set("bill.seller", await billSeller());
-    // and each line's MRP, HSN and GST rate as printed, so a later product edit can't change this bill
-    const facts = await lineFacts(current.items);
-    for (const item of current.items) {
-      const kept = facts.get(String(item.variantId));
-      if (kept) item.set("billed", kept);
-    }
-    // and a bill of its own for each provider that bills its items in its own name (Providers → Tax and billing)
-    const providerBills = await issueProviderBills(current, session);
-    if (providerBills.length) current.set("providerBills", providerBills);
-    await current.save({ session });
-    await timeline(
-      current._id,
-      actorId,
-      "delivery",
-      "out-for-delivery",
-      "delivered",
-      session,
-    );
-    await notify(
+    if (!current) throw Error("This delivery isn’t with a rider any more, so it can’t be confirmed here.");
+    await finishDelivery(
+      current,
       {
-        userId: current.customerId,
-        type: "delivery",
-        title: "Order delivered",
-        body: await customerMessage("delivered", current.number),
-        href: `/account/orders/${current._id}#rate`,
+        actorId,
+        riderId: String(current.assignedTo),
+        cashPaise: current.paymentMethod === "cod" ? current.totalPaise : 0,
+        note: `Confirmed by the owner without the code: ${data.reason}`,
       },
       session,
     );
+    await AuditLog.create(
+      [{ actorId, action: "delivery.confirm-without-code", target: String(current._id), details: { reason: data.reason } }],
+      { session },
+    );
   });
+}
+/**
+ * Everything "delivered" means, whoever confirmed it: the stock leaves the shelf, the cash is with
+ * the rider, the bill is issued and the customer is told. The caller has checked the order and holds
+ * the session.
+ */
+async function finishDelivery(
+  current: OrderDoc,
+  { actorId, riderId, cashPaise, note }: { actorId: string; riderId: string; cashPaise: number; note?: string },
+  session: mongoose.ClientSession,
+) {
+  const previous = current.deliveryStatus;
+  const reservations = await InventoryReservation.find({
+    orderId: current._id,
+    status: "active",
+  }).session(session);
+  // a line none of whose own item went in (not available, or all swapped) holds no stock any more
+  const holding = (current.items as OrderLine[]).filter((line) => packedOf(line) > 0);
+  if (reservations.length !== holding.length)
+    throw Error("Inventory reservation mismatch");
+  for (const r of reservations) {
+    const sold = await InventoryItem.updateOne(
+      {
+        variantId: r.variantId,
+        reserved: { $gte: r.quantity },
+        onHand: { $gte: r.quantity },
+      },
+      { $inc: { reserved: -r.quantity, onHand: -r.quantity } },
+      { session },
+    );
+    if (sold.modifiedCount !== 1)
+      throw Error("Inventory invariant violation");
+    r.status = "consumed";
+    await r.save({ session });
+    await InventoryMovement.create(
+      [
+        {
+          orderId: current._id,
+          variantId: r.variantId,
+          actorId,
+          quantity: r.quantity,
+          kind: "sale",
+        },
+      ],
+      { session },
+    );
+  }
+  if (current.paymentMethod === "cod") {
+    await CODCollection.create(
+      [
+        {
+          orderId: current._id,
+          collectorId: riderId,
+          expectedPaise: current.totalPaise,
+          collectedPaise: cashPaise,
+          collectedAt: new Date(),
+        },
+      ],
+      { session },
+    );
+    current.codStatus = "collected";
+    current.paymentStatus = "paid";
+    await timeline(current._id, actorId, "cod", "uncollected", "collected", session);
+    await timeline(current._id, actorId, "payment", "pending", "paid", session);
+  }
+  current.deliveryStatus = "delivered";
+  // the bill is issued now: it keeps the shop's details as they are today, whatever the shop is called later
+  current.set("bill.issuedAt", new Date());
+  current.set("bill.seller", await billSeller());
+  // and each line's MRP, HSN and GST rate as printed, so a later product edit can't change this bill
+  const facts = await lineFacts(current.items);
+  for (const item of current.items) {
+    const kept = facts.get(String(item.variantId));
+    if (kept) item.set("billed", kept);
+  }
+  // and a bill of its own for each provider that bills its items in its own name (Providers → Tax and billing)
+  const providerBills = await issueProviderBills(current, session);
+  if (providerBills.length) current.set("providerBills", providerBills);
+  await current.save({ session });
+  await timeline(current._id, actorId, "delivery", previous, "delivered", session, note);
+  await notify(
+    {
+      userId: current.customerId,
+      type: "delivery",
+      title: "Order delivered",
+      body: await customerMessage("delivered", current.number),
+      href: `/account/orders/${current._id}#rate`,
+    },
+    session,
+  );
 }
 export async function reconcileCOD(actorId: string, input: unknown) {
   await actor(actorId, "cod:reconcile");

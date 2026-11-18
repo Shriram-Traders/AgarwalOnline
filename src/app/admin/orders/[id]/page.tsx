@@ -852,6 +852,29 @@ export default async function ManageOrder({
                   </div>
                 </>
               )}
+              {/* the customer can't give the code at all: the owner vouches for the delivery instead */}
+              {hasPermission(user.roles, "delivery:confirm") &&
+                o.orderStatus === "confirmed" &&
+                ["out-for-delivery", "attempted"].includes(o.deliveryStatus) && (
+                  <ActionForm
+                    action={operationAction}
+                    submit="Confirm delivery without the code"
+                    buttonClassName="secondary-button"
+                    confirmMessage={`Mark ${o.number} delivered without the customer’s code?${
+                      o.paymentMethod === "cod" ? ` ${formatPrice(o.totalPaise)} in cash then counts as with ${rider.name}.` : ""
+                    } This can’t be undone.`}
+                  >
+                    <Hidden id={id} operation="confirm-delivery" />
+                    <p className="muted">
+                      Only when the customer can’t give the code (no phone, no internet) and you’re sure they have the
+                      whole order. The reason goes on the order’s history.
+                    </p>
+                    <label>
+                      Why the code couldn’t be used
+                      <textarea name="reason" minLength={5} maxLength={500} required />
+                    </label>
+                  </ActionForm>
+                )}
             </div>
           )}
           <div className="panel">

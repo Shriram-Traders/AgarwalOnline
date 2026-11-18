@@ -30,7 +30,10 @@ type StaffCopy = {
   search: {
     label: string;
     placeholder: string;
-    groups: Record<"record" | "setting" | "action" | "page" | "goto", string>;
+    groups: Record<"record" | "setting" | "action" | "page" | "goto" | "product" | "order" | "customer", string>;
+    /** The chips that narrow the search to one kind of thing. */
+    scopes: Record<"all" | "product" | "order" | "customer" | "settings", string>;
+    searching: string;
     ordersMatching: (q: string) => string;
     customersMatching: (q: string) => string;
     ordersHint: string;
@@ -96,19 +99,24 @@ export const staffCopy: Record<Locale, StaffCopy> = {
     },
     search: {
       label: "Search the workspace",
-      placeholder: "Search settings, pages, orders",
+      placeholder: "Search products, orders, customers, settings",
       groups: {
-        record: "Orders and customers",
+        product: "Products",
+        order: "Orders",
+        customer: "Customers",
+        record: "See all",
         setting: "Settings",
         action: "Actions",
         page: "Pages",
         goto: "Go to",
       },
+      scopes: { all: "All", product: "Products", order: "Orders", customer: "Customers", settings: "Settings and pages" },
+      searching: "Searching…",
       ordersMatching: (q) => `Orders matching “${q}”`,
       customersMatching: (q) => `Customers matching “${q}”`,
       ordersHint: "Overview › Orders",
       customersHint: "Customers",
-      empty: (q) => `No setting or page called “${q}”. Try another word, like “delivery fee” or “GST”.`,
+      empty: (q) => `Nothing called “${q}”. Try another word, a product’s name, an order number or a phone number.`,
       count: (n) => (n === 1 ? "1 result" : `${n} results`),
       keys: "↑ ↓ move · Enter open · Esc close",
       clear: "Clear search",
@@ -167,14 +175,19 @@ export const staffCopy: Record<Locale, StaffCopy> = {
     },
     search: {
       label: "कामात शोधा",
-      placeholder: "सेटिंग्ज, पाने, ऑर्डर शोधा",
+      placeholder: "उत्पादने, ऑर्डर, ग्राहक, सेटिंग्ज शोधा",
       groups: {
-        record: "ऑर्डर व ग्राहक",
+        product: "उत्पादने",
+        order: "ऑर्डर",
+        customer: "ग्राहक",
+        record: "सर्व पाहा",
         setting: "सेटिंग्ज",
         action: "कामे",
         page: "पाने",
         goto: "थेट जा",
       },
+      scopes: { all: "सर्व", product: "उत्पादने", order: "ऑर्डर", customer: "ग्राहक", settings: "सेटिंग्ज व पाने" },
+      searching: "शोधत आहे…",
       ordersMatching: (q) => `“${q}” शी जुळणाऱ्या ऑर्डर`,
       customersMatching: (q) => `“${q}” शी जुळणारे ग्राहक`,
       ordersHint: "आढावा › ऑर्डर",

@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
     assignDelivery: vi.fn(),
     partnerTransition: vi.fn(),
     requestDeliveryOTP: vi.fn(),
+    sendDeliveryCodeForRider: vi.fn(async () => "Code sent"),
     completeDelivery: vi.fn(),
     reconcileCOD: vi.fn(),
     resolveCODDiscrepancy: vi.fn(),
@@ -65,6 +66,29 @@ describe("Order page steps whose panel goes away", () => {
       expect(mocks.service[step]).toHaveBeenCalledOnce();
     },
   );
+
+  it.each([
+    [{ operation: "deliver", code: "246810", cashRupees: "320.00" }, "completeDelivery", "done"],
+    [{ operation: "delivery-status", next: "failed", reason: "Customer cancelled at the door" }, "partnerTransition", "closed"],
+  ] as const)(
+    "a rider's stop that leaves the list lands on the list saying so (%s)",
+    async (fields, step, said) => {
+      await expect(operationAction({}, form({ ...fields, orderId: ORDER }))).rejects.toMatchObject({
+        url: `/delivery?${said}=${ORDER}`,
+        type: "replace",
+      });
+      expect(mocks.service[step]).toHaveBeenCalledOnce();
+    },
+  );
+
+  it("a rider's step that keeps the stop open says what happened", async () => {
+    const say = async (fields: Record<string, string>) =>
+      (await operationAction({}, form({ ...fields, orderId: ORDER }))).success;
+    expect(await say({ operation: "delivery-status", next: "out-for-delivery" })).toBe("On the way: the customer has been told.");
+    expect(await say({ operation: "delivery-status", next: "attempted", reason: "Door locked" })).toMatch(/^Attempt recorded/);
+    expect(await say({ operation: "send-delivery-code" })).toBe("Code sent");
+    expect(mocks.redirect).not.toHaveBeenCalled();
+  });
 
   it("stays on the form with a plain message when the step is refused", async () => {
     mocks.service.cancelByStore.mockRejectedValueOnce(

@@ -7,7 +7,8 @@ import {
   ProductVariant,
   InventoryItem,
 } from "../src/lib/db/models";
-import { anyOnOffer, catalog, catalogCategories, catalogSections } from "../src/lib/catalog/queries";
+import { anyOnOffer, catalog, catalogCategories, catalogSections, shopCatalogue } from "../src/lib/catalog/queries";
+import { browseCatalog, filtersFrom } from "../src/lib/catalog/browse";
 const uri = process.env.TEST_MONGODB_URI;
 describe.skipIf(!uri)("MongoDB catalog", () => {
   beforeAll(async () => {
@@ -154,6 +155,15 @@ describe.skipIf(!uri)("MongoDB catalog", () => {
       expect(section.shelves.map((shelf) => shelf.slug)).toEqual(["party-gifting", "diaries"]);
     } finally {
       await Category.deleteMany({ slug: { $in: ["gifts-party", "diaries", "party-gifting"] } });
+    }
+  });
+  it("a shopper's phone, browsing the whole catalogue it loaded, gives the server's answer", async () => {
+    const { items, aisles, synonyms } = await shopCatalogue();
+    const cases: Record<string, string>[] = [{}, { category: "paper" }, { q: "pens" }, { q: "notbook" }, { q: "वह्या" }, { q: "notebooks paper" }, { sort: "price-desc" }, { sort: "new" }, { inStock: "true" }];
+    for (const params of cases) {
+      const server = (await catalog(params)).map((item) => item.slug);
+      const phone = browseCatalog(items, filtersFrom(new URLSearchParams(params)), { aisles, synonyms }).map((item) => item.slug);
+      expect(phone, JSON.stringify(params)).toEqual(server);
     }
   });
   it("keeps working when Atlas Search is switched on but unavailable", async () => {

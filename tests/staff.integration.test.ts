@@ -4,7 +4,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { AuditLog, User } from "../src/lib/db/models";
 import { Order, OrderTimelineEvent } from "../src/lib/commerce/models";
 import { connectDB } from "../src/lib/db/connect";
-import { createStaff, grantStaffRole, updateStaff } from "../src/lib/staff/service";
+import { createStaff, grantStaffRole, setOwnOwnerRole, updateStaff } from "../src/lib/staff/service";
 import { getAuth } from "../src/lib/auth/better-auth";
 
 const uri = process.env.TEST_MONGODB_URI;
@@ -214,6 +214,17 @@ describe.skipIf(!uri)("Staff access management", () => {
     await expect(updateStaff(superAdminId, input)).rejects.toThrow(
       "own account",
     );
+  });
+
+  it("lets an owner move themselves between Owner and Tech, and nothing else", async () => {
+    await setOwnOwnerRole(superAdminId, { role: "tech" });
+    expect((await User.findById(superAdminId))?.roles).toEqual(["customer", "super-admin", "tech"]);
+    expect(await AuditLog.exists({ action: "staff.grant", target: superAdminId, "details.own": true })).toBeTruthy();
+    await setOwnOwnerRole(superAdminId, { role: "super-admin" });
+    expect((await User.findById(superAdminId))?.roles).toEqual(["customer", "super-admin"]);
+    // never down to admin or customer from here
+    await expect(setOwnOwnerRole(superAdminId, { role: "admin" })).rejects.toThrow();
+    expect((await User.findById(superAdminId))?.roles).toEqual(["customer", "super-admin"]);
   });
 
   it("won't change the owner's own role through 'Create a new account'", async () => {

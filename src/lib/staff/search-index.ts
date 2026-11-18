@@ -124,7 +124,7 @@ const customize: FinderEntry[] = [
     "Defaults for new packs, areas, delivery times and offers",
     "नवीन पॅक, क्षेत्र, वेळा व ऑफरसाठी सुरुवातीची मूल्ये",
     ["Form defaults", "सुरुवातीची मूल्ये"],
-    ["default", "purchase limit", "default fee", "default capacity", "offer length", "analytics range"],
+    ["default", "purchase limit", "default fee", "default capacity", "offer length", "analytics range", "rider pay", "delivery pay", "pay per delivery", "partner pay"],
     ["सुरुवातीची", "मूल्ये"],
   ),
   custom(
@@ -135,6 +135,18 @@ const customize: FinderEntry[] = [
     ["late", "overdue", "work queue", "timings", "sla", "reminder"],
     ["उशीर", "रांग"],
   ),
+  // Tech only: the developer credits
+  {
+    ...custom(
+      "team",
+      "Developer card and team page: name, photo, email, WhatsApp, links",
+      "डेव्हलपर कार्ड व टीम पान: नाव, फोटो, ईमेल, व्हॉट्सॲप, लिंक",
+      ["Developer and team", "डेव्हलपर व टीम"],
+      ["developer", "developed by", "credits", "team", "tech", "footer card", "linkedin", "instagram", "portfolio", "whatsapp", "photo"],
+      ["डेव्हलपर", "टीम"],
+    ),
+    permission: "tech:write",
+  },
 ];
 
 const settings: FinderEntry[] = [

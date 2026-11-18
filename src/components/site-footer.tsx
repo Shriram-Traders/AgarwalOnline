@@ -5,6 +5,7 @@ import type { Locale } from "@/lib/locale-types";
 import { LEGAL_PAGES, POLICIES_HOME } from "@/lib/legal/pages";
 import { frontWords, shopSettings } from "@/lib/settings/shop";
 import { taxProfile } from "@/lib/tax/profile";
+import { DevCredit } from "./dev-credit";
 
 export async function SiteFooter({
   locale,
@@ -45,7 +46,7 @@ export async function SiteFooter({
       </footer>
     );
   // the owners' line and contact details (Customize → Shop front; contact from Business and tax details)
-  const [front, shop] = await Promise.all([shopSettings("storefront"), taxProfile()]);
+  const [front, shop, team] = await Promise.all([shopSettings("storefront"), taxProfile(), shopSettings("team")]);
   const tagline = frontWords(front, "footerTagline", locale);
   return (
     <footer className="site-footer">
@@ -165,6 +166,11 @@ export async function SiteFooter({
           </ul>
         </nav>
       </div>
+      {team.showFooterCard && (
+        <div className="footer-credit">
+          <DevCredit team={team} mr={mr} />
+        </div>
+      )}
       <div className="footer-base">
         <div className="footer-base-inner">
           <p>© {new Date().getFullYear()} Agarwal Online</p>

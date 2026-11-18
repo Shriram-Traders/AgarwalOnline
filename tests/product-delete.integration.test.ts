@@ -19,7 +19,6 @@ import { setAlertLevel, setProductVisibility, updateVariant } from "../src/lib/c
 import { applyStockImport, planStockImport, stockSheet } from "../src/lib/inventory/import";
 import { LOW_STOCK, lowStockRows } from "../src/lib/inventory/low-stock";
 import { shopperVisible } from "../src/lib/catalog/visibility";
-import { shownSku } from "../src/lib/catalog/deleted";
 
 const uri = process.env.TEST_MONGODB_URI;
 describe.skipIf(!uri)("Removing stock and deleting packs and products", () => {
@@ -72,7 +71,8 @@ describe.skipIf(!uri)("Removing stock and deleting packs and products", () => {
       expect(pack.deletedAt).toBeInstanceOf(Date);
       // past orders and bills still find it by id, under its own name
       expect(pack.label).toBe("100 pages");
-      expect(shownSku(pack.sku)).toBe("NB-100");
+      // it gives up its SKU, so a new pack can have it
+      expect(pack.sku).toMatch(/^NB-100-deleted-/);
       expect((await stockOf(packId)).onHand).toBe(0);
       const movement = await InventoryMovement.findOne({ variantId: packId, quantity: -30, kind: "adjust" });
       expect(movement).toBeTruthy();

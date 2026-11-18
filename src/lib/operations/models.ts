@@ -37,9 +37,24 @@ const collectionSchema = new Schema(
     discrepancyResolvedBy: { type: Schema.Types.ObjectId, ref: "User" },
     discrepancyResolution: String,
     discrepancyResolvedAt: Date,
+    /** the rider's handover this cash went into, so it is handed over only once */
+    handoverId: { type: Schema.Types.ObjectId, ref: "CashHandover" },
   },
   { timestamps: true, strict: "throw" },
 );
+/** Cash a rider says they handed over at the counter, and the shop's confirmation that it arrived. */
+const handoverSchema = new Schema(
+  {
+    riderId: ref("User"),
+    collectionIds: [{ type: Schema.Types.ObjectId, ref: "CODCollection" }],
+    amountPaise: { type: Number, required: true },
+    confirmedBy: { type: Schema.Types.ObjectId, ref: "User" },
+    confirmedAt: Date,
+  },
+  { timestamps: true, strict: "throw" },
+);
+handoverSchema.index({ riderId: 1, createdAt: -1 });
+handoverSchema.index({ confirmedAt: 1, createdAt: -1 });
 const attemptSchema = new Schema(
   {
     orderId: ref("Order"),
@@ -55,6 +70,8 @@ export const PackingChecklist =
 export const CODCollection =
   mongoose.models.CODCollection ||
   mongoose.model("CODCollection", collectionSchema);
+export const CashHandover =
+  mongoose.models.CashHandover || mongoose.model("CashHandover", handoverSchema);
 export const DeliveryAttempt =
   mongoose.models.DeliveryAttempt ||
   mongoose.model("DeliveryAttempt", attemptSchema);

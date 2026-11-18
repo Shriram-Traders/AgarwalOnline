@@ -304,6 +304,9 @@ fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
 .primary-button:hover { background: var(--brand-strong); color: var(--on-brand); }
 .secondary-button { background: transparent; border-color: var(--ink); color: var(--ink); }
 .secondary-button:hover { background: var(--ink); color: var(--canvas); }
+/* a link drawn as a button inside a table keeps the button's look, not the table's underlined link colour */
+td a.secondary-button { color: var(--ink); text-decoration: none; }
+td a.secondary-button:hover { color: var(--canvas); }
 .primary-button:active, .secondary-button:active, .orange-button:active { transform: translateY(1px); }
 .text-button {
   min-height: 40px;
@@ -512,7 +515,8 @@ details:not(.panel, .popover) > summary { padding: 8px 0; color: var(--accent); 
 .form-stack :is(select, textarea):user-invalid,
 .phone-input:has(input:user-invalid) { border-color: var(--danger); }
 .form-stack textarea, .chat-compose textarea { min-height: 110px; resize: vertical; }
-.form-stack input[type="file"] {
+/* a hidden one behind a button stays hidden: at full width it ran off the page and made it scroll sideways */
+.form-stack input[type="file"]:not(.sr-only) {
   width: 100%;
   padding: 10px;
   border: 1px dashed var(--line-strong);
@@ -1586,6 +1590,68 @@ a.order-row:hover { border-color: var(--ink); color: var(--ink); }
 .footer-base { border-top: 1px solid var(--line); }
 .footer-base-inner { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 16px; padding: 16px var(--gutter); font-size: 0.8rem; color: var(--muted); }
 .footer-base p { margin: 0; }
+/* the developer credit (DevCredit): one card above the copyright line, and the same pieces on /p/team */
+.footer-credit { width: min(100%, calc(var(--content) + 2 * var(--gutter))); margin-inline: auto; padding: 0 var(--gutter) 32px; }
+.dev-credit { display: flex; flex-wrap: wrap; align-items: center; gap: 16px 20px; padding: 20px 24px; border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--surface); }
+.dev-photo { flex: none; width: 64px; height: 64px; border-radius: 50%; object-fit: cover; box-shadow: 0 0 0 3px var(--band); }
+.dev-photo.is-initials { display: grid; place-items: center; background: var(--band); color: var(--on-band); font-weight: 800; font-size: 1.3rem; }
+.dev-credit-text { flex: 1 1 180px; min-width: 0; }
+.dev-credit-text p { margin: 0; }
+.dev-credit-eyebrow { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+.dev-credit-name { margin-top: 2px; font-size: 1.15rem; font-weight: 800; color: var(--ink); }
+.dev-credit-role { color: var(--muted); }
+.dev-contacts { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.dev-contacts a { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 14px; border: 1px solid var(--line); border-radius: 999px; background: var(--canvas); color: var(--ink); font-weight: 600; text-decoration: none; overflow-wrap: anywhere; }
+.dev-contacts a:hover { border-color: var(--brand); }
+.dev-contacts svg { flex: none; color: var(--brand); }
+.dev-team-link { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; color: var(--brand); font-weight: 700; text-decoration: none; }
+/* the team page: a card for each person, side by side where there's room, contacts lined up at the bottom */
+.team-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr)); gap: 16px; }
+/* a profile card: a tinted strip behind the photo, everything centred, so it looks finished with only a name */
+.team-member { position: relative; display: flex; flex-direction: column; align-items: center; gap: 14px; overflow: hidden; text-align: center; }
+.team-member::before { content: ""; position: absolute; inset: 0 0 auto; height: 76px; background: var(--tint-1, var(--brand-soft)); }
+.team-member > * { position: relative; }
+.team-member-head { display: flex; flex-direction: column; align-items: center; gap: 10px; max-width: 100%; }
+.team-member-head > div { max-width: 100%; }
+.team-member .dev-photo { width: 104px; height: 104px; margin-top: 16px; font-size: 2.2rem; box-shadow: 0 0 0 4px var(--surface), 0 0 0 6px var(--band); }
+.team-member h2 { margin: 0; font-size: 1.35rem; overflow-wrap: anywhere; }
+.team-role { margin: 2px 0 0; color: var(--muted); font-weight: 600; }
+.team-bio { margin: 0; max-width: 52ch; color: var(--ink-2); line-height: 1.6; }
+.team-skills { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.team-skills li { padding: 4px 12px; border-radius: 999px; background: var(--tint-1, var(--brand-soft)); color: var(--ink); font-size: 0.85rem; font-weight: 600; }
+.team-member .dev-contacts { justify-content: center; margin-top: auto; padding-top: 4px; }
+.team-hire { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px 24px; margin-top: 20px; padding: 24px; border: 1px solid var(--line); border-left: 4px solid var(--brand); border-radius: var(--r-lg); background: var(--surface); }
+.team-hire > div:first-child { flex: 1 1 18rem; min-width: 0; }
+.team-hire h2 { margin: 0 0 4px; font-size: 1.2rem; }
+.team-hire p { margin: 0; max-width: 56ch; color: var(--ink-2); }
+.team-hire-actions { display: flex; flex-wrap: wrap; gap: 8px; min-width: 0; }
+.team-hire-actions a { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; max-width: 100%; overflow-wrap: anywhere; }
+.team-note { margin-top: 20px; }
+/* the team page already shows the card's details */
+body:has(.team-page) .footer-credit { display: none; }
+/* Settings → Developer and team → Your photo */
+.team-photo-field { display: grid; gap: 8px; }
+/* reads like the form's other labels (.form-stack label) */
+.team-photo-label { color: var(--ink-2); font-size: 0.875rem; font-weight: 600; }
+.team-photo-label small { display: block; margin-top: 6px; color: var(--muted); font-weight: 400; }
+.team-photo-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; }
+.team-photo-row .dev-photo { width: 88px; height: 88px; }
+.dev-photo.is-empty { display: grid; place-items: center; background: var(--surface-2); color: var(--muted); box-shadow: 0 0 0 2px var(--line); }
+.team-photo-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.team-photo-actions label.secondary-button { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; cursor: pointer; }
+.team-photo-actions label.secondary-button:focus-within { outline: 2px solid var(--brand); outline-offset: 2px; }
+.team-photo-actions .is-busy { opacity: 0.6; pointer-events: none; }
+.team-photo-actions .text-button { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; }
+/* framing it: the square that gets saved, with the card's circle marked on it */
+.photo-crop { display: grid; gap: 12px; justify-items: start; }
+.photo-crop p { margin: 0; }
+.photo-crop-stage { position: relative; width: min(100%, 280px); aspect-ratio: 1; overflow: hidden; border-radius: var(--r-md); background: var(--ink); touch-action: none; cursor: grab; user-select: none; }
+.photo-crop-stage:active { cursor: grabbing; }
+.photo-crop-stage:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.photo-crop-stage img { position: absolute; max-width: none; pointer-events: none; }
+.photo-crop-ring { position: absolute; inset: 0; border-radius: 50%; box-shadow: 0 0 0 200px var(--scrim); outline: 2px solid var(--canvas); pointer-events: none; }
+.photo-crop-zoom { display: grid; gap: 4px; width: min(100%, 280px); color: var(--ink-2); font-size: 0.875rem; font-weight: 600; }
+.photo-crop-zoom input { width: 100%; min-height: 44px; accent-color: var(--brand); }
 
 /* ---------- Store policies (/privacy, /terms, /refunds, /shipping, /contact) ---------- */
 .legal-meta { margin: -16px 0 20px; color: var(--muted); font-size: 0.85rem; }
@@ -1939,6 +2005,20 @@ a.order-row:hover { border-color: var(--ink); color: var(--ink); }
   .footer-store h2 { flex-basis: 100%; }
   .footer-store ul { display: flex; gap: 0 20px; }
   .footer-base-inner { flex-direction: column; gap: 2px; padding-block: 12px; }
+  /* the developer card: photo and name on one row, the contacts two across, the team page a full-width button */
+  .footer-credit { padding-bottom: 20px; }
+  .dev-credit { gap: 12px 14px; padding: 16px; }
+  .dev-credit > .dev-photo { width: 56px; height: 56px; }
+  /* one contact fills the row; more sit two across */
+  .site-footer .dev-contacts { flex: 1 1 100%; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 8rem), 1fr)); }
+  .site-footer .dev-contacts a { width: 100%; justify-content: center; }
+  .dev-credit .dev-team-link { flex: 1 1 100%; justify-content: center; border: 1px solid var(--brand); border-radius: 999px; }
+  /* a team card: a smaller photo, contacts two across, the "work with us" buttons full width */
+  .team-member .dev-photo { width: 88px; height: 88px; font-size: 1.8rem; }
+  .team-member .dev-contacts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 8rem), 1fr)); }
+  .team-member .dev-contacts a { width: 100%; justify-content: center; }
+  .team-hire { padding: 18px; }
+  .team-hire-actions, .team-hire-actions a { width: 100%; }
   .legal-layout { grid-template-columns: 1fr; gap: 20px; }
   /* the sticky contents column gives way to a folded list above the text */
   .legal-toc { display: none; }
@@ -2492,6 +2572,8 @@ td .form-stack > .compact-button { min-width: 0; }
 /* out for delivery: the code card is the one thing to act on */
 .handover-card { border-color: var(--brand); background: var(--brand-tint); }
 .handover-card .form-stack { gap: 12px; }
+/* the order's delivery code, big enough to read out at the door */
+.delivery-code { margin: 4px 0 8px; color: var(--ink); font-size: 2rem; font-weight: 800; letter-spacing: 0.25em; font-variant-numeric: tabular-nums; }
 .order-card > h2 { display: flex; align-items: center; gap: 8px; margin: 0 0 14px; font-size: 1.15rem; }
 .order-card > h2 svg { color: var(--brand); }
 .order-card > p.muted { margin: -6px 0 12px; font-size: 0.9rem; }

@@ -28,7 +28,7 @@ export const privacyDoc: LegalBuilder = {
               ["Your account", "Name, mobile number, email, password (stored only as a one-way hash, never readable), your preferred payment method and what to do if an item is unavailable."],
               ["Google sign-in", "If you choose it: the name, email address, profile picture link and account ID Google shares with us, and the sign-in tokens Google issues for your account."],
               ["Delivery addresses", "Recipient's name, mobile number, address, landmark, PIN code and delivery instructions."],
-              ["Orders", "Items, prices, offer used, delivery time, payment method, order and delivery status, the version of our Terms you agreed to, and the delivery code (stored only as a hash)."],
+              ["Orders", "Items, prices, offer used, delivery time, payment method, order and delivery status, and the version of our Terms you agreed to. The delivery code isn't stored: it is worked out from the order whenever it is shown or checked."],
               ["Support and complaints", "Chat messages, complaint and return details, and photos you upload."],
               ["Reviews and ratings", "Product reviews (shown publicly), order ratings and comments (seen only by the store)."],
               ["Shared lists", "List names, items and who added them."],
@@ -84,7 +84,7 @@ export const privacyDoc: LegalBuilder = {
               ["MongoDB Atlas", "Hosts our database, where account and order data is stored."],
               ["Vercel", "Hosts the website and handles each page request."],
               ["Hostinger", "Sends our emails (email confirmations and school quotations): your email address and the message."],
-              ["MiniMoth", "Sends one-time codes for signing up, resetting a password and confirming a delivery, by WhatsApp or, if that fails, by SMS: the mobile number and the code."],
+              ["MiniMoth", "Sends one-time codes for signing up and resetting a password, and each order's delivery code, by WhatsApp or, if that fails, by SMS: the mobile number and the code."],
               ["Google", "Only if you sign in with Google."],
               ["Google Analytics", "The pages you open and what you tap on them, your browser and device, the city your connection is in, and a random ID kept in a cookie. Google works the city out from your IP address and doesn't keep the address. Google signals and ad personalisation are off, and staff are never counted."],
               ["Browser push services", "Only if you turn on notifications: they travel through your browser maker's push service (Google for Chrome, Mozilla for Firefox, Apple for Safari), encrypted so only your device can read them."],
@@ -181,7 +181,7 @@ export const privacyDoc: LegalBuilder = {
         blocks: [
           {
             list: [
-              "Passwords are stored only as one-way hashes. Sign-in and delivery codes expire within minutes and allow only a few tries.",
+              "Passwords are stored only as one-way hashes. Sign-in codes expire within minutes and allow only a few tries. A delivery code works only for its own order, until it is delivered, and allows only a few tries at a time.",
               "Repeated attempts to sign in or send forms are blocked for a while.",
               "The site uses secure (HTTPS) connections.",
               "Staff see only what their role needs, and their actions are logged.",

@@ -52,9 +52,17 @@
 @media (min-width: 1100px) {
   .settings-shell { grid-template-columns: 300px minmax(0, 1fr); gap: 32px; align-items: start; }
   .settings-menu a { min-height: 52px; padding: 8px 12px; }
+  /* the list stays in view beside a long section, instead of scrolling away and leaving a blank column */
+  .settings-menu { position: sticky; top: calc(var(--header-h) + 16px); max-height: calc(100dvh - var(--header-h) - 32px); overflow-y: auto; scrollbar-width: thin; }
   .settings-back { display: none; }
   .settings-shell:not([data-chosen]) .settings-section[data-default] { display: grid; }
   .settings-shell:not([data-chosen]) .settings-menu-group:first-child li:first-child a { background: var(--brand-soft); box-shadow: inset 3px 0 0 var(--brand); }
+}
+
+/* Developer and team: short boxes two across where there's room; a long box, a photo and a checkbox take the row */
+@media (min-width: 761px) {
+  #team .form-section { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: end; column-gap: 20px; }
+  #team .form-section > :is(legend, label:has(textarea, [name$="Skills"], [name$="Title"]), .checkbox-label, .team-photo-field) { grid-column: 1 / -1; }
 }
 
 /* ---------- Lists on a phone: one short row per record ---------- */
@@ -81,9 +89,13 @@
 .filter-more { display: none; }
 @media (max-width: 760px) {
   /* only when there is something besides the search box to show */
-  .audit-filters:has([name="q"]):has(> :is(label, fieldset, div):not(:has([name="q"]))) .filter-more { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+  /* the search box is one field; a second one not kept in sight means there is something to fold.
+     (No :has() inside :has(): browsers drop such a rule.) */
+  .audit-filters:has([name="q"]):has(> :is(label, fieldset, div):not(.filter-keep) ~ :is(label, fieldset, div):not(.filter-keep)) .filter-more { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
   .audit-filters:has([name="q"]):not([data-open]) { display: flex; flex-wrap: wrap; gap: 8px; }
-  .audit-filters:has([name="q"]):not([data-open]) > :is(label, fieldset, div):not(:has([name="q"])) { display: none; }
+  /* a filter people reach for every time (Products' Category) stays beside the search box: .filter-keep */
+  .audit-filters:has([name="q"]):not([data-open]) > :is(label, fieldset, div):not(:has([name="q"])):not(.filter-keep) { display: none; }
+  .audit-filters:has([name="q"]):not([data-open]) > .filter-keep { flex: 1 0 100%; }
   .audit-filters:has([name="q"]):not([data-open]) > :has([name="q"]) { flex: 1 0 100%; }
   .audit-filters:has([name="q"]):not([data-open]) > :is(button, a) { flex: 1 1 0; min-width: 0; }
   .filter-more[aria-expanded="true"] svg { color: var(--brand); }
@@ -133,4 +145,41 @@
 @media (max-width: 760px) {
   .workspace-main details.panel:not([open]) { margin-bottom: 8px; padding: 0 16px; }
   .workspace-main details.panel > summary { min-height: 52px; font-family: inherit; font-size: 1rem; font-weight: 700; }
+}
+
+/* ---------- Lists that answer as you type (filter-live.tsx) ---------- */
+/* the button has nothing left to do once the list updates by itself; Enter still applies at once */
+.audit-filters[data-live] > button.primary-button { display: none; }
+/* while the next list is on its way, the current one dims a little instead of the page jumping */
+.audit-filters ~ * { transition: opacity var(--fast); }
+.audit-filters[data-pending] ~ * { opacity: 0.55; }
+@media (prefers-reduced-motion: reduce) { .audit-filters ~ * { transition: none; } }
+.order-search[data-live] > button.compact-button { display: none; }
+
+/* ---------- Workspace search: chips that narrow it, and product photos ---------- */
+.finder-scopes { display: flex; gap: 6px; margin: 0 0 6px; padding: 2px 2px 8px; overflow-x: auto; scrollbar-width: none; border-bottom: 1px solid var(--line); }
+.finder-scopes::-webkit-scrollbar { display: none; }
+.finder-scopes button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-pill);
+  background: var(--paper);
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.finder-scopes button:hover { border-color: var(--ink); color: var(--ink); }
+.finder-scopes button[aria-pressed="true"] { border-color: var(--ink); background: var(--ink); color: var(--canvas); }
+.finder-scopes button b { min-width: 18px; padding: 0 5px; border-radius: var(--r-pill); background: var(--brand-soft); color: var(--ink); font-size: 0.72rem; text-align: center; }
+.finder-scopes button[aria-pressed="true"] b { background: color-mix(in oklab, var(--paper) 25%, transparent); color: inherit; }
+.finder-thumb { flex: none; width: 32px; height: 32px; border-radius: var(--r-sm); background: var(--paper); object-fit: contain; }
+@media (pointer: coarse) {
+  .finder-scopes button { min-height: 40px; }
 }

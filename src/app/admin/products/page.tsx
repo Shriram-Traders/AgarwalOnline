@@ -26,6 +26,7 @@ const STATUSES = [
 
 import { Provider } from "@/lib/providers/models";
 import { notDeleted } from "@/lib/catalog/deleted";
+import { normalizeSearch, searchWords } from "@/lib/catalog/search";
 
 export default async function Products({
   searchParams,
@@ -59,13 +60,19 @@ export default async function Products({
       category: categories.find((category) => String(category._id) === String(product.categoryId)),
     };
   });
-  const q = params.q?.trim().toLowerCase();
+  const q = params.q?.trim();
+  // every word typed must be found, in any order, as the shop's search does: plurals, the shop's synonyms
+  // (vahi, kalam) and Marathi aliases count, and so does the category's name ("namkeen" finds every sev)
+  const words = q ? searchWords(q) : [];
+  const found = (row: (typeof rows)[number]) => {
+    const text = normalizeSearch(
+      [row.product.name.en, row.product.name.mr, row.product.brand ?? "", row.category?.name.en ?? "", ...(row.product.aliases ?? []), ...row.packs.map((pack) => pack.sku)].join(" "),
+    );
+    return words.every((alternatives) => alternatives.some((word) => text.includes(word)));
+  };
   const shown = rows.filter(
     (row) =>
-      (!q ||
-        [row.product.name.en, row.product.name.mr, row.product.brand ?? "", ...row.packs.map((pack) => pack.sku)].some(
-          (text) => text.toLowerCase().includes(q),
-        )) &&
+      (!q || found(row)) &&
       (!params.category || row.category?.slug === params.category) &&
       (!params.provider ||
         (params.provider === "own" ? !row.product.providerId : String(row.product.providerId ?? "") === params.provider)) &&
@@ -99,10 +106,10 @@ export default async function Products({
       )}
       <FilterBar label="Filter products" submitLabel="Show products" clearHref={filtered ? "/admin/products" : undefined}>
         <label>
-          Search <small>name, brand or SKU</small>
+          Search <small>name, brand or category</small>
           <input name="q" defaultValue={params.q} maxLength={80} />
         </label>
-        <label>
+        <label className="filter-keep">
           Category
           <select name="category" defaultValue={params.category ?? ""}>
             <option value="">All categories</option>

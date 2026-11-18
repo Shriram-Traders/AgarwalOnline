@@ -244,14 +244,14 @@ test("whole journey: sign up, shop, pay, pack, deliver, reconcile", async ({ bro
   await expect(rider.getByLabel("Customer delivery code")).toBeVisible();
   await shot(rider, "delivery-order-detail");
 
-  // the customer asks for the code, the partner enters it
+  // the customer has the order's code on its page (MiniMoth sends the same one), the partner enters it
   await page.goto(orderUrl);
-  await page.getByRole("button", { name: "Request delivery confirmation code" }).click();
-  await expect(page.getByText("Development delivery code: 246810")).toBeVisible();
+  await expect(page.locator(".delivery-code")).toHaveText("246810");
   await rider.getByLabel("Customer delivery code").fill("246810");
   await rider.getByRole("checkbox").check();
   await rider.getByRole("button", { name: "Verify code & mark delivered" }).click();
-  await expect(rider).toHaveURL("/delivery");
+  await expect(rider).toHaveURL(/\/delivery\?done=/);
+  await expect(rider.getByRole("status").filter({ hasText: /^Delivered / })).toBeVisible();
 
   await admin.goto(orderUrl.replace("/account/orders/", "/admin/orders/"));
   await admin.getByRole("button", { name: "Complete order", exact: true }).click();

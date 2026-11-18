@@ -1,7 +1,7 @@
 import { beforeAll, beforeEach, afterAll, describe, it, expect } from "vitest";
 import mongoose from "mongoose";
 import { connectDB } from "../src/lib/db/connect";
-import { User, InventoryItem, OTPChallenge } from "../src/lib/db/models";
+import { User, InventoryItem, RateLimit } from "../src/lib/db/models";
 import {
   Order,
   DeliverySlot,
@@ -14,16 +14,20 @@ import {
   savePacking,
   assignDelivery,
   partnerTransition,
-  requestDeliveryOTP,
+  sendDeliveryCodeForRider,
   completeDelivery,
+  confirmDeliveryByOwner,
   reconcileCOD,
 } from "../src/lib/operations/service";
+import { confirmHandover, startHandover } from "../src/lib/operations/handover";
+import { CashHandover } from "../src/lib/operations/models";
 const uri = process.env.TEST_MONGODB_URI;
 describe.skipIf(!uri)("Packing, delivery and COD controls", () => {
   let customer: string,
     admin: string,
     partner: string,
     other: string,
+    owner: string,
     orderId: string,
     variantId: string;
   beforeAll(async () => {
@@ -56,8 +60,9 @@ describe.skipIf(!uri)("Packing, delivery and COD controls", () => {
       { phone: "9000000092", name: "Admin", roles: ["customer", "admin"] },
       { phone: "9000000093", name: "Partner", roles: ["customer", "delivery"] },
       { phone: "9000000094", name: "Other partner", roles: ["customer", "delivery"] },
+      { phone: "9000000095", name: "Owner", roles: ["customer", "super-admin"] },
     ]);
-    [customer, admin, partner, other] = users.map((u: { _id: unknown }) =>
+    [customer, admin, partner, other, owner] = users.map((u: { _id: unknown }) =>
       String(u._id),
     );
     variantId = String(new mongoose.Types.ObjectId());
@@ -168,13 +173,10 @@ describe.skipIf(!uri)("Packing, delivery and COD controls", () => {
     await expect(
       completeDelivery(other, { orderId, code: "246810", cashPaise: 10000 }),
     ).rejects.toThrow("assigned");
-    await requestDeliveryOTP(customer, orderId);
+    // nobody asks for the code first: the order has one from the start
     await expect(
       completeDelivery(partner, { orderId, code: "111111", cashPaise: 10000 }),
-    ).rejects.toThrow("Invalid");
-    expect((await OTPChallenge.findOne({ purpose: "delivery" })).attempts).toBe(
-      1,
-    );
+    ).rejects.toThrow("doesn’t match");
     await completeDelivery(partner, {
       orderId,
       code: "246810",
@@ -197,9 +199,64 @@ describe.skipIf(!uri)("Packing, delivery and COD controls", () => {
       reconcileCOD(admin, { orderId, receivedPaise: 10000, note: "" }),
     ).rejects.toThrow("already");
   });
+  it("allows only a few tries at the code at a time", async () => {
+    await ready();
+    for (let n = 0; n < 5; n++)
+      await expect(completeDelivery(partner, { orderId, code: "111111", cashPaise: 10000 })).rejects.toThrow("doesn’t match");
+    // even the right code waits now: guessing six digits five at a time would take years
+    await expect(completeDelivery(partner, { orderId, code: "246810", cashPaise: 10000 })).rejects.toThrow("Too many attempts");
+    expect((await Order.findById(orderId)).deliveryStatus).toBe("out-for-delivery");
+  });
+  it("sends the code by itself when the parcel leaves the shop, and the rider resends the same code", async () => {
+    await expect(sendDeliveryCodeForRider(partner, orderId)).rejects.toThrow("not assigned to you");
+    await ready();
+    // Start delivery sent it once already
+    expect((await RateLimit.findOne({ key: new RegExp(`^delivery-code:${orderId}:`) }))?.count).toBe(1);
+    await expect(sendDeliveryCodeForRider(other, orderId)).rejects.toThrow("not assigned to you");
+    await expect(sendDeliveryCodeForRider(customer, orderId)).rejects.toThrow("FORBIDDEN");
+    expect(await sendDeliveryCodeForRider(partner, orderId)).toBe("Development delivery code: 246810");
+    // the code it sent closes the delivery, as one the customer asked for would
+    await completeDelivery(partner, { orderId, code: "246810", cashPaise: 10000 });
+    expect((await Order.findById(orderId)).deliveryStatus).toBe("delivered");
+  });
+  it("says so when an order has no phone to send the code to", async () => {
+    await Order.updateOne({ _id: orderId }, { $unset: { "address.phone": "" } });
+    await ready();
+    // Start delivery (in ready) went through without a phone to send to
+    await expect(sendDeliveryCodeForRider(partner, orderId)).rejects.toThrow("no phone number");
+  });
+  it("lets only the owner confirm a delivery the code can't, with the cash counted as the rider's", async () => {
+    await ready();
+    await expect(confirmDeliveryByOwner(admin, { orderId, reason: "Customer has no phone" })).rejects.toThrow("FORBIDDEN");
+    await expect(confirmDeliveryByOwner(partner, { orderId, reason: "Customer has no phone" })).rejects.toThrow("FORBIDDEN");
+    await expect(confirmDeliveryByOwner(owner, { orderId, reason: "no" })).rejects.toThrow();
+    await confirmDeliveryByOwner(owner, { orderId, reason: "Customer has no phone; called her neighbour, she has it" });
+    const order = await Order.findById(orderId);
+    expect([order.deliveryStatus, order.codStatus]).toEqual(["delivered", "collected"]);
+    const cash = await CODCollection.findOne({ orderId });
+    expect([String(cash.collectorId), cash.collectedPaise]).toEqual([partner, 10000]);
+    expect((await InventoryItem.findOne({ variantId })).onHand).toBe(0);
+    const said = await OrderTimelineEvent.findOne({ orderId, dimension: "delivery", next: "delivered" });
+    expect(said.notes).toMatch(/^Confirmed by the owner without the code: Customer has no phone/);
+    // once is enough
+    await expect(confirmDeliveryByOwner(owner, { orderId, reason: "Again, by mistake" })).rejects.toThrow("isn’t with a rider");
+  });
+  it("lets a rider hand over their cash once, and the shop confirm it once", async () => {
+    await ready();
+    await completeDelivery(partner, { orderId, code: "246810", cashPaise: 10000 });
+    await expect(startHandover(other)).rejects.toThrow("no cash with you");
+    expect(await startHandover(partner)).toMatch(/^Handover of ₹100/);
+    await expect(startHandover(partner)).rejects.toThrow("no cash with you");
+    const handover = await CashHandover.findOne({ riderId: partner });
+    expect(handover.amountPaise).toBe(10000);
+    await expect(confirmHandover(partner, { handoverId: String(handover._id) })).rejects.toThrow("FORBIDDEN");
+    expect(await confirmHandover(admin, { handoverId: String(handover._id) })).toBe("Received ₹100: 1 order settled.");
+    expect((await Order.findById(orderId)).codStatus).toBe("reconciled");
+    expect((await CODCollection.findOne({ orderId })).receivedPaise).toBe(10000);
+    await expect(confirmHandover(admin, { handoverId: String(handover._id) })).rejects.toThrow("already confirmed");
+  });
   it("records a cash discrepancy without claiming settlement", async () => {
     await ready();
-    await requestDeliveryOTP(customer, orderId);
     await completeDelivery(partner, {
       orderId,
       code: "246810",

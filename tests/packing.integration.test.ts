@@ -26,7 +26,6 @@ import {
   savePacking,
   assignDelivery,
   partnerTransition,
-  requestDeliveryOTP,
   completeDelivery,
 } from "../src/lib/operations/service";
 import { reorder } from "../src/lib/commerce/service";
@@ -225,7 +224,6 @@ describe.skipIf(!uri)("Packing what the shop actually has", () => {
     await changeOrderStatus(admin, { orderId, dimension: "fulfilment", next: "ready" });
     await assignDelivery(admin, { orderId, partnerId: rider });
     await partnerTransition(rider, { orderId, next: "out-for-delivery" });
-    await requestDeliveryOTP(customer, orderId);
   }
 
   it("takes what wasn't there off a cash bill, works the offer out again, frees the stock and tells the customer", async () => {
@@ -734,7 +732,6 @@ describe.skipIf(!uri)("Packing what the shop actually has", () => {
     expect(await customerTitles()).toEqual(["Order confirmed"]);
     await assignDelivery(admin, { orderId: id, partnerId: rider });
     await partnerTransition(rider, { orderId: id, next: "out-for-delivery" });
-    await requestDeliveryOTP(customer, id);
     await completeDelivery(rider, { orderId: id, code: "246810", cashPaise: 27000 });
     await changeOrderStatus(admin, { orderId: id, dimension: "order", next: "completed" });
     expect(await customerTitles()).toEqual([

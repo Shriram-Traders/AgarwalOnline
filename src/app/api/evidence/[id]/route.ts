@@ -14,8 +14,8 @@ export async function GET(
     return new Response("Not found", { status: 404 });
   const evidence = await UploadedEvidence.findById(id);
   if (!evidence) return new Response("Not found", { status: 404 });
-  // product photos are shown to every shopper, signed in or not; the rest stay private
-  const isProductPhoto = evidence.purpose === "product";
+  // product photos and the developer's photo are shown to every shopper, signed in or not; the rest stay private
+  const isProductPhoto = evidence.purpose === "product" || evidence.purpose === "team";
   if (!isProductPhoto) {
     const user = await currentUser();
     if (!user) return new Response("Not found", { status: 404 });

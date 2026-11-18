@@ -26,6 +26,10 @@
  *
  * 2026-11-12.1: English only. The Marathi versions are gone, and with them the line that the English
  * version prevails, the language cookie and "language" among account details.
+ *
+ * 2026-11-17.1: one delivery code per order: on the order page from the start, the same code sent
+ * by MiniMoth when the order leaves the shop and on every resend, worked out rather than stored, and
+ * a few tries at a time instead of a five-minute expiry.
  */
-export const POLICY_VERSION = "2026-11-12.1";
-export const LAST_UPDATED = { en: "12 November 2026", mr: "12 नोव्हेंबर 2026" } as const;
+export const POLICY_VERSION = "2026-11-17.1";
+export const LAST_UPDATED = { en: "17 November 2026", mr: "17 नोव्हेंबर 2026" } as const;

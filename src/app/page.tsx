@@ -379,13 +379,10 @@ export default async function Home() {
             linkLabel={t.pastOrders}
           >
             <div className="product-grid">
-              {buyAgainRow.map((product, index) => (
-                <ProductCard
-                  key={product.id}
-                  product={product}
-                  locale={locale}
-                  eager={index < 5}
-                />
+              {/* lazy: the first rail starts at the bottom of a phone's first screen (below it on a
+                  computer), and an eager card's photo was preloaded ahead of the page's own styles */}
+              {buyAgainRow.map((product) => (
+                <ProductCard key={product.id} product={product} locale={locale} />
               ))}
             </div>
           </Section>
@@ -399,13 +396,8 @@ export default async function Home() {
             count={products.length}
           >
             <div className="product-grid">
-              {popular.map((product, index) => (
-                <ProductCard
-                  key={product.id}
-                  product={product}
-                  locale={locale}
-                  eager={!buyAgainRow.length && index < 5}
-                />
+              {popular.map((product) => (
+                <ProductCard key={product.id} product={product} locale={locale} />
               ))}
             </div>
           </Section>

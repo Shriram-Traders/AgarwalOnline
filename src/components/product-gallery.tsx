@@ -21,7 +21,8 @@ export function ProductGallery({
     <div className="product-gallery">
       <div className={`product-art large${active ? "" : " quiet"}`}>
         {active ? (
-          <Image src={active} alt={`${name} product view ${selected + 1}`} fill sizes="(max-width:700px) 100vw, 50vw" loading="eager" className="product-photo" />
+          // the largest thing on a product page: fetched ahead of everything that can wait (modern-web-guidance: optimize-image-priority)
+          <Image src={active} alt={`${name} product view ${selected + 1}`} fill sizes="(max-width:700px) 100vw, 50vw" fetchPriority="high" className="product-photo" />
         ) : (
           <AisleIcon slug={category} />
         )}

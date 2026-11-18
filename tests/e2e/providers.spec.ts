@@ -4,7 +4,7 @@
 import { test, expect, type Browser, type Page } from "@playwright/test";
 import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
-import { Category, Product, ProductVariant, User } from "../../src/lib/db/models";
+import { Category, InventoryItem, Product, ProductVariant, User } from "../../src/lib/db/models";
 import { CartLine, Order } from "../../src/lib/commerce/models";
 import { ApprovalRequest } from "../../src/lib/governance/models";
 import { Provider } from "../../src/lib/providers/models";
@@ -64,11 +64,12 @@ test("staff list a product with a new provider; it goes live once the owner appr
   await form.getByLabel("Town").fill("Pali");
   await form.getByLabel(/^Web address/).fill("kale-hamper");
   await form.getByLabel(/^Pack label/).fill("1 box");
-  await form.getByLabel(/^SKU/).fill("KALE-HAMPER");
   await form.getByLabel("Pack quantity").fill("1");
   await form.getByLabel("Selling price (₹)").fill("449");
   await form.getByLabel(/^MRP/).fill("499");
   await form.getByLabel("Opening stock").fill("10");
+  // staff are never asked what the shop paid
+  await expect(form.getByLabel(/^Purchase price/)).toHaveCount(0);
   await shot(staff, "add-product");
   await form.getByRole("button", { name: "Send for approval" }).click();
   await expect(form.getByText("Request sent. The product goes live once an owner approves it.")).toBeVisible({ timeout: 30_000 });
@@ -78,9 +79,10 @@ test("staff list a product with a new provider; it goes live once the owner appr
   // the owner can't put the item live while its provider waits
   const owner = await signedIn(browser, page, OWNER);
   const request = await ApprovalRequest.findOne({ kind: "product", state: "pending" });
-  const review = async () => {
+  const review = async (change?: () => Promise<void>) => {
     await owner.goto(`/super-admin/approvals?review=${request._id}#review`);
     await expect(owner.locator("#review")).toContainText("Kale Toys, Pali");
+    await change?.();
     await owner.locator("#review").getByRole("button", { name: "Record decision" }).click();
     await owner.getByRole("button", { name: /^Yes, / }).click();
   };
@@ -97,11 +99,21 @@ test("staff list a product with a new provider; it goes live once the owner appr
   // the decision buttons give way to its new status
   await expect(panel.locator(".eyebrow")).toContainText("Live", { timeout: 30_000 });
   await expect(panel.getByRole("button", { name: "Approve" })).toHaveCount(0);
-  await review();
+  // the owner corrects the count and adds what the shop paid before approving
+  await review(async () => {
+    const form = owner.locator("#review");
+    await expect(form.getByLabel("Name", { exact: true })).toHaveValue("Kale Hamper");
+    await form.getByLabel("Opening stock").fill("12");
+    await form.getByLabel(/^Purchase price/).fill("300");
+    await shot(owner, "review-edit");
+  });
   // approved, the request leaves the waiting list and the product is live with its provider
   await expect.poll(async () => String((await Product.findOne({ slug: "kale-hamper" }))?.providerId), { timeout: 30_000 }).toBe(
     String(provider._id),
   );
+  const pack = await ProductVariant.findOne({ sku: "kale-hamper-1" }).select("+costPaise");
+  expect([pack.pricePaise, pack.costPaise]).toEqual([44900, 30000]);
+  expect((await InventoryItem.findOne({ variantId: pack._id })).onHand).toBe(12);
 });
 
 test("shoppers see the provider on the card and in the product page's Product info", async ({ page }) => {
@@ -129,7 +141,8 @@ test("shoppers see the provider on the card and in the product page's Product in
 
 test("the basket and the order page name the provider, and the packing slip groups by shop", async ({ browser, page }) => {
   const shopper = await User.findOne({ email: SHOPPER.email });
-  const hamper = await ProductVariant.findOne({ sku: "KALE-HAMPER" });
+  // made from its web address when the product was added
+  const hamper = await ProductVariant.findOne({ sku: "kale-hamper-1" });
   await CartLine.create({ customerId: shopper._id, variantId: hamper._id, quantity: 1 });
   const order = await Order.create({
     customerId: shopper._id,

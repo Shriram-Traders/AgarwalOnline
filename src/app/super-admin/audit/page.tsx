@@ -1,4 +1,4 @@
-import { staffRoleOf, type Role } from "@/lib/auth/permissions";
+import { pickedRole, type Role } from "@/lib/auth/permissions";
 import Link from "next/link";
 import mongoose from "mongoose";
 import { ScrollText } from "lucide-react";
@@ -14,6 +14,7 @@ export const metadata = { title: "Audit trail", robots: { index: false } };
 
 const ROLE_NAMES: Record<string, string> = {
   "super-admin": "Owner",
+  tech: "Tech",
   admin: "Admin",
   delivery: "Delivery partner",
   customer: "Customer",
@@ -107,7 +108,7 @@ export default async function AuditPage({
             <option value="">Everyone</option>
             {actors.map((actor) => (
               <option key={String(actor._id)} value={String(actor._id)}>
-                {actor.name} · {ROLE_NAMES[staffRoleOf(actor.roles as Role[]) ?? "customer"]}
+                {actor.name} · {ROLE_NAMES[pickedRole(actor.roles as Role[]) ?? "customer"]}
               </option>
             ))}
           </select>
@@ -135,7 +136,7 @@ export default async function AuditPage({
               return (
                 <span className="audit-who">
                   <strong>{actor?.name ?? "System"}</strong>
-                  {actor?.roles && <small>{ROLE_NAMES[staffRoleOf(actor.roles as Role[]) ?? "customer"]}</small>}
+                  {actor?.roles && <small>{ROLE_NAMES[pickedRole(actor.roles as Role[]) ?? "customer"]}</small>}
                 </span>
               );
             },

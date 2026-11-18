@@ -2,7 +2,7 @@ import AxeBuilder from "@axe-core/playwright";
 import { test, expect, type Page } from "@playwright/test";
 import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
-import { User } from "../../src/lib/db/models";
+import { Category, InventoryItem, Product, ProductVariant, User } from "../../src/lib/db/models";
 import { ChatConversation } from "../../src/lib/chat/models";
 
 // The staff workspace: its own header, the settings search, the grouped menu with counts and the phone tabs.
@@ -27,14 +27,43 @@ test.beforeAll(async () => {
     { ...SHOPPER, roles: ["customer"], emailVerified: true, passwordHash },
   ]);
   await ChatConversation.create({ customerId: shopper._id, title: CHAT, status: "waiting-support" });
+  // a product to find: its words are in no setting, page or other test's product
+  await removeSearchProduct();
+  const shelf = await Category.findOneAndUpdate(
+    { slug: "ws-search-shelf" },
+    { $setOnInsert: { name: { en: "Workspace Shelf", mr: "Workspace Shelf" } } },
+    { upsert: true, new: true },
+  );
+  const product = await Product.create({
+    slug: "ws-zebrafish-sharpener",
+    name: { en: "Zebrafish Sharpener", mr: "Zebrafish Sharpener" },
+    description: { en: "A sharpener", mr: "A sharpener" },
+    categoryId: shelf._id,
+    categorySlug: "ws-search-shelf",
+    status: "published",
+  });
+  const pack = await ProductVariant.create({ productId: product._id, sku: "WS-ZEBRA-1", label: "1 piece", unit: "piece", packQuantity: 1, pricePaise: 2000, mrpPaise: 2000 });
+  await InventoryItem.create({ variantId: pack._id, onHand: 3, reserved: 0 });
 });
+async function removeSearchProduct() {
+  const product = await Product.findOne({ slug: "ws-zebrafish-sharpener" });
+  if (!product) return;
+  const packs = await ProductVariant.find({ productId: product._id });
+  await InventoryItem.deleteMany({ variantId: { $in: packs.map((pack) => pack._id) } });
+  await ProductVariant.deleteMany({ productId: product._id });
+  await Product.deleteOne({ _id: product._id });
+}
 test.afterAll(async () => {
+  await removeSearchProduct();
+  await Category.deleteOne({ slug: "ws-search-shelf" });
   await ChatConversation.deleteMany({ title: CHAT });
   await User.deleteMany({ phone: { $in: phones } });
   await mongoose.disconnect();
 });
 
 async function signIn(page: Page, who: { email: string }) {
+  // the shop allows 5 email sign-ins per account in 15 minutes; this file signs the owner in more often
+  for (const name of ["ratelimits", "authRateLimits"]) await mongoose.connection.collection(name).deleteMany({});
   await page.goto("/login");
   await page.getByRole("button", { name: "Email", exact: true }).click();
   await page.getByLabel("Email address").fill(who.email);
@@ -43,6 +72,25 @@ async function signIn(page: Page, who: { email: string }) {
   await expect(page).toHaveURL("/admin");
 }
 const finder = (page: Page) => page.getByRole("combobox", { name: "Search the workspace" });
+
+test("a staff list answers as you type, with no button to press, and Clear empties the box", async ({ page }) => {
+  await signIn(page, OWNER);
+  await page.goto("/admin/products");
+  const filters = page.getByRole("search", { name: "Filter products" });
+  await expect(filters.getByRole("button", { name: "Show products" })).toBeHidden();
+  await filters.getByRole("textbox", { name: /^Search/ }).fill("zebrafish");
+  await expect(page).toHaveURL(/\/admin\/products\?q=zebrafish$/);
+  await expect(page.locator(".data-table tbody tr")).toHaveCount(1);
+  await expect(page.locator(".data-table")).toContainText("Zebrafish Sharpener");
+  // the shelf's name finds it too, and picking a category applies at once
+  await filters.getByRole("textbox", { name: /^Search/ }).fill("workspace shelf");
+  await expect(page.locator(".data-table")).toContainText("Zebrafish Sharpener");
+  await filters.getByRole("combobox", { name: "Category" }).selectOption("ws-search-shelf");
+  await expect(page).toHaveURL(/category=ws-search-shelf/);
+  await filters.getByRole("link", { name: "Clear" }).click();
+  await expect(page).toHaveURL("/admin/products");
+  await expect(filters.getByRole("textbox", { name: /^Search/ })).toHaveValue("");
+});
 
 test.describe("desktop", () => {
   test.skip(({ isMobile }) => isMobile, "the phone has its own tests below");
@@ -69,6 +117,20 @@ test.describe("desktop", () => {
     await expect(page.getByRole("option").first()).toContainText("Orders matching");
     await page.keyboard.press("Escape");
     await expect(finder(page)).toHaveAttribute("aria-expanded", "false");
+  });
+
+  test("the search finds real products as you type, and a chip narrows it to them", async ({ page }) => {
+    await signIn(page, OWNER);
+    await finder(page).fill("zebrafish");
+    const option = page.getByRole("option", { name: /Zebrafish Sharpener/ });
+    await expect(option).toBeVisible();
+    const chips = page.getByRole("group", { name: "Search the workspace" });
+    await chips.getByRole("button", { name: /^Products/ }).click();
+    await expect(chips.getByRole("button", { name: /^Products/ })).toHaveAttribute("aria-pressed", "true");
+    await expect(finder(page)).toBeFocused();
+    await expect(page.getByRole("option")).toHaveCount(1);
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL(/\/admin\/products\/[a-f\d]{24}$/);
   });
 
   test("the menu folds, remembers it, and counts what waits", async ({ page }) => {

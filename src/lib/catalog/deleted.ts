@@ -10,6 +10,3 @@ export const notDeleted = { deletedAt: null } as const;
 
 /** A deleted record gives up its SKU or web address, so the same one can be used again. */
 export const deletedName = (text: string, id: unknown) => `${text}-deleted-${String(id).slice(-6)}`;
-
-/** The SKU as people knew it, for history that still shows a deleted pack. */
-export const shownSku = (sku?: string) => sku?.replace(/-deleted-[a-f\d]{6}$/, "");

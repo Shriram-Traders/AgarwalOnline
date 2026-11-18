@@ -5,9 +5,8 @@ import { PageHeading } from "@/components/page-heading";
 import { requirePage } from "@/lib/auth/session";
 import { governanceAction } from "@/lib/governance/actions";
 import { Category, parentsOf } from "@/lib/db/models";
-import { MoneyInput } from "@/components/money-input";
 import { hasPermission } from "@/lib/auth/permissions";
-import { GST_RATES } from "@/lib/tax/gst";
+import { AudienceAndTaxFields, PackFields, ProductDetailsFields } from "@/components/request-fields";
 import { ProductPhotos } from "@/components/product-photos";
 import { ProviderPicker, type ProviderOption } from "@/components/provider-picker";
 import { Provider } from "@/lib/providers/models";
@@ -44,48 +43,12 @@ export default async function NewProductPage() {
       />
       <ActionForm action={governanceAction} submit={isOwner ? "Add product" : "Send for approval"} className="form-stack panel editor-panel">
         <input type="hidden" name="operation" value="product" />
-        <fieldset className="form-section">
-          <legend>Name and description</legend>
-          <label>
-            Name
-            <input name="nameEn" required />
-          </label>
-          <label>
-            Description
-            <textarea name="descriptionEn" required />
-          </label>
-        </fieldset>
-        <fieldset className="form-section">
-          <legend>How shoppers find it</legend>
-          <div className="staff-form-grid">
-            <label>
-              Category
-              <select name="categoryId" required>
-                {shelves.map((item) => (
-                  <option value={String(item._id)} key={String(item._id)}>
-                    {item.name.en}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Brand <small>Optional</small>
-              <input name="brand" />
-            </label>
-            <ProviderPicker
-              owner={isOwner}
-              providers={providers.map((p) => ({ id: String(p._id), name: p.name, town: p.town, status: p.status }))}
-            />
-            <label>
-              Web address <small>Lowercase words joined by dashes, like gel-pen-set</small>
-              <input name="slug" pattern="[a-z0-9]+(?:-[a-z0-9]+)*" spellCheck={false} required />
-            </label>
-            <label>
-              Other words shoppers type <small>Separated by commas, like notebook, diary. Marathi words work too, like वही</small>
-              <input name="aliases" />
-            </label>
-          </div>
-        </fieldset>
+        <ProductDetailsFields shelves={shelves.map((item) => ({ id: String(item._id), name: item.name.en }))}>
+          <ProviderPicker
+            owner={isOwner}
+            providers={providers.map((p) => ({ id: String(p._id), name: p.name, town: p.town, status: p.status }))}
+          />
+        </ProductDetailsFields>
         <fieldset className="form-section" id="photos">
           <legend>
             Photos <small>Optional · the first is the cover</small>
@@ -95,83 +58,10 @@ export default async function NewProductPage() {
         <fieldset className="form-section">
           <legend>First pack</legend>
           <div className="staff-form-grid">
-            <label>
-              Pack label <small>What shoppers see, like “Pack of 10”</small>
-              <input name="label" required />
-            </label>
-            <label>
-              SKU <small>Letters, numbers and dashes</small>
-              <input name="sku" pattern="[A-Za-z0-9-]+" spellCheck={false} required />
-            </label>
-            <label>
-              Unit
-              <select name="unit">
-                {["piece", "kg", "g", "l", "ml"].map((unit) => (
-                  <option key={unit}>{unit}</option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Pack quantity
-              <input name="packQuantity" inputMode="decimal" pattern="[0-9]+(\.[0-9]+)?" required />
-            </label>
-            <label>
-              Selling price (₹)
-              <MoneyInput name="priceRupees" />
-            </label>
-            <label>
-              MRP (₹) <small>The printed price; the saving is worked out from it</small>
-              <MoneyInput name="mrpRupees" />
-            </label>
-            <label>
-              Opening stock
-              <input name="stock" inputMode="numeric" pattern="[0-9]+" required />
-            </label>
-            {isOwner && (
-              <label>
-                School price before GST (₹) <small>Optional: what schools see as the expected price</small>
-                <MoneyInput name="schoolPriceRupees" required={false} />
-              </label>
-            )}
-            {isOwner && (
-              <label>
-                Purchase price (₹) <small>Optional; only owners see it, for profit</small>
-                <MoneyInput name="costRupees" required={false} />
-              </label>
-            )}
+            <PackFields owner={isOwner} />
           </div>
         </fieldset>
-        <fieldset className="form-section">
-          <legend>Who can see it</legend>
-          <label className="checkbox-label">
-            <input type="checkbox" name="showToCustomers" defaultChecked /> Customers
-            <small>In the shop, search, baskets and wishlists</small>
-          </label>
-          <label className="checkbox-label">
-            <input type="checkbox" name="showToSchools" /> Schools
-            <small>In the school catalogue, for quotations</small>
-          </label>
-        </fieldset>
-        <fieldset className="form-section">
-          <legend>Tax <small>Printed on school quotations; can be added later</small></legend>
-          <div className="staff-form-grid">
-            <label>
-              GST rate
-              <select name="gstRatePercent" defaultValue="">
-                <option value="">Not set</option>
-                {GST_RATES.map((rate) => (
-                  <option value={rate} key={rate}>
-                    {rate}%
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              HSN code <small>4, 6 or 8 digits</small>
-              <input name="hsnCode" inputMode="numeric" pattern="[0-9]{4}([0-9]{2}){0,2}" maxLength={8} autoComplete="off" />
-            </label>
-          </div>
-        </fieldset>
+        <AudienceAndTaxFields />
       </ActionForm>
     </section>
   );

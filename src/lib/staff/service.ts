@@ -4,6 +4,8 @@ import {
   assertPermission,
   rolesFor,
   accountRoles,
+  ownerLevel,
+  pickedRole,
   staffRoleOf,
   staffRoles,
   type AccountRole,
@@ -51,7 +53,7 @@ async function giveRole(
   session: mongoose.ClientSession,
   details: Record<string, unknown> = {},
 ) {
-  const previousRole = staffRoleOf(person.roles as Role[]);
+  const previousRole = pickedRole(person.roles as Role[]);
   // a rider who no longer delivers hands back deliveries not yet started; one out for delivery stops this
   if (previousRole === "delivery" && role !== "delivery")
     await releaseRiderOrders(String(person._id), actorId, session, `${person.name} no longer delivers; ready for another rider`);
@@ -69,6 +71,30 @@ async function giveRole(
     ],
     { session },
   );
+}
+
+/**
+ * An owner moves themselves between Owner and Tech: the one change to your own role made here. Both
+ * keep every owner's power, so the shop is never left without one; any other change to your own
+ * account still needs another owner. Roles are read fresh on every request, so it applies at once.
+ */
+export async function setOwnOwnerRole(actorId: string, input: unknown) {
+  await authorize(actorId);
+  const { role } = z.object({ role: z.enum(["super-admin", "tech"]) }).parse(input);
+  await mongoose.connection.transaction(async (session) => {
+    const me = await User.findOne({ _id: actorId, active: true }).session(session);
+    if (!me) throw Error("UNAUTHENTICATED");
+    const previousRole = pickedRole(me.roles as Role[]);
+    if (!ownerLevel(previousRole)) throw Error("Only an owner can switch between Owner and Tech.");
+    if (previousRole === role) return;
+    me.roles = rolesFor(role);
+    await me.save({ session });
+    await AuditLog.create(
+      [{ actorId, action: "staff.grant", target: actorId, details: { role, previousRole, own: true } }],
+      { session },
+    );
+  });
+  return { role };
 }
 
 /** Gives someone picked from the list of existing accounts a staff role. Works for accounts without a phone number. */
@@ -113,7 +139,7 @@ export async function createStaff(actorId: string, input: unknown) {
         throw Error("Manage your own account from your account page. This number is yours.");
       if (
         staffRoleOf(existing.roles as Role[]) === "super-admin" &&
-        data.role !== "super-admin" &&
+        !ownerLevel(data.role) &&
         !(await User.countDocuments({
           roles: "super-admin",
           active: true,
@@ -199,12 +225,12 @@ export async function updateStaff(actorId: string, input: unknown) {
       roles: { $in: staffRoles },
     }).session(session);
     if (!staff) throw Error("Staff account not found.");
-    const currentRole = staffRoleOf(staff.roles as Role[]);
+    const currentRole = pickedRole(staff.roles as Role[]);
     const nextRole = data.role === "customer" ? null : data.role;
     if (
-      currentRole === "super-admin" &&
+      ownerLevel(currentRole) &&
       staff.active &&
-      (nextRole !== "super-admin" || !data.active)
+      (!ownerLevel(nextRole) || !data.active)
     ) {
       const remaining = await User.countDocuments({
         roles: "super-admin",

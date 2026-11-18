@@ -75,7 +75,6 @@ test("Add product: several photos, put in order, go live with the product", asyn
   await main.getByLabel("Description", { exact: true }).fill("Pens for the photo test");
   await main.getByLabel(/^Web address/).fill(slugFor());
   await main.getByLabel(/^Pack label/).fill("Pack of 5");
-  await main.getByLabel(/^SKU/).fill(`PHOTO-PEN-${test.info().project.name.toUpperCase()}`);
   await main.getByLabel("Pack quantity").fill("5");
   await main.getByLabel("Selling price (₹)").fill("99");
   await main.getByLabel(/^MRP/).fill("120");

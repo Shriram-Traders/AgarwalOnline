@@ -6,7 +6,7 @@ import { DataTable } from "@/components/data-table";
 import { ShowMore, rowsShown } from "@/components/show-more";
 import { EmptyState } from "@/components/empty-state";
 import { FilterBar } from "@/components/filter-bar";
-import { MoneyInput } from "@/components/money-input";
+import { PackFields } from "@/components/request-fields";
 import { Popover } from "@/components/popover";
 import { DeleteRow } from "@/components/delete-row";
 import { StockChangeDialog } from "@/components/stock-change-dialog";
@@ -25,7 +25,7 @@ import { InventoryMovement } from "@/lib/commerce/models";
 import { InventoryItem, Product, ProductVariant } from "@/lib/db/models";
 import { DEFAULT_ALERT_BELOW, isLow } from "@/lib/inventory/low-stock";
 import { shopSettings } from "@/lib/settings/shop";
-import { notDeleted, shownSku } from "@/lib/catalog/deleted";
+import { notDeleted } from "@/lib/catalog/deleted";
 import { ApprovalRequest } from "@/lib/governance/models";
 export const metadata = { title: "Stock", robots: { index: false } };
 
@@ -43,7 +43,10 @@ export default async function InventoryPage({
     // purchase prices are read for owners only
     ProductVariant.find(notDeleted).select(isOwner ? "+costPaise" : "").sort({ sku: 1 }).limit(2000),
     InventoryItem.find({}).limit(2000),
-    InventoryMovement.find({}).sort({ at: -1 }).limit(50).populate("variantId", "sku label"),
+    InventoryMovement.find({})
+      .sort({ at: -1 })
+      .limit(50)
+      .populate({ path: "variantId", select: "label productId", populate: { path: "productId", select: "name.en" } }),
     // where a new pack starts (Customize → Form defaults)
     shopSettings("defaults"),
     ApprovalRequest.find({ kind: "delete-pack", state: "pending" }).select("targetId").lean<{ targetId: unknown }[]>(),
@@ -135,7 +138,7 @@ export default async function InventoryPage({
       )}
       <details className="panel create-staff" id="stock-sheet" open={params.sheet === "1"}>
         <summary>Update stock from a spreadsheet</summary>
-        <StockImport />
+        <StockImport owner={isOwner} />
       </details>
       <details className="panel create-staff" id="new-pack" open={params.new === "pack"}>
         <summary>Add a pack size</summary>
@@ -155,63 +158,16 @@ export default async function InventoryPage({
                 ))}
               </select>
             </label>
-            <label>
-              SKU <small>Letters, numbers and dashes</small>
-              <input name="sku" pattern="[A-Za-z0-9-]+" spellCheck={false} required />
-            </label>
-            <label>
-              Pack label <small>What shoppers see, like “Pack of 10”</small>
-              <input name="label" required />
-            </label>
-            <label>
-              Unit
-              <select name="unit">
-                {["piece", "kg", "g", "l", "ml"].map((unit) => (
-                  <option key={unit}>{unit}</option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Pack quantity
-              <input name="packQuantity" inputMode="decimal" pattern="[0-9]+(\.[0-9]+)?" required />
-            </label>
-            <label>
-              Price (₹)
-              <MoneyInput name="priceRupees" />
-            </label>
-            <label>
-              MRP (₹)
-              <MoneyInput name="mrpRupees" />
-            </label>
-            <label>
-              Most one shopper can buy
-              <input name="maxQuantity" inputMode="numeric" pattern="[0-9]+" defaultValue={starts.packOrderLimit} required />
-            </label>
-            <label>
-              Opening stock
-              <input name="stock" inputMode="numeric" pattern="[0-9]+" required />
-            </label>
-            {isOwner && (
-              <label>
-                School price before GST (₹) <small>Optional</small>
-                <MoneyInput name="schoolPriceRupees" required={false} />
-              </label>
-            )}
-            {isOwner && (
-              <label>
-                Purchase price (₹) <small>Optional; only owners see it</small>
-                <MoneyInput name="costRupees" required={false} />
-              </label>
-            )}
+            <PackFields owner={isOwner} orderLimit={starts.packOrderLimit} />
           </div>
         </ActionForm>
       </details>
       <FilterBar label="Filter stock" submitLabel="Show stock" clearHref={filtered ? "/admin/inventory" : undefined}>
         <label>
-          Search <small>product, pack or SKU</small>
+          Search <small>product or pack</small>
           <input name="q" defaultValue={params.q} maxLength={80} />
         </label>
-        <label>
+        <label className="filter-keep">
           Show
           <select name="stock" defaultValue={params.stock ?? ""}>
             <option value="">Every pack</option>
@@ -248,7 +204,7 @@ export default async function InventoryPage({
                 <span>
                   {product ? <Link href={`/admin/products/${product._id}`}>{product.name.en}</Link> : "Unknown product"}
                   <small>
-                    {variant.label} · <code>{variant.sku}</code>
+                    {variant.label}
                     {variant.active === false ? " · hidden pack" : ""}
                   </small>
                 </span>
@@ -354,12 +310,9 @@ export default async function InventoryPage({
           {
             header: "Pack",
             cell: (movement) => {
-              const variant = movement.variantId as unknown as { sku?: string; label?: string };
-              return (
-                <>
-                  {variant?.label} · <code>{shownSku(variant?.sku)}</code>
-                </>
-              );
+              // a deleted pack or product keeps its name, so its history still says what it was
+              const variant = movement.variantId as unknown as { label?: string; productId?: { name?: { en?: string } } };
+              return [variant?.productId?.name?.en, variant?.label].filter(Boolean).join(" · ");
             },
           },
           { header: "What", cell: (movement) => displayStatus(movement.kind) },

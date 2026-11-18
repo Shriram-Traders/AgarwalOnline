@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseEnv } from "../src/lib/env";
-import { hasPermission, assertPermission } from "../src/lib/auth/permissions";
+import { hasPermission, assertPermission, pickedRole, rolesFor, staffHome, staffRoleOf } from "../src/lib/auth/permissions";
 import { digest, otpDigest, equalHash, token } from "../src/lib/auth/crypto";
 import { tenDigitMobile } from "../src/lib/auth/otp";
 const env = {
@@ -78,6 +78,20 @@ describe("security boundaries", () => {
     expect(hasPermission(["customer", "super-admin"], "settings:write")).toBe(true);
     // a staff member keeps every customer permission
     expect(hasPermission(["customer", "admin"], "cart:own")).toBe(true);
+  });
+  it("gives Tech everything an owner has, plus the site's own settings", () => {
+    const tech = rolesFor("tech");
+    expect(tech).toEqual(["customer", "super-admin", "tech"]);
+    expect(hasPermission(tech, "settings:write")).toBe(true);
+    expect(hasPermission(tech, "staff:manage")).toBe(true);
+    expect(hasPermission(tech, "tech:write")).toBe(true);
+    // an owner can't change the developer credits
+    expect(hasPermission(["customer", "super-admin"], "tech:write")).toBe(false);
+    // Tech works in the owner's workspace, and the Staff page names the role
+    expect(staffRoleOf(tech)).toBe("super-admin");
+    expect(staffHome(tech)).toBe("/admin");
+    expect(pickedRole(tech)).toBe("tech");
+    expect(pickedRole(["customer", "admin"])).toBe("admin");
   });
   it("separates OTP subjects and uses opaque high-entropy session tokens", () => {
     expect(

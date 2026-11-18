@@ -2,6 +2,7 @@ import { ActionForm } from "@/components/action-form";
 import { MoneyInput } from "@/components/money-input";
 import { customizeAction } from "@/lib/settings/actions";
 import { DURATIONS, SECTIONS, durationLabel, type FieldSpec, type SectionKey } from "@/lib/settings/shop";
+import { TeamPhotoField } from "./team-photo-field";
 
 type Field = [name: string, spec: FieldSpec];
 
@@ -86,6 +87,8 @@ function Input({ name, spec, value }: { name: string; spec: FieldSpec; value: un
           <input type="color" name={name} defaultValue={String(value)} />
         </label>
       );
+    case "photo":
+      return <TeamPhotoField name={name} label={spec.label} hint={spec.hint} value={String(value ?? "")} />;
     case "text": {
       const Box = spec.long ? "textarea" : "input";
       return (

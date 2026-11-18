@@ -1,15 +1,20 @@
 "use client";
 import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore, type RefObject } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { CornerDownLeft, File, Search, SlidersHorizontal, UserRoundSearch, X, Zap, ReceiptText, type LucideIcon } from "lucide-react";
-import type { Role } from "@/lib/auth/permissions";
+import { CornerDownLeft, File, Package, Search, SlidersHorizontal, UserRound, UserRoundSearch, X, Zap, ReceiptText, type LucideIcon } from "lucide-react";
+import { hasPermission, type Role } from "@/lib/auth/permissions";
+import type { RecordHit } from "@/lib/staff/records";
 import type { Locale } from "@/lib/locale-types";
 import { staffCopy } from "@/lib/staff/copy";
-import { findInWorkspace, type FinderGroupKind, type FinderHit } from "@/lib/staff/finder";
+import { findInWorkspace, type FinderGroup, type FinderGroupKind, type FinderHit } from "@/lib/staff/finder";
 import { highlightTarget } from "./hash-target";
 
 const KIND_ICONS: Record<FinderGroupKind, LucideIcon> = {
+  product: Package,
+  order: ReceiptText,
+  customer: UserRound,
   record: ReceiptText,
   setting: SlidersHorizontal,
   action: Zap,
@@ -17,12 +22,25 @@ const KIND_ICONS: Record<FinderGroupKind, LucideIcon> = {
   goto: File,
 };
 const noop = () => () => {};
+
+type Scope = "all" | "product" | "order" | "customer" | "settings";
+/** Which chip a result belongs to: "Orders matching…" goes with orders, "Customers matching…" with customers. */
+const scopeOf = (hit: FinderHit): Exclude<Scope, "all"> =>
+  hit.kind === "record"
+    ? hit.id === "record.customers"
+      ? "customer"
+      : "order"
+    : hit.kind === "product" || hit.kind === "order" || hit.kind === "customer"
+      ? hit.kind
+      : "settings";
 const isMac = () => /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 
 /**
- * The workspace search. It finds settings, actions and pages (not shop products), plus orders
- * and customers by number, name or phone. As a dropdown under the header bar, or inline in the
- * phone's search sheet. Follows the combobox pattern: focus stays in the box, ↑ ↓ move, Enter opens.
+ * The workspace search. Settings, actions and pages are found in the browser as you type; real
+ * products, orders and customers come from the server a moment later (/api/staff/search), each only
+ * for staff allowed to open them. Chips narrow it to one kind. As a dropdown under the header bar, or
+ * inline in the phone's search sheet. Follows the combobox pattern: focus stays in the box, ↑ ↓ move,
+ * Enter opens.
  */
 export function StaffFinder({
   roles,
@@ -46,11 +64,56 @@ export function StaffFinder({
   const [active, setActive] = useState(0);
   const [said, setSaid] = useState("");
   const mac = useSyncExternalStore(noop, isMac, () => false);
-  const groups = useMemo(() => findInWorkspace(query, { roles, locale }), [query, roles, locale]);
+  const [scope, setScope] = useState<Scope>("all");
+  const [live, setLive] = useState<{ q: string; hits: RecordHit[] } | null>(null);
+  const canProducts = hasPermission(roles, "catalog:write");
+  const canOrders = hasPermission(roles, "order:manage");
+  const trimmed = query.trim();
+  const asks = trimmed.length >= 2 && (canProducts || canOrders);
+  // products, orders and customers from the server, a moment after typing pauses
+  useEffect(() => {
+    if (!asks) return;
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      try {
+        const response = await fetch(`/api/staff/search?q=${encodeURIComponent(trimmed)}`, { signal: controller.signal });
+        if (response.ok) setLive({ q: trimmed, hits: (await response.json()).hits ?? [] });
+      } catch {
+        // a dropped request leaves the last results up
+      }
+    }, 120);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [asks, trimmed]);
+  const searching = asks && live?.q !== trimmed;
+  const found = useMemo(() => findInWorkspace(query, { roles, locale }), [query, roles, locale]);
+  const all = useMemo(() => {
+    // the last answer stays up until the next arrives, so the list doesn't blink while typing
+    const records = asks && live ? live.hits : [];
+    const liveGroups = (["order", "customer", "product"] as const)
+      .map((kind): FinderGroup => ({
+        kind,
+        hits: records
+          .filter((hit) => hit.kind === kind)
+          .map((hit) => ({ id: hit.id, kind, title: hit.title, hint: hit.hint, href: hit.href, image: hit.image })),
+      }))
+      .filter((group) => group.hits.length);
+    // real records lead: an order or phone number with its orders, a word with its products. Settings
+    // match loosely ("pen" is in "open" and "pending"), so they follow; "See all…" links come last.
+    const products = liveGroups.filter((group) => group.kind === "product");
+    const people = liveGroups.filter((group) => group.kind !== "product");
+    const lead = found[0]?.kind === "record" ? [...people, ...products] : [...products, ...people];
+    return [...lead, ...found.filter((group) => group.kind !== "record"), ...found.filter((group) => group.kind === "record")];
+  }, [found, live, asks]);
+  const scopes = (["all", ...(canProducts ? ["product"] : []), ...(canOrders ? ["order", "customer"] : []), "settings"] as Scope[]);
+  const counts = (target: Scope) =>
+    all.flatMap((group) => group.hits).filter((hit) => hit.kind !== "record" && (target === "all" || scopeOf(hit) === target)).length;
+  const groups = scope === "all" ? all : all.map((group) => ({ ...group, hits: group.hits.filter((hit) => scopeOf(hit) === scope) })).filter((group) => group.hits.length);
   const hits = groups.flatMap((group) => group.hits);
   const shown = variant === "inline" || open;
-  const trimmed = query.trim();
-  const nothing = Boolean(trimmed) && !hits.some((hit) => hit.kind !== "record");
+  const nothing = Boolean(trimmed) && !searching && !hits.some((hit) => hit.kind !== "record");
   const current = Math.min(active, Math.max(hits.length - 1, 0));
   const listId = `${id}-list`;
   const optionId = (index: number) => `${id}-option-${index}`;
@@ -81,6 +144,7 @@ export function StaffFinder({
     setOpen(false);
     setQuery("");
     setActive(0);
+    setScope("all");
     highlightTarget(hit.href);
     onPick?.();
   };
@@ -169,6 +233,30 @@ export function StaffFinder({
         )}
       </div>
       <div className="finder-popover" hidden={!shown}>
+        {trimmed && scopes.length > 2 && (
+          <div className="finder-scopes" role="group" aria-label={text.label}>
+            {scopes.map((item) => {
+              const count = counts(item);
+              return (
+                <button
+                  key={item}
+                  type="button"
+                  aria-pressed={scope === item}
+                  // the box keeps the focus, so ↑ ↓ and Enter still work after a tap
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => {
+                    setScope(item);
+                    setActive(0);
+                  }}
+                >
+                  {text.scopes[item]}
+                  {item !== "all" && count > 0 && <b>{count}</b>}
+                </button>
+              );
+            })}
+          </div>
+        )}
+        {searching && !hits.length && <p className="finder-empty">{text.searching}</p>}
         {nothing && <p className="finder-empty">{text.empty(trimmed)}</p>}
         <div id={listId} role="listbox" aria-label={text.label}>
           {groups.map((group, at) => (
@@ -191,7 +279,11 @@ export function StaffFinder({
                     onMouseMove={() => mine !== current && setActive(mine)}
                     onClick={() => picked(hit)}
                   >
-                    <Icon size={18} aria-hidden="true" />
+                    {hit.image ? (
+                      <Image src={hit.image} alt="" width={32} height={32} className="finder-thumb" loading="eager" />
+                    ) : (
+                      <Icon size={18} aria-hidden="true" />
+                    )}
                     <span>
                       <strong>{hit.title}</strong>
                       {hit.hint && <small>{hit.hint}</small>}

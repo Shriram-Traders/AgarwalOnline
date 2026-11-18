@@ -1,3 +1,5 @@
+import { Suspense } from "react";
+import { LiveFilter } from "@/components/filter-live";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronRight, UserPlus, UsersRound } from "lucide-react";
@@ -211,6 +213,9 @@ export default async function SchoolPage({
                 Name, phone or email
               </label>
               <input id="school-find" name="find" defaultValue={term} placeholder="Name, phone or email" maxLength={60} />
+              <Suspense fallback={null}>
+                <LiveFilter />
+              </Suspense>
               <button className="secondary-button compact-button">Find</button>
               {term && (
                 <Link href={`/super-admin/schools/${id}#add`} className="text-button">

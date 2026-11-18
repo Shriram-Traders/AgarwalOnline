@@ -337,8 +337,9 @@ test("Super Admin manages staff and reviews the audit trail", async ({
     await menu.getByRole("link", { name: "Staff & roles" }).click();
   }
   // an existing account is picked from the list and given a role
+  // the list answers as you type: no Find button to press
   await page.getByLabel("Name, phone or email").fill("Picker");
-  await page.getByRole("button", { name: "Find", exact: true }).click();
+  await expect(page).toHaveURL(/find=Picker/);
   await page.getByLabel("Role for Picker Candidate").selectOption("delivery");
   await page
     .locator("form", { has: page.getByLabel("Role for Picker Candidate") })
@@ -559,18 +560,14 @@ test("admin packing through partner delivery and cash reconciliation", async ({
       partnerPage.getByLabel("Customer delivery code"),
     ).toBeVisible();
     await page.goto(`/account/orders/${order._id}`);
-    await page
-      .getByRole("button", { name: "Request delivery confirmation code" })
-      .click();
-    await expect(
-      page.getByText("Development delivery code: 246810"),
-    ).toBeVisible();
+    await expect(page.locator(".delivery-code")).toHaveText("246810");
     await partnerPage.getByLabel("Customer delivery code").fill("246810");
     await partnerPage.getByRole("checkbox").check();
     await partnerPage
       .getByRole("button", { name: "Verify code & mark delivered" })
       .click();
-    await expect(partnerPage).toHaveURL("/delivery");
+    await expect(partnerPage).toHaveURL(/\/delivery\?done=/);
+    await expect(partnerPage.getByRole("status").filter({ hasText: /^Delivered / })).toBeVisible();
     // the customer signs in again in later tests; they've already said "Not now" to rating this order
     await OrderFeedback.create({ orderId: order._id, orderNumber: order.number, state: "skipped" });
     await adminPage.goto(`/admin/orders/${order._id}`);

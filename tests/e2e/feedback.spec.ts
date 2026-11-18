@@ -299,8 +299,8 @@ test("the owner reads the ratings, replies to the low one and the customer sees 
   await expect(main.getByRole("heading", { name: "Everything is read" })).toBeVisible();
   await main.getByRole("link", { name: "All ratings" }).click();
   await expect(cards).toHaveCount(2);
+  // the list answers as you type
   await main.getByLabel(/^Search/).fill("fb-2");
-  await main.getByRole("button", { name: "Show ratings" }).click();
   await expect(cards).toHaveCount(1);
 
   // the customer is told, and sees the reply on the order

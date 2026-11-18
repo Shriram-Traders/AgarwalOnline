@@ -145,6 +145,56 @@ test("catalogue: Load more shows the rest under the first page", async ({ page }
   await expect(main.getByRole("link", { name: /^Load \d+ more/ })).toHaveCount(0);
 });
 
+test("catalogue: the next products appear as you scroll, without tapping anything", async ({ page }) => {
+  const loaded = page.waitForResponse((response) => response.url().includes("/api/catalog/all"));
+  await page.goto("/catalog");
+  await loaded;
+  const main = page.locator("main");
+  await expect(main.locator(".product-grid > *")).toHaveCount(48);
+  await main.locator(".load-more").scrollIntoViewIfNeeded();
+  await expect(main.locator(".product-grid > *")).not.toHaveCount(48);
+  // the address remembers how far down, so Back from a product comes back to the same place
+  await expect(page).toHaveURL(/page=2/);
+});
+
+test("catalogue: once the shop is loaded, shelves, search and sort change on the phone with no page from the server", async ({ page }) => {
+  const loaded = page.waitForResponse((response) => response.url().includes("/api/catalog/all"));
+  await page.goto("/catalog?category=stationery&in=desk");
+  await loaded;
+  // a page drawn by the server is asked for with the "rsc" header (prefetches aside); none may go out from here
+  const fromServer: string[] = [];
+  page.on("request", (request) => {
+    const headers = request.headers();
+    if (headers.rsc && !headers["next-router-prefetch"]) fromServer.push(request.url());
+  });
+  await page.evaluate(() => ((window as unknown as { stayed: boolean }).stayed = true));
+  const rail = page.getByRole("navigation", { name: "Browse product categories" });
+  const heading = page.getByRole("heading", { level: 1 });
+  await rail.getByRole("link", { name: "Notebooks & Paper" }).click();
+  await expect(page).toHaveURL(/category=paper&in=desk$/);
+  await expect(heading).toHaveText("Notebooks & Paper");
+  await expect(rail.getByRole("link", { name: "Notebooks & Paper" })).toHaveAttribute("aria-current", "page");
+  await expect(page).toHaveTitle("Notebooks & Paper online in Nagothane | Agarwal Online");
+  await expect(page.locator("main .product-grid .product-card").first()).toBeVisible();
+  // Back returns to the shelf before, still without the server
+  await page.goBack();
+  await expect(heading).toHaveText("Writing & Pens");
+  // a search and a sort answer on the phone as well
+  const toggle = page.getByRole("button", { name: /Filter & sort/ });
+  if (await toggle.isVisible()) await toggle.click();
+  const form = page.locator("#catalog-filter-form");
+  await form.getByLabel("Sort by").selectOption("price-desc");
+  await expect(page).toHaveURL(/sort=price-desc/);
+  await form.getByRole("searchbox", { name: "Search" }).fill("gel pen");
+  await expect(page).toHaveURL(/q=gel\+pen/);
+  // a search from a shelf looks along that shelf, as the server's page does
+  await expect(heading).toHaveText("Writing & Pens");
+  await expect(page.locator("main .results-line")).toContainText("for “gel pen”");
+  await expect(page.locator("main .product-grid .product-card").first()).toContainText(/gel/i);
+  expect(fromServer).toEqual([]);
+  expect(await page.evaluate(() => (window as unknown as { stayed?: boolean }).stayed)).toBe(true);
+});
+
 test("catalogue: a shelf in two sections shows in each one's rail, and a shelf leads on to the next", async ({ page }) => {
   // the seed puts "Writing & Pens" under Stationery and under Office
   await page.goto("/catalog?category=stationery&in=work");
@@ -166,6 +216,29 @@ test("catalogue: a shelf in two sections shows in each one's rail, and a shelf l
   // a search looks through the whole shop: the rail steps aside
   await page.goto("/catalog?q=pen");
   await expect(rail).toHaveCount(0);
+});
+
+test("catalogue: Filter & sort applies as you pick or type, without reloading the page", async ({ page }) => {
+  await page.goto("/catalog?category=stationery&in=desk");
+  // a mark that a full page load would wipe
+  await page.evaluate(() => ((window as unknown as { stayed: boolean }).stayed = true));
+  const toggle = page.getByRole("button", { name: /Filter & sort/ });
+  if (await toggle.isVisible()) await toggle.click();
+  const form = page.locator("#catalog-filter-form");
+  await form.getByLabel("Sort by").selectOption("price-asc");
+  await expect(page).toHaveURL(/category=stationery&in=desk&sort=price-asc$/);
+  const prices = await page.locator("main .product-grid .product-card .price-row strong").allInnerTexts();
+  const rupees = prices.map((text) => Number(text.replace(/[^\d.]/g, "")));
+  expect(rupees).toEqual([...rupees].sort((a, b) => a - b));
+  await form.getByLabel("In stock only").check();
+  await expect(page).toHaveURL(/inStock=true/);
+  // Featured is the shop's own order: picking it back leaves the address clean
+  await form.getByLabel("Sort by").selectOption({ label: "Featured" });
+  await expect(page).toHaveURL(/category=stationery&in=desk&inStock=true$/);
+  await form.getByRole("searchbox", { name: "Search" }).fill("gel pen");
+  await expect(page).toHaveURL(/q=gel\+pen/);
+  await expect(page.locator("main .product-grid .product-card").first()).toContainText(/gel/i);
+  expect(await page.evaluate(() => (window as unknown as { stayed?: boolean }).stayed)).toBe(true);
 });
 
 test("search: popular searches before typing, then your recent ones", async ({ page }) => {

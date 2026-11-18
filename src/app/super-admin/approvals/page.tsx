@@ -6,7 +6,7 @@ import { EmptyState } from "@/components/empty-state";
 import { PageHeading } from "@/components/page-heading";
 import { DataTable } from "@/components/data-table";
 import { FilterBar } from "@/components/filter-bar";
-import { Category, Product, ProductVariant, User } from "@/lib/db/models";
+import { Category, Product, ProductVariant, User, parentsOf } from "@/lib/db/models";
 import { StatusPill, type Tone } from "@/components/status-pill";
 import { When } from "@/components/when";
 import { requirePage } from "@/lib/auth/session";
@@ -16,6 +16,9 @@ import { ActionForm } from "@/components/action-form";
 import { governanceAction } from "@/lib/governance/actions";
 import { formatIst } from "@/lib/display";
 import { Provider } from "@/lib/providers/models";
+import { MoneyInput } from "@/components/money-input";
+import { AudienceAndTaxFields, PackFields, ProductDetailsFields } from "@/components/request-fields";
+import { hasPermission } from "@/lib/auth/permissions";
 export const metadata = { title: "Approvals", robots: { index: false } };
 
 const VIEWS = {
@@ -29,6 +32,8 @@ const VIEWS = {
 } as const;
 type View = keyof typeof VIEWS;
 const isDelete = (kind: string) => kind === "delete-pack" || kind === "delete-product";
+/** Requests whose details an owner can change before approving (see EDITS in governance/service). */
+const EDITABLE = new Set(["product", "variant", "price", "stock"]);
 const STATES: Record<string, [string, Tone]> = {
   pending: ["Waiting", "warn"],
   approved: ["Approved for later", "warn"],
@@ -43,13 +48,15 @@ export default async function Approvals({
 }: {
   searchParams: Promise<{ view?: string; review?: string }>;
 }) {
-  await requirePage("approval:review");
+  const user = await requirePage("approval:review");
+  // purchase and school prices are for those who may set them
+  const owner = hasPermission(user.roles, "settings:write");
   // changes approved for a later time go live when their time comes, without waiting for the daily job
   await publishScheduled();
   const params = await searchParams;
   const view = (params.view && params.view in VIEWS ? params.view : "waiting") as View;
   const [categories, requests, counts, waitingProviders] = await Promise.all([
-    Category.find({}).select("name"),
+    Category.find({}).select("name parentIds"),
     ApprovalRequest.find(VIEWS[view].match).sort({ createdAt: view === "waiting" ? 1 : -1 }).limit(200),
     Promise.all((Object.keys(VIEWS) as View[]).map((key) => ApprovalRequest.countDocuments(VIEWS[key].match))),
     // providers staff added wait on their own page; say so here, where owners come to decide
@@ -90,6 +97,10 @@ export default async function Approvals({
   const reviewingProvider = provider
     ? `${provider.name}, ${provider.town}${provider.status === "pending" ? " (new: approve it on the Providers page first)" : provider.status === "declined" ? " (declined)" : ""}`
     : undefined;
+  // a product goes on a shelf; a section only groups shelves
+  const sectionIds = new Set(categories.flatMap((item) => parentsOf(item)));
+  const shelves = categories.filter((item) => !sectionIds.has(String(item._id))).map((item) => ({ id: String(item._id), name: item.name.en }));
+  const editable = reviewing?.state === "pending" && EDITABLE.has(reviewing.kind);
   const nameOf = (id: unknown) => people.find((person) => String(person._id) === String(id))?.name ?? "Someone";
   const titleFor = (r: { kind: string; targetId: unknown; after: Record<string, string> }) => {
     if (r.kind === "product") return `New product: ${r.after.nameEn}`;
@@ -160,27 +171,89 @@ export default async function Approvals({
               <h3>Before</h3>
               <ApprovalDetails values={reviewing.before} />
             </div>
-            <div>
-              <h3>Requested change</h3>
-              <ApprovalDetails
-                values={reviewing.after}
-                categoryName={categories.find((c) => String(c._id) === String(reviewing.after.categoryId))?.name.en}
-                providerName={reviewingProvider}
-              />
-            </div>
+            {/* a waiting request's details are in the form below, to change if needed; photos and provider stay as asked */}
+            {!editable ? (
+              <div>
+                <h3>Requested change</h3>
+                <ApprovalDetails
+                  values={reviewing.after}
+                  categoryName={categories.find((c) => String(c._id) === String(reviewing.after.categoryId))?.name.en}
+                  providerName={reviewingProvider}
+                />
+              </div>
+            ) : reviewing.kind === "product" ? (
+              <div>
+                <h3>Photos and provider</h3>
+                <ApprovalDetails
+                  values={{ images: reviewing.after.images ?? [], ...(reviewing.after.providerId ? { providerId: reviewing.after.providerId } : {}) }}
+                  providerName={reviewingProvider}
+                />
+              </div>
+            ) : null}
           </div>
           {reviewing.state === "pending" ? (
             <ActionForm
+              // a fresh form for each request, so one request's values never show on another's
+              key={String(reviewing._id)}
               action={governanceAction}
               submit="Record decision"
               confirmMessage={
                 isDelete(reviewing.kind)
                   ? "Approving deletes it: its stock is written off and it leaves the shop, the Stock page and baskets. Past orders and bills keep it. Rejecting sends it back to the person who asked."
-                  : "Approving publishes the change at the time you chose, or straight away; rejecting sends it back to the person who asked."
+                  : editable
+                    ? "Approving publishes it with the details in this form, at the time you chose or straight away; rejecting sends it back to the person who asked, as they asked it."
+                    : "Approving publishes the change at the time you chose, or straight away; rejecting sends it back to the person who asked."
               }
             >
               <input type="hidden" name="operation" value="review" />
               <input type="hidden" name="requestId" value={String(reviewing._id)} />
+              {editable && (
+                <>
+                  <input type="hidden" name="edit" value="1" />
+                  <p className="muted">
+                    Filled in with what {nameOf(reviewing.requesterId)} asked for. Change anything before you approve; a rejection leaves it as
+                    they asked.
+                  </p>
+                  {reviewing.kind === "product" && (
+                    <>
+                      <ProductDetailsFields values={reviewing.after} shelves={shelves} />
+                      <fieldset className="form-section">
+                        <legend>Pack</legend>
+                        <div className="staff-form-grid">
+                          <PackFields values={reviewing.after} owner={owner} />
+                        </div>
+                      </fieldset>
+                      <AudienceAndTaxFields values={reviewing.after} />
+                    </>
+                  )}
+                  {reviewing.kind === "variant" && (
+                    <fieldset className="form-section">
+                      <legend>Pack</legend>
+                      <div className="staff-form-grid">
+                        <PackFields values={reviewing.after} owner={owner} orderLimit={Number(reviewing.after.maxQuantity)} />
+                      </div>
+                    </fieldset>
+                  )}
+                  {reviewing.kind === "price" && (
+                    <div className="staff-form-grid">
+                      <label>
+                        Selling price (₹)
+                        <MoneyInput name="priceRupees" defaultValue={Number(reviewing.after.pricePaise) / 100} />
+                      </label>
+                      <label>
+                        MRP (₹)
+                        <MoneyInput name="mrpRupees" defaultValue={Number(reviewing.after.mrpPaise) / 100} />
+                      </label>
+                    </div>
+                  )}
+                  {reviewing.kind === "stock" && (
+                    <label>
+                      Stock change <small>12 to add, -3 to take off</small>
+                      <input name="delta" pattern="-?[0-9]+" defaultValue={String(reviewing.after.delta)} required />
+                    </label>
+                  )}
+                </>
+              )}
               <fieldset className="day-picker">
                 <legend>Decision</legend>
                 <label className="checkbox-label">

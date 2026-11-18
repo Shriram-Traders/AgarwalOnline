@@ -55,6 +55,8 @@ export type FieldSpec = Base &
     /** Minutes, picked from a list. */
     | { readonly kind: "duration"; readonly default: number }
     | { readonly kind: "colour"; readonly default: string }
+    /** An uploaded photo's address (TeamPhotoField uploads it; Save keeps it). */
+    | { readonly kind: "photo"; readonly default: string }
   );
 
 export const PAPERS = [
@@ -391,6 +393,14 @@ export const SECTIONS = {
         max: 10000,
       },
       offerDays: { kind: "number", label: "Days a new offer runs", group: "A new offer", default: 30, min: 1, max: 365 },
+      riderPay: {
+        kind: "money",
+        label: "Pay for each delivery (₹)",
+        group: "Delivery partners",
+        hint: "What a partner earns per delivered order. Leave it at 0 if you don’t pay per delivery: their page then shows no pay.",
+        default: 0,
+        max: 100000,
+      },
       analyticsDays: {
         kind: "number",
         label: "Days Analytics shows when it opens",
@@ -398,6 +408,161 @@ export const SECTIONS = {
         default: 30,
         min: 7,
         max: 365,
+      },
+    },
+  },
+  // only Tech can change these (saveShopSettings); the footer card and /p/team show them
+  team: {
+    fields: {
+      pageTitle: { kind: "text", label: "Headline", group: "The team page", default: "The team behind the site", min: 2, max: 80 },
+      pageIntro: {
+        kind: "text",
+        label: "Line under the headline",
+        hint: "Left blank, it says who built the site and that people can get in touch.",
+        long: true,
+        default: "",
+        max: 300,
+      },
+      devName: { kind: "text", label: "Your name", group: "You", default: "Krish Modi", min: 2, max: 60 },
+      devRole: { kind: "text", label: "Your role", default: "Lead developer", min: 2, max: 60 },
+      devPhoto: { kind: "photo", label: "Your photo", hint: "A square photo works best. Until there is one, your initials show.", default: "" },
+      devBio: { kind: "text", label: "About you", hint: "A line or two on the team page. Blank leaves it out.", long: true, default: "", max: 400 },
+      devSkills: {
+        kind: "text",
+        label: "What you work on",
+        hint: "Separated by commas, like Design, Next.js, MongoDB. Blank leaves it out.",
+        default: "",
+        max: 200,
+      },
+      devEmail: {
+        kind: "text",
+        label: "Email",
+        group: "How people reach you",
+        default: "krishmodi3030@gmail.com",
+        max: 120,
+        pattern: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
+        patternMessage: "Email: check the address.",
+      },
+      devWhatsapp: {
+        kind: "text",
+        label: "WhatsApp number",
+        placeholder: "10 digits",
+        default: "",
+        max: 10,
+        pattern: /^[6-9]\d{9}$/,
+        patternMessage: "WhatsApp number: 10 digits, starting with 6, 7, 8 or 9.",
+      },
+      devLinkedin: {
+        kind: "text",
+        label: "LinkedIn link",
+        placeholder: "https://www.linkedin.com/in/yourname",
+        default: "",
+        max: 200,
+        pattern: /^https:\/\/([a-z]{2,3}\.)?linkedin\.com\/\S+$/,
+        patternMessage: "LinkedIn link: start it with https://www.linkedin.com/.",
+      },
+      devGithub: {
+        kind: "text",
+        label: "GitHub link",
+        placeholder: "https://github.com/yourname",
+        default: "",
+        max: 200,
+        pattern: /^https:\/\/(www\.)?github\.com\/\S+$/,
+        patternMessage: "GitHub link: start it with https://github.com/.",
+      },
+      devInstagram: {
+        kind: "text",
+        label: "Instagram link",
+        placeholder: "https://instagram.com/yourname",
+        default: "",
+        max: 200,
+        pattern: /^https:\/\/(www\.)?instagram\.com\/\S+$/,
+        patternMessage: "Instagram link: start it with https://instagram.com/.",
+      },
+      devPortfolio: {
+        kind: "text",
+        label: "Portfolio link",
+        placeholder: "https://",
+        default: "",
+        max: 200,
+        pattern: /^https:\/\/\S+$/,
+        patternMessage: "Portfolio link: start it with https://.",
+      },
+      showFooterCard: { kind: "check", label: "Show your card at the bottom of every shop page", default: true },
+      helperName: {
+        kind: "text",
+        label: "Name",
+        group: "Also on the team",
+        hint: "Left blank, their card is hidden.",
+        default: "Swarnabh",
+        max: 60,
+      },
+      helperRole: { kind: "text", label: "Role", default: "Developer", max: 60 },
+      helperPhoto: { kind: "photo", label: "Their photo", hint: "A square photo works best. Until there is one, their initials show.", default: "" },
+      helperBio: { kind: "text", label: "About them", long: true, default: "", max: 400 },
+      helperSkills: { kind: "text", label: "What they work on", hint: "Separated by commas.", default: "", max: 200 },
+      helperEmail: {
+        kind: "text",
+        label: "Their email",
+        group: "How people reach them",
+        default: "",
+        max: 120,
+        pattern: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
+        patternMessage: "Their email: check the address.",
+      },
+      helperWhatsapp: {
+        kind: "text",
+        label: "Their WhatsApp",
+        placeholder: "10 digits",
+        default: "",
+        max: 10,
+        pattern: /^[6-9]\d{9}$/,
+        patternMessage: "Their WhatsApp: 10 digits, starting with 6, 7, 8 or 9.",
+      },
+      helperLinkedin: {
+        kind: "text",
+        label: "Their LinkedIn",
+        placeholder: "https://www.linkedin.com/in/theirname",
+        default: "",
+        max: 200,
+        pattern: /^https:\/\/([a-z]{2,3}\.)?linkedin\.com\/\S+$/,
+        patternMessage: "Their LinkedIn: start it with https://www.linkedin.com/.",
+      },
+      helperGithub: {
+        kind: "text",
+        label: "Their GitHub",
+        placeholder: "https://github.com/theirname",
+        default: "",
+        max: 200,
+        pattern: /^https:\/\/(www\.)?github\.com\/\S+$/,
+        patternMessage: "Their GitHub: start it with https://github.com/.",
+      },
+      helperInstagram: {
+        kind: "text",
+        label: "Their Instagram",
+        placeholder: "https://instagram.com/theirname",
+        default: "",
+        max: 200,
+        pattern: /^https:\/\/(www\.)?instagram\.com\/\S+$/,
+        patternMessage: "Their Instagram: start it with https://instagram.com/.",
+      },
+      helperPortfolio: {
+        kind: "text",
+        label: "Their portfolio",
+        placeholder: "https://",
+        default: "",
+        max: 200,
+        pattern: /^https:\/\/\S+$/,
+        patternMessage: "Their portfolio: start it with https://.",
+      },
+      hireOn: { kind: "check", label: "Show a box for people who want a website", group: "Work with us", default: true },
+      hireTitle: { kind: "text", label: "Its heading", default: "Want a website like this one?", min: 2, max: 80 },
+      hireText: {
+        kind: "text",
+        label: "Its text",
+        long: true,
+        default: "We build websites for local shops and businesses. Get in touch to talk about yours.",
+        max: 300,
       },
     },
   },
@@ -468,6 +633,13 @@ function schemaOf(name: string, spec: FieldSpec): z.ZodType {
       return z.number().refine((value) => (DURATIONS as readonly number[]).includes(value), `${label}: pick one.`);
     case "colour":
       return z.string().regex(/^#[0-9a-f]{6}$/i, `${label}: pick a colour.`);
+    case "photo":
+      // stored by the upload (this site's own address, or the photo service's https one), or none
+      return z
+        .string()
+        .trim()
+        .max(500)
+        .refine((value) => !value || /^(https:\/\/\S+|\/api\/evidence\/[a-f0-9]{24})$/.test(value), `${label}: upload the photo again.`);
     default:
       throw Error(`Unknown field kind for ${name}`);
   }
@@ -549,7 +721,7 @@ export async function saveShopSettings(actorId: string, section: SectionKey, for
   if (!mongoose.isValidObjectId(actorId)) throw Error("UNAUTHENTICATED");
   const actor = await User.findOne({ _id: actorId, active: true });
   if (!actor) throw Error("UNAUTHENTICATED");
-  assertPermission(actor.roles as Role[], "settings:write");
+  assertPermission(actor.roles as Role[], section === "team" ? "tech:write" : "settings:write");
   const after = valuesFromForm(section, form);
   await mongoose.connection.transaction(async (session) => {
     const before = (await SystemSetting.findOne({ key: keyOf(section) }).session(session))?.value ?? null;

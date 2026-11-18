@@ -93,6 +93,8 @@
   /* ---------- buttons are pills ---------- */
   & :is(.primary-button, .secondary-button, .orange-button, .filter-toggle, .add-button, .google-button) { border-radius: var(--r-pill); }
   & .secondary-button:not(.hero-actions *) { border-color: var(--line); background: var(--paper); }
+  /* the base hover turns the words white; without the dark fill they vanished on the white pill */
+  & .secondary-button:not(.hero-actions *):hover { border-color: var(--ink); background: var(--ink); color: var(--canvas); }
   & .add-button { border-color: var(--brand); }
 
   /* ---------- cards: white, borderless, floating; no rules under headings ---------- */

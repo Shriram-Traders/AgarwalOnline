@@ -1,3 +1,5 @@
+import { Suspense } from "react";
+import { LiveFilter } from "@/components/filter-live";
 import Link from "next/link";
 import { requirePage } from "@/lib/auth/session";
 import { hasPermission, type Permission } from "@/lib/auth/permissions";
@@ -239,6 +241,9 @@ export default async function Admin({
               Order number, customer name or phone
             </label>
             <input id="order-q" name="q" defaultValue={term} placeholder="Order number, name or phone" maxLength={60} />
+            <Suspense fallback={null}>
+              <LiveFilter />
+            </Suspense>
             <button className="secondary-button compact-button">Find</button>
             {term && (
               <Link href={filter ? `/admin?status=${filter}#orders` : "/admin#orders"} className="text-button">

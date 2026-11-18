@@ -1,6 +1,7 @@
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
 import { FilterMore } from "./filter-more";
+import { LiveFilter } from "./filter-live";
 
 /**
  * The GET filter bar above admin lists. Three pages wrote this by hand with no
@@ -26,6 +27,10 @@ export function FilterBar({
   return (
     <form className="audit-filters" role="search" aria-label={label}>
       {children}
+      {/* the list answers as you type or pick (filter-live.tsx); it reads the address, hence Suspense */}
+      <Suspense fallback={null}>
+        <LiveFilter />
+      </Suspense>
       <FilterMore />
       <button className="primary-button">{submitLabel}</button>
       {clearHref ? (

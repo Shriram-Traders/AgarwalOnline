@@ -5,6 +5,7 @@ import { requirePermission } from "../auth/session";
 import type { MutationState } from "../commerce/actions";
 import { log } from "../logger";
 import { BILL_STYLES, SECTION_KEYS, saveBillStyle, saveShopSettings, type SectionKey } from "./shop";
+import { storeEvidence } from "../evidence/service";
 
 const SAVED: Record<SectionKey, string> = {
   bill: "Bill settings saved. Every bill opened from now on uses them.",
@@ -15,6 +16,7 @@ const SAVED: Record<SectionKey, string> = {
   numbers: "Numbering saved. New orders and quotations use it.",
   defaults: "Defaults saved. New packs, areas, delivery times and offers start from them.",
   queues: "Work queue timings saved.",
+  team: "Developer and team saved. The footer card and the team page show it within a minute.",
 };
 
 /** Customize: an owner saves one section (the form's hidden `section` field says which). */
@@ -45,5 +47,23 @@ export async function billStyleAction(_state: MutationState, form: FormData): Pr
     if (e instanceof z.ZodError) return { error: "Pick one of the bill styles." };
     log("error", "customize.bill-style-error", { error: e });
     return { error: "Unable to save. Try again." };
+  }
+}
+
+/**
+ * Settings → Developer and team: stores the photo Tech picked and gives back its address for the
+ * form's photo field. It shows on the card once the section is saved.
+ */
+export async function uploadTeamPhotoAction(form: FormData): Promise<{ url?: string; error?: string }> {
+  try {
+    const user = await requirePermission("tech:write");
+    const evidence = await storeEvidence(user.id, { file: form.get("file") as File, purpose: "team" });
+    return { url: evidence.url as string };
+  } catch (error) {
+    const text = error instanceof Error ? error.message : "";
+    if (/^(Choose|Photographs|Use a|Image storage)/.test(text)) return { error: text };
+    if (text === "FORBIDDEN" || text === "UNAUTHENTICATED") return { error: "Only Tech can change the developer’s photo." };
+    log("error", "team.photo-error", { error });
+    return { error: "Unable to upload this photo. Please try again." };
   }
 }

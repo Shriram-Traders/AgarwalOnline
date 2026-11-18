@@ -9,7 +9,8 @@ const evidenceSchema = new Schema(
     purpose: {
       type: String,
       // "product-draft": chosen on Add product before the product exists; it becomes "product" once the product is made
-      enum: ["complaint", "packing", "delivery", "failed-delivery", "product", "product-draft"],
+      // "team": the developer's photo on the footer card and /p/team, public like product photos
+      enum: ["complaint", "packing", "delivery", "failed-delivery", "product", "product-draft", "team"],
       required: true,
     },
     provider: { type: String, enum: ["local", "cloudinary"], required: true },

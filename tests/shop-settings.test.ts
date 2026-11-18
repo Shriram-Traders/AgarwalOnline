@@ -59,9 +59,10 @@ describe("shop settings", () => {
     });
     const defaults = valuesFromForm(
       "defaults",
-      form({ packOrderLimit: "12", areaFeeRupees: "40", areaCodLimitRupees: "2500.50", slotCapacity: "15", offerDays: "7", analyticsDays: "60" }),
+      form({ packOrderLimit: "12", areaFeeRupees: "40", areaCodLimitRupees: "2500.50", slotCapacity: "15", offerDays: "7", analyticsDays: "60", riderPayRupees: "25" }),
     );
     expect(defaults.areaFee).toBe(4000);
+    expect(defaults.riderPay).toBe(2500);
     expect(defaults.areaCodLimit).toBe(250050);
   });
 
@@ -90,5 +91,36 @@ describe("shop settings", () => {
     // an owner's own headline can still name the same-day time
     const timed = readValues("storefront", { heroTitle: { en: "Order by {cutoff},", mr: "" } });
     expect(fill(frontWords(timed, "heroTitle", "en"), { cutoff: "3 PM" })).toBe("Order by 3 PM,");
+  });
+
+  it("credit the developer until Tech changes it, and hide contacts left blank", () => {
+    const defaults = defaultsOf("team");
+    // as a browser sends the form: a ticked box as "on", an unticked one not at all
+    const team = Object.fromEntries(
+      Object.entries(defaults).flatMap(([key, value]) =>
+        typeof value === "boolean" ? (value ? [[key, "on"]] : []) : [[key, String(value)]],
+      ),
+    ) as Record<string, string>;
+    expect(team.devName).toBe("Krish Modi");
+    expect(team.devRole).toBe("Lead developer");
+    expect(team.devEmail).toBe("krishmodi3030@gmail.com");
+    expect([team.devPhoto, team.devWhatsapp, team.devInstagram, team.devLinkedin, team.devPortfolio]).toEqual(["", "", "", "", ""]);
+    expect(team.helperName).toBe("Swarnabh");
+    expect([defaults.showFooterCard, defaults.hireOn]).toEqual([true, true]);
+    // Swarnabh's card can be hidden by leaving his name blank, and takes the same kinds of contact
+    expect(valuesFromForm("team", form({ ...team, helperName: "" })).helperName).toBe("");
+    expect(() => valuesFromForm("team", form({ ...team, helperWhatsapp: "12345" }))).toThrow(ZodError);
+    expect(valuesFromForm("team", form({ ...team, helperGithub: "https://github.com/swarnabh" })).helperGithub).toBe("https://github.com/swarnabh");
+    const saved = valuesFromForm(
+      "team",
+      form({ ...team, devWhatsapp: "9876543210", devLinkedin: "https://www.linkedin.com/in/krish", devInstagram: "https://instagram.com/krish" }),
+    );
+    expect(saved.devWhatsapp).toBe("9876543210");
+    expect(() => valuesFromForm("team", form({ ...team, devWhatsapp: "12345" }))).toThrow(ZodError);
+    expect(() => valuesFromForm("team", form({ ...team, devLinkedin: "linkedin.com/in/krish" }))).toThrow(ZodError);
+    expect(() => valuesFromForm("team", form({ ...team, devPhoto: "http://example.com/me.jpg" }))).toThrow(ZodError);
+    // an uploaded photo: this site's own address, or the photo service's
+    expect(valuesFromForm("team", form({ ...team, devPhoto: "/api/evidence/0123456789abcdef01234567" })).devPhoto).toBe("/api/evidence/0123456789abcdef01234567");
+    expect(valuesFromForm("team", form({ ...team, devPhoto: "https://res.cloudinary.com/x/me.jpg" })).devPhoto).toBe("https://res.cloudinary.com/x/me.jpg");
   });
 });

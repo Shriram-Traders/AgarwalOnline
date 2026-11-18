@@ -43,8 +43,22 @@ export function ActionForm({
   /** Turn the button off when the form can't succeed yet (the page says why). */
   disabled?: boolean;
 }) {
-  const safe = useMemo(() => safeAction(action, offlineMessage), [action, offlineMessage]);
-  const [state, dispatch, pending] = useActionState(safe, {});
+  /**
+   * React's own reset after a save puts each field back to what the page first drew. A drop-down
+   * never learns the saved value (React doesn't move a <select>'s starting choice when the page
+   * refreshes), so the colour theme showed the old one after saving and a second Save brought it
+   * back. Instead the reset is always refused, and each save that goes through draws the fields
+   * afresh (`drawn` keys the form) from the page as it now is: saved values on an edit form,
+   * empty boxes on an "add" one.
+   */
+  const safe = useMemo(() => {
+    const save = safeAction(action, offlineMessage);
+    return async (previous: MutationState & { drawn?: number }, form: FormData) => {
+      const result = await save(previous, form);
+      return { ...result, drawn: (previous.drawn ?? 0) + (result.success ? 1 : 0) };
+    };
+  }, [action, offlineMessage]);
+  const [state, dispatch, pending] = useActionState(safe, { drawn: 0 });
   const [confirming, setConfirming] = useState(false);
   const approved = useRef(false);
   const formRef = useRef<HTMLFormElement>(null);
@@ -53,14 +67,16 @@ export function ActionForm({
   const opener = useRef<HTMLElement | null>(null);
   const titleId = useId();
   const messageId = useId();
+  const drawn = state.drawn;
+  const button = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     if (state.success) onSuccess?.(state.success);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once per save, whatever the parent re-renders
   }, [state]);
-  // an "add" form should still empty itself once the save goes through
-  const keepAfterError = (event: React.FormEvent) => {
-    if (state.error) event.preventDefault();
-  };
+  // the fresh fields took focus with them; give it back to the button that saved
+  useEffect(() => {
+    if (drawn && document.activeElement === document.body) button.current?.focus({ preventScroll: true });
+  }, [drawn]);
 
   /** Close without submitting and hand focus back to whatever opened the dialog. */
   const dismiss = useCallback(() => {
@@ -101,10 +117,11 @@ export function ActionForm({
   return (
     <>
       <form
+        key={drawn}
         ref={formRef}
         action={dispatch}
         className={className}
-        onReset={keepAfterError}
+        onReset={keepTyped}
         onSubmit={(event) => {
           if (confirmMessage && !approved.current) {
             event.preventDefault();
@@ -116,7 +133,7 @@ export function ActionForm({
         {children}
         {state.error && <p role="alert" className="error-message">{state.error}</p>}
         {state.success && <p role="status" className="success-message">{state.success}</p>}
-        <button className={buttonClassName} disabled={pending || disabled} aria-busy={pending}>
+        <button ref={button} className={buttonClassName} disabled={pending || disabled} aria-busy={pending}>
           {!pending && submitIcon}
           {pending ? "Please wait…" : submit}
         </button>

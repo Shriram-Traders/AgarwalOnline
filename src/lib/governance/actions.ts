@@ -57,7 +57,13 @@ export async function governanceAction(
       success = live ? "Deleted." : "Request sent. An owner decides whether it goes.";
       if (live && data.target === "product") leaveFor = "/admin/products?deleted=1";
     } else if (operation === "review") {
-      await reviewApproval(user.id, data);
+      // with the request's own fields (an owner may change them first), unticked boxes send nothing
+      await reviewApproval(
+        user.id,
+        form.get("edit") === "1"
+          ? { ...data, showToCustomers: form.get("showToCustomers") === "on", showToSchools: form.get("showToSchools") === "on" }
+          : data,
+      );
       success = "Decision saved.";
     } else if (operation === "withdraw") {
       await withdrawRequest(user.id, form.get("requestId"));

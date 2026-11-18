@@ -5,7 +5,10 @@ import { StatusPill } from "@/components/status-pill";
 import { formatPrice } from "@/lib/display";
 import { HandCoins } from "lucide-react";
 import { requirePage } from "@/lib/auth/session";
-import { CODCollection } from "@/lib/operations/models";
+import { CashHandover, CODCollection } from "@/lib/operations/models";
+import { operationAction } from "@/lib/operations/actions";
+import { ActionForm } from "@/components/action-form";
+import { When } from "@/components/when";
 import { PageHeading } from "@/components/page-heading";
 export const metadata = { title: "Cash on delivery", robots: { index: false } };
 
@@ -16,6 +19,8 @@ export default async function CODPage() {
     .limit(250)
     .populate("orderId", "number codStatus")
     .populate("collectorId", "name");
+  // what riders say they've handed over, oldest first: counted and confirmed here
+  const handovers = await CashHandover.find({ confirmedAt: null }).sort({ createdAt: 1 }).populate("riderId", "name");
   const open = collections.filter((item) => !item.reconciledAt);
   const discrepancies = collections.filter(
     (item) => item.discrepancyPaise && !item.discrepancyResolvedAt,
@@ -25,8 +30,37 @@ export default async function CODPage() {
       <PageHeading
         eyebrow="Run the store"
         title="Cash on delivery"
-        lead="Cash the delivery partners collected, what was handed over at the counter, and any difference still to settle. Open an order to record a handover."
+        lead="Cash the delivery partners collected, what was handed over at the counter, and any difference still to settle. Confirm a rider’s handover once you have counted it; if it’s short, settle it order by order on the order page."
       />
+      {handovers.length > 0 && (
+        <section aria-labelledby="handovers-title">
+          <h2 id="handovers-title">Handovers to confirm</h2>
+          <DataTable
+            caption="Cash riders say they handed over, waiting to be counted"
+            rows={handovers}
+            rowKey={(h) => String(h._id)}
+            columns={[
+              { header: "Rider", cell: (h) => (h.riderId as unknown as { name?: string })?.name ?? "Rider" },
+              { header: "Orders", numeric: true, cell: (h) => h.collectionIds.length },
+              { header: "Amount", numeric: true, cell: (h) => formatPrice(h.amountPaise) },
+              { header: "Handed over", cell: (h) => <When at={h.createdAt} /> },
+              {
+                header: "Counted",
+                cell: (h) => (
+                  <ActionForm
+                    action={operationAction}
+                    submit={`Received ${formatPrice(h.amountPaise)}`}
+                    confirmMessage={`All ${formatPrice(h.amountPaise)} from ${(h.riderId as unknown as { name?: string })?.name ?? "the rider"} is here? Each order in it is settled.`}
+                  >
+                    <input type="hidden" name="operation" value="confirm-handover" />
+                    <input type="hidden" name="handoverId" value={String(h._id)} />
+                  </ActionForm>
+                ),
+              },
+            ]}
+          />
+        </section>
+      )}
       <div className="analytics-cards">
         <article className="panel">
           <small>Waiting for handover</small>

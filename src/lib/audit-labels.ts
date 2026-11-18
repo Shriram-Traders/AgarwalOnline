@@ -1,5 +1,6 @@
 /** What each audit code means, in the words an owner would use. The code itself stays visible next to it. */
 const LABELS: Record<string, string> = {
+  "approval.edit": "Changed a request before approving it",
   "approval.publish.delete-pack": "Deleted a pack",
   "approval.publish.delete-product": "Deleted a product",
   "approval.publish.provider-billing": "Applied a provider's tax and billing details",

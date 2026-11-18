@@ -5,8 +5,9 @@ import { staffCopy } from "./copy";
 import { navFor } from "./nav";
 import { FINDER_INDEX, type FinderEntry, type FinderKind } from "./search-index";
 
-export type FinderGroupKind = "record" | FinderKind | "goto";
-export type FinderHit = { id: string; kind: FinderGroupKind; title: string; hint?: string; href: string };
+/** "product", "order" and "customer" are real records, found on the server as you type (records.ts). */
+export type FinderGroupKind = "record" | FinderKind | "goto" | "product" | "order" | "customer";
+export type FinderHit = { id: string; kind: FinderGroupKind; title: string; hint?: string; href: string; image?: string };
 export type FinderGroup = { kind: FinderGroupKind; hits: FinderHit[] };
 
 const PER_GROUP = 5;

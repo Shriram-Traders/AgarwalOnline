@@ -46,7 +46,8 @@ export default async function AnalyticsPage({
       <PageHeading
         eyebrow="Run the store"
         title="Analytics"
-        lead="Sales, profit, stock, customers and delivery for the dates you choose."
+        // profit is an owner's alone; staff aren't told there is any
+        lead={`Sales${isOwner ? ", profit" : ""}, stock, customers and delivery for the dates you choose.`}
         aside={
           <a
             className="secondary-button"

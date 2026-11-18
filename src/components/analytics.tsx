@@ -73,5 +73,8 @@ export function Analytics({ id }: { id: string }) {
     last.current = here;
   }, [pathname, search]);
 
-  return <Script src={`https://www.googletagmanager.com/gtag/js?id=${id}`} strategy="afterInteractive" />;
+  // after the page has loaded, not before: gtag.js is ~196 KB and "afterInteractive" preloaded it in <head>, where it
+  // took about a second of a 4G phone's bandwidth from the styles the first paint waits for. Page views typed
+  // into the queue above still go once it arrives; only a visit that leaves within the first seconds goes uncounted.
+  return <Script src={`https://www.googletagmanager.com/gtag/js?id=${id}`} strategy="lazyOnload" />;
 }

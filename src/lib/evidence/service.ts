@@ -41,6 +41,7 @@ export async function storeEvidence(
         "failed-delivery",
         "product",
         "product-draft",
+        "team",
       ]),
       orderId: objectId.optional(),
       complaintId: objectId.optional(),
@@ -92,6 +93,9 @@ export async function storeEvidence(
   } else if (data.purpose === "product-draft") {
     // a photo for a product that doesn't exist yet: Add product
     if (!hasPermission(actor.roles as Role[], "catalog:write")) throw Error("FORBIDDEN");
+  } else if (data.purpose === "team") {
+    // the developer's photo: Settings → Developer and team
+    if (!hasPermission(actor.roles as Role[], "tech:write")) throw Error("FORBIDDEN");
   }
 
   const bytes = Buffer.from(await input.file.arrayBuffer());
@@ -149,7 +153,8 @@ export async function storeEvidence(
     sha256,
     // product photos are catalogue content, not evidence: they must never expire; a draft one
     // goes away unless the product it was chosen for is sent for approval
-    ...(data.purpose === "product"
+    // the developer's photo stays as long as the card shows it
+    ...(data.purpose === "product" || data.purpose === "team"
       ? {}
       : {
           expiresAt: new Date(

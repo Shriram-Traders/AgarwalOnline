@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requirePermission } from "../auth/session";
 import type { MutationState } from "../commerce/actions";
-import { createStaff, grantStaffRole, updateStaff } from "./service";
+import { createStaff, grantStaffRole, setOwnOwnerRole, updateStaff } from "./service";
 import { plainMessage } from "../form-errors";
 
 export async function staffAction(
@@ -36,6 +36,10 @@ export async function staffAction(
       await grantStaffRole(actor.id, input);
       granted = String(form.get("userId"));
     }
+    else if (operation === "own-role") {
+      const { role } = await setOwnOwnerRole(actor.id, input);
+      success = role === "tech" ? "You’re Tech now: Settings shows Developer and team." : "You’re an owner now, without the Tech settings.";
+    }
     else if (operation === "update") {
       const { released } = await updateStaff(actor.id, input);
       if (released)
@@ -48,7 +52,7 @@ export async function staffAction(
   } catch (error) {
     if (error instanceof z.ZodError) return { error: plainMessage(error) };
     const message = error instanceof Error ? error.message : "";
-    if (/^(Manage your|Keep at least|Staff account|Name, work|This rider has|Enter a 10-digit|Already a customer)/.test(message))
+    if (/^(Manage your|Keep at least|Staff account|Name, work|This rider has|Enter a 10-digit|Already a customer|Only an owner)/.test(message))
       return { error: message };
     if (/duplicate key/i.test(message))
       return { error: "That email or phone number is already in use." };
