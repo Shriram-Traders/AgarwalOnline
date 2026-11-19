@@ -39,6 +39,8 @@ const collectionSchema = new Schema(
     discrepancyResolvedAt: Date,
     /** the rider's handover this cash went into, so it is handed over only once */
     handoverId: { type: Schema.Types.ObjectId, ref: "CashHandover" },
+    /** cash, or UPI to the shop's own account at the door (never with the rider: the owner checks it came in) */
+    method: { type: String, enum: ["cash", "upi"], default: "cash" },
   },
   { timestamps: true, strict: "throw" },
 );

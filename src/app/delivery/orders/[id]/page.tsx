@@ -17,6 +17,8 @@ import { When } from "@/components/when";
 import { formatPrice, noBreakTimes } from "@/lib/display";
 import { inBagOf, lineNotes, type PackedLine } from "@/lib/operations/packing";
 import { taxProfile } from "@/lib/tax/profile";
+import { doorUpi } from "@/lib/settings/shop";
+import { qrPath } from "@/lib/qr";
 export const metadata = { title: "Delivery", robots: { index: false } };
 
 /** A photo that backs up what happened at the door: optional, so it never stands in the way of the main step. */
@@ -54,6 +56,17 @@ export default async function DeliveryOrder({
     taxProfile(),
   ]);
   const cod = o.paymentMethod === "cod";
+  // UPI at the door, once the shop has a UPI ID: a QR for this order's amount, paid straight to the shop
+  const { upiId, accountName } = (await doorUpi()) ?? { upiId: "", accountName: "" };
+  const payee = accountName || shop.legalName || "Agarwal Online";
+  const upi =
+    cod && upiId
+      ? qrPath(
+          `upi://pay?${new URLSearchParams({ pa: upiId, pn: payee, am: (o.totalPaise / 100).toFixed(2), cu: "INR", tn: `Order ${o.number}` })
+            .toString()
+            .replace(/\+/g, "%20")}`,
+        )
+      : null;
   const phone: string | undefined = o.address.phone || undefined;
   return (
     <section className="page-container">
@@ -145,11 +158,38 @@ export default async function DeliveryOrder({
                   <input type="hidden" name="operation" value="send-delivery-code" />
                 </ActionForm>
               )}
-              <ActionForm action={operationAction} submit="Verify code & mark delivered">
+              <ActionForm action={operationAction} submit="Verify code & mark delivered" className="form-stack deliver-form">
                 <input type="hidden" name="orderId" value={id} />
                 <input type="hidden" name="operation" value="deliver" />
                 {/* nothing to type for the cash: the rider confirms the amount below */}
                 <input type="hidden" name="cashRupees" value={cod ? (o.totalPaise / 100).toFixed(2) : "0"} />
+                {upi && (
+                  <>
+                    <fieldset className="pay-choice">
+                      <legend>How is the customer paying?</legend>
+                      <label className="checkbox-label">
+                        <input type="radio" name="method" value="cash" defaultChecked /> Cash
+                      </label>
+                      <label className="checkbox-label">
+                        <input type="radio" name="method" value="upi" /> UPI
+                      </label>
+                    </fieldset>
+                    {/* shown once UPI is picked (CSS): the customer scans it, the amount and order are filled in */}
+                    <figure className="upi-pay">
+                      <svg viewBox={`0 0 ${upi.size} ${upi.size}`} role="img" aria-label={`UPI QR code: pay ${formatPrice(o.totalPaise)} to ${payee}`}>
+                        {/* black on white whatever the theme: that's what a phone's camera reads */}
+                        <rect width={upi.size} height={upi.size} fill="#fff" />
+                        <path d={upi.d} fill="#000" />
+                      </svg>
+                      <figcaption>
+                        <strong>{formatPrice(o.totalPaise)}</strong> to {payee}
+                        <small>
+                          {upiId} · Order {o.number}. Wait until their app says the payment went through.
+                        </small>
+                      </figcaption>
+                    </figure>
+                  </>
+                )}
                 <label>
                   Customer delivery code
                   <input
@@ -163,9 +203,21 @@ export default async function DeliveryOrder({
                 </label>
                 <label>
                   <input type="checkbox" required />
-                  {cod
-                    ? `I handed over the complete order and collected ${formatPrice(o.totalPaise)} in cash.`
-                    : "I handed over the complete order."}
+                  {!cod ? (
+                    "I handed over the complete order."
+                  ) : (
+                    <>
+                      <span className="if-cash">
+                        I handed over the complete order and collected {formatPrice(o.totalPaise)} in cash.
+                      </span>
+                      {upi && (
+                        <span className="if-upi">
+                          I handed over the complete order, and saw the customer’s UPI payment of {formatPrice(o.totalPaise)} go
+                          through.
+                        </span>
+                      )}
+                    </>
+                  )}
                 </label>
               </ActionForm>
               <p className="muted">

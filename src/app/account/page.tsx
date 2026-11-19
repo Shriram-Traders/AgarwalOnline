@@ -34,6 +34,9 @@ import { currentLocale } from "@/lib/i18n";
 import { customerStage } from "@/lib/display";
 import { dayLabel } from "@/lib/commerce/slots";
 import { OrderHistory } from "@/components/order-history";
+import { ProductCard } from "@/components/product-card";
+import { catalog } from "@/lib/catalog/queries";
+import { buyAgain } from "@/lib/catalog/buy-again";
 import { representsActiveSchool } from "@/lib/schools/membership";
 export const metadata = { title: "Your account", robots: { index: false } };
 export default async function Account({
@@ -46,7 +49,7 @@ export default async function Account({
   const home = staffHome(user.roles);
   const locale = await currentLocale();
   const mr = locale === "mr";
-  const profile = await User.findById(user.id).select("preferredPaymentMethod substitutionPreference");
+  const profile = await User.findById(user.id).select("preferredPaymentMethod substitutionPreference basketReminders");
   const representsSchool = await representsActiveSchool(user.id, user.roles);
   const customerOverview = await Promise.all([
           Order.findOne({
@@ -71,6 +74,8 @@ export default async function Account({
             .select(
               "number createdAt totalPaise items.quantity items.linePaise items.billedBy deliveryPaise promotionDiscountPaise providerBills bill orderStatus fulfilmentStatus deliveryStatus paymentMethod paymentStatus codStatus",
             ),
+          // what they buy most, one tap from ADD
+          catalog().then((products) => buyAgain(user.id, products)).then((products) => products.slice(0, 8)),
         ]);
   return (
     <section className="page-container">
@@ -149,6 +154,21 @@ export default async function Account({
               </p>
             )}
           </section>
+          {customerOverview[5].length > 0 && (
+            <section className="account-again" aria-labelledby="again-title">
+              <div className="section-heading">
+                <div>
+                  <h2 id="again-title">Buy it again</h2>
+                  <p className="muted">What you order most, ready to add.</p>
+                </div>
+              </div>
+              <div className="product-grid buy-again-rail">
+                {customerOverview[5].map((product) => (
+                  <ProductCard key={product.id} product={product} locale={locale} />
+                ))}
+              </div>
+            </section>
+          )}
         </>
       )}
       <div className="dashboard-links">
@@ -286,6 +306,11 @@ export default async function Account({
               <option value="best-match">{mr ? "सर्वात जवळचा पर्याय निवडा" : "Choose the closest match"}</option>
               <option value="no-substitutions">{mr ? "पर्याय नको" : "Do not substitute"}</option>
             </select>
+          </label>
+          <label className="checkbox-label">
+            <input type="checkbox" name="basketReminders" defaultChecked={profile?.basketReminders !== false} />
+            Remind me once about items left in my basket
+            <small>A notification a few hours later, if you turned notifications on.</small>
           </label>
           <p className="muted">
             {/* there is no self-service number change; the store does it */}

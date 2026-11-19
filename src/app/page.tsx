@@ -12,10 +12,10 @@ import { deliveryRules } from "@/lib/commerce/service";
 import { categoryImages, productImages } from "@/lib/catalog/images";
 import { catalog, catalogCategories, catalogSections, shelfPhotos } from "@/lib/catalog/queries";
 import { ProductCard } from "@/components/product-card";
+import { buyAgain as buyAgainFor } from "@/lib/catalog/buy-again";
 import { DeliveryPromise } from "@/components/delivery-promise";
 import { currentUser } from "@/lib/auth/session";
 import { currentLocale } from "@/lib/i18n";
-import { Order } from "@/lib/commerce/models";
 import { liveAreaFees, liveAreaNames } from "@/lib/commerce/areas";
 import { homeFaq } from "@/lib/home-faq";
 import { LegalText } from "@/components/legal-text";
@@ -29,7 +29,7 @@ import { taxProfile } from "@/lib/tax/profile";
 import { jsonLd, storeJsonLd, websiteJsonLd } from "@/lib/seo";
 import { getEnv } from "@/lib/env";
 import { paymentsEnabled } from "@/lib/payments/provider";
-import { fill, frontWords, shopSettings } from "@/lib/settings/shop";
+import { doorUpi, fill, frontWords, shopSettings } from "@/lib/settings/shop";
 export const dynamic = "force-dynamic";
 // the title and description are the root layout's; shared links with tracking tags fold into one address
 export const metadata = { alternates: { canonical: "/" } };
@@ -196,29 +196,23 @@ export default async function Home() {
     deliveryRules(),
   ]);
   // everything that only needs to know who's signed in, in one round
-  const [family, activeOffers, areaDocs, previousOrder, shop, front, areaFees] = await Promise.all([
+  const [family, activeOffers, areaDocs, buyAgain, shop, front, areaFees, upiAtDoor] = await Promise.all([
     user ? familyOf(user.id) : null,
     // a private code handed out in person, or one used up, is never advertised here
     liveOffers().then((offers) => offers.filter(runningAt(now)).filter(advertisable).slice(0, 2)),
     liveAreaNames(),
-    user ? Order.findOne({ customerId: user.id }).sort({ createdAt: -1 }).select("items.variantId") : null,
+    // what they buy most, from their recent orders (it used to be only the last order, even a cancelled one)
+    user ? buyAgainFor(user.id, products) : [],
     taxProfile(),
     shopSettings("storefront"),
     liveAreaFees(),
+    doorUpi(),
   ]);
-  const previousIds = new Set(
-    previousOrder?.items.map((item: { variantId: unknown }) =>
-      String(item.variantId),
-    ) ?? [],
-  );
-  const buyAgain = products.filter((product) =>
-    product.variants.some((variant) => previousIds.has(variant.id)),
-  );
   const t = copy[locale];
   const online = paymentsEnabled();
   const cutoff = `${rules.cutoffHour % 12 || 12} ${rules.cutoffHour >= 12 ? "PM" : "AM"}`;
   const freeFrom = formatPrice(rules.freeThresholdPaise);
-  const faq = homeFaq(locale, { areas: areaDocs, feesPaise: areaFees, cutoff, freeFromPaise: rules.freeThresholdPaise, online });
+  const faq = homeFaq(locale, { areas: areaDocs, feesPaise: areaFees, cutoff, freeFromPaise: rules.freeThresholdPaise, online, upi: Boolean(upiAtDoor) });
   // a child's class kit leads the page for their family: the first child whose school has one with us
   type Child = { _id: unknown; name: string; school: string; className: string; year: string };
   const pupils: Child[] = (family?.children ?? []).filter((child: Child) => child.school);

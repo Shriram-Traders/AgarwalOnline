@@ -40,4 +40,5 @@ export const DEFAULT_FACTS: LegalFacts = {
   areas: [],
   evidenceDays: 90,
   auditDays: 730,
+  upiAtDoor: false,
 };

@@ -104,6 +104,14 @@ function waitingWindow() {
   return tab;
 }
 
+/**
+ * How long a phone waits for the PDF before sending the bill's link instead. A phone opens its share list
+ * only within a few seconds of the tap (about 5 in Chrome); the live server can take longer than that to
+ * start making PDFs after a quiet spell, and the share was refused.
+ */
+const SHARE_WAIT_MS = 3500;
+const wait = (ms: number) => new Promise<null>((resolve) => setTimeout(() => resolve(null), ms));
+
 /** Opens WhatsApp in a new window on a tap: a button, so analytics never records the link's secret code. */
 function openWhatsApp(url: string) {
   window.open(url, "_blank", "noopener,noreferrer");
@@ -178,23 +186,42 @@ export function BillActions({
     return files;
   }
 
-  async function whatsappUrl() {
+  /** The bill's view-only link (/b/<code>), or "" when it couldn't be had (signed out, no connection). */
+  async function billLink() {
     const response = await fetch(`/api/invoices/${orderId}/link`, { method: "POST", credentials: "same-origin" }).catch(() => null);
-    const link = response?.ok ? ((await response.json().catch(() => ({}))) as { url?: string }).url : undefined;
-    return `https://wa.me/${phone && /^\d{10}$/.test(phone) ? `91${phone}` : ""}?text=${encodeURIComponent(`${text}${link ? ` ${link}` : ""}`)}`;
+    return (response?.ok ? ((await response.json().catch(() => ({}))) as { url?: string }).url : undefined) ?? "";
   }
+  const whatsappUrl = (link: string) =>
+    `https://wa.me/${phone && /^\d{10}$/.test(phone) ? `91${phone}` : ""}?text=${encodeURIComponent(`${text}${link ? ` ${link}` : ""}`)}`;
 
-  /** The PDFs saved, then WhatsApp with the view-only link: in the window opened on the tap, or on a second tap. */
-  async function saveAndLink(files: File[], tab: Window | null) {
-    saveFiles(files);
-    const url = await whatsappUrl();
+  /** WhatsApp with the view-only link: in the window opened on the tap, or on a second tap. `before` says what came first. */
+  function openLink(link: string, tab: Window | null, before: string) {
+    const url = whatsappUrl(link);
     if (tab && !tab.closed) {
       tab.opener = null;
       tab.location.replace(url);
-      say(`${savedWords(files.length)} WhatsApp opens with a link to the ${what}.`);
+      say(`${before} WhatsApp opens with a link to the ${what}.`);
     } else {
       // a window opened now, after the wait, would be blocked
-      say(`${savedWords(files.length)} Tap Open WhatsApp to send a link to the ${what}.`, url);
+      say(`${before} Tap Open WhatsApp to send a link to the ${what}.`, url);
+    }
+  }
+
+  /** The PDFs saved, then WhatsApp with the view-only link. */
+  async function saveAndLink(files: File[], tab: Window | null, link: Promise<string>) {
+    saveFiles(files);
+    openLink(await link, tab, savedWords(files.length));
+  }
+
+  /** The share list with the bill's link, for when the PDF was too slow for it or couldn't be made. */
+  async function shareLink(link: string, problem: string) {
+    if (!link) return say(problem);
+    try {
+      await navigator.share({ text: `${text} ${link}` });
+      say(`Shared a link to the ${what}: whoever opens it can download the PDF.`);
+    } catch (error) {
+      if (named(error, "AbortError")) say("");
+      else say(`Tap Open WhatsApp to send a link to the ${what}.`, whatsappUrl(link));
     }
   }
 
@@ -213,7 +240,7 @@ export function BillActions({
         say("Your PDF is ready. Tap Share PDF on WhatsApp again to send it.");
       } else {
         setReady(null);
-        await saveAndLink(files, null);
+        await saveAndLink(files, null, billLink());
       }
     }
   }
@@ -227,13 +254,27 @@ export function BillActions({
     const tab = onPhone() ? null : waitingWindow();
     setBusy(true);
     say(`Making the ${what} PDF…`);
+    // the link is asked for at once, alongside the PDF: it's what WhatsApp gets if the PDF can't come
+    const link = billLink();
+    let problem = GENERIC;
+    const made = makeFiles().catch((error: unknown) => {
+      problem = messageOf(error);
+      return null;
+    });
     try {
-      const files = await makeFiles();
-      if (native) await shareFiles(files);
-      else await saveAndLink(files, tab);
-    } catch (error) {
+      if (native) {
+        // a PDF slower than the share list waits for, or none at all: the link goes while the tap still counts
+        const files = await Promise.race([made, wait(SHARE_WAIT_MS)]);
+        if (files) await shareFiles(files);
+        else await shareLink(await link, problem);
+        return;
+      }
+      const files = await made;
+      if (files) return await saveAndLink(files, tab, link);
+      const url = await link;
+      if (url) return openLink(url, tab, problem);
       tab?.close();
-      say(messageOf(error));
+      say(problem);
     } finally {
       setBusy(false);
     }

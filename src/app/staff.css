@@ -65,6 +65,19 @@
   #team .form-section > :is(legend, label:has(textarea, [name$="Skills"], [name$="Title"]), .checkbox-label, .team-photo-field) { grid-column: 1 / -1; }
 }
 
+/* UPI at the door (delivery/orders/[id]): the QR shows once UPI is picked, and the line to tick says how they paid */
+.pay-choice { display: flex; flex-wrap: wrap; gap: 8px 20px; margin: 0; padding: 0; border: 0; }
+.pay-choice legend { margin-bottom: 6px; padding: 0; font-weight: 600; }
+.pay-choice .checkbox-label { min-height: 44px; }
+.upi-pay { display: none; justify-items: center; gap: 10px; margin: 0; padding: 16px; border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--surface); text-align: center; }
+.upi-pay svg { display: block; width: min(100%, 280px); height: auto; border-radius: var(--r); }
+.upi-pay figcaption { display: grid; gap: 4px; }
+.upi-pay figcaption strong { font-size: 1.4rem; }
+.upi-pay figcaption small { color: var(--muted); overflow-wrap: anywhere; }
+.deliver-form:has(input[name="method"][value="upi"]:checked) .upi-pay { display: grid; }
+.deliver-form .if-upi, .deliver-form:has(input[name="method"][value="upi"]:checked) .if-cash { display: none; }
+.deliver-form:has(input[name="method"][value="upi"]:checked) .if-upi { display: inline; }
+
 /* ---------- Lists on a phone: one short row per record ---------- */
 /* The record's name on top, then each value with its column name in one line that wraps,
    instead of a card with a labelled box per value (three records a screen became six or more). */

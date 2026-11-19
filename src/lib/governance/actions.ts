@@ -1,5 +1,7 @@
 "use server";
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
+import { sendBackInStock } from "../engagement/stock-alerts";
 import { redirect } from "next/navigation";
 import { requirePermission } from "../auth/session";
 import type { MutationState } from "../commerce/actions";
@@ -48,6 +50,8 @@ export async function governanceAction(
       success = live ? "Price changed. Shoppers see it now." : "Request sent. The new price goes live once an owner approves it.";
     } else if (operation === "stock") {
       const { outcome } = await adjustStock(user.id, data);
+      // whoever asked to hear when it's back hears now, not at the hourly check
+      if (outcome === "applied") after(() => sendBackInStock().catch((error) => log("warn", "stock-alert.after-change", { error })));
       success =
         outcome === "applied"
           ? "Stock updated."

@@ -22,6 +22,24 @@ export function verificationEmail(name: string, url: string) {
   };
 }
 
+/** A 6-digit code by email: to create an account with an email address, or to set a new password. */
+export function codeEmail(code: string) {
+  const digits = escape(code);
+  return {
+    subject: `${code} is your Agarwal Online code`,
+    text: `Your Agarwal Online code is ${code}\n\nEnter it on the page where you asked for it. It works for 10 minutes. If you didn't ask for a code, ignore this email: nothing changes without it.\n\nAgarwal Online, Nagothane`,
+    html: `<!doctype html><html><body style="margin:0;padding:24px;background:#f8fafc;font-family:Arial,Helvetica,sans-serif;color:#0f172a">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:10px">
+<tr><td style="padding:28px">
+<p style="margin:0 0 18px;font-size:20px;font-weight:700">Agarwal <span style="font-size:11px;letter-spacing:2px;color:#64748b;font-weight:600">ONLINE</span></p>
+<p style="margin:0 0 12px;font-size:15px;line-height:1.5">Your code is</p>
+<p style="margin:0 0 22px;font-size:32px;font-weight:700;letter-spacing:8px">${digits}</p>
+<p style="margin:0 0 6px;font-size:13px;color:#64748b">Enter it on the page where you asked for it. It works for 10 minutes.</p>
+<p style="margin:0;font-size:13px;color:#64748b">If you didn't ask for a code, ignore this email: nothing changes without it.</p>
+</td></tr></table></body></html>`,
+  };
+}
+
 const rupees = (paise: number) =>
   new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", minimumFractionDigits: 2 }).format(paise / 100);
 

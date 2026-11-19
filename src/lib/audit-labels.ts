@@ -67,6 +67,7 @@ const LABELS: Record<string, string> = {
   "customize.bill": "Changed how bills look",
   "customize.slip": "Changed how packing slips look",
   "customize.quotation": "Changed the quotation settings",
+  "customize.payments": "Changed how customers pay at the door",
   "customize.storefront": "Changed the shop front",
   "customize.messages": "Changed the customer messages",
   "customize.numbers": "Changed order and quotation numbering",

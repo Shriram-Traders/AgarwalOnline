@@ -96,6 +96,14 @@ const customize: FinderEntry[] = [
     ["कोटेशन", "बँक", "खाते"],
   ),
   custom(
+    "payments",
+    "UPI at the door: switch it on or off",
+    "दारात यूपीआय: चालू किंवा बंद",
+    ["Paying at the door", "दारात पैसे"],
+    ["upi", "upi at the door", "qr code", "pay at door", "cash on delivery", "cod", "gpay", "phonepe", "paytm"],
+    ["यूपीआय", "क्यूआर", "रोख"],
+  ),
+  custom(
     "storefront",
     "Colour theme, announcement bar, home page words, footer and Google title",
     "रंगसंगती, घोषणा पट्टी, मुख्य पानाचा मजकूर, तळटीप व गूगल शीर्षक",

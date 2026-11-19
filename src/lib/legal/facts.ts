@@ -8,15 +8,17 @@ import { istDate } from "../commerce/delivery";
 import { clock, windowLabel } from "../commerce/slots";
 import { getEnv } from "../env";
 import { taxProfile } from "../tax/profile";
+import { doorUpi } from "../settings/shop";
 import type { LegalFacts } from "./types";
 
 /** The live values the policy pages quote: business details, delivery rules, areas and retention. Once per request. */
 export const legalFacts = cache(async (): Promise<LegalFacts> => {
   await connectDB();
-  const [profile, rules, areas] = await Promise.all([
+  const [profile, rules, areas, upi] = await Promise.all([
     taxProfile(),
     deliveryRules(),
     ServiceArea.find({ enabled: true }).sort({ name: 1 }).select("name feePaise codEnabled codLimitPaise"),
+    doorUpi(),
   ]);
   const patterns = await SlotPattern.find({ areaId: { $in: areas.map((area) => area._id) }, enabled: true })
     .sort({ startMinutes: 1 })
@@ -48,5 +50,6 @@ export const legalFacts = cache(async (): Promise<LegalFacts> => {
     })),
     evidenceDays: env.EVIDENCE_RETENTION_DAYS,
     auditDays: env.AUDIT_RETENTION_DAYS,
+    upiAtDoor: Boolean(upi),
   };
 });

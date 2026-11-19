@@ -14,7 +14,8 @@ import { actor } from "./service";
 export async function startHandover(riderId: string) {
   await actor(riderId, "cod:collect");
   return mongoose.connection.transaction(async (session) => {
-    const holding = await CODCollection.find({ collectorId: riderId, reconciledAt: null, handoverId: null }).session(session);
+    // UPI went straight to the shop's account: only cash is handed over
+    const holding = await CODCollection.find({ collectorId: riderId, reconciledAt: null, handoverId: null, method: { $ne: "upi" } }).session(session);
     if (!holding.length) throw Error("There is no cash with you to hand over.");
     const amountPaise = holding.reduce((sum, c) => sum + (c.collectedPaise as number), 0);
     const [handover] = await CashHandover.create([{ riderId, collectionIds: holding.map((c) => c._id), amountPaise }], {

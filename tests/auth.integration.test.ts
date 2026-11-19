@@ -70,6 +70,25 @@ describe.skipIf(!uri)("Better Auth MongoDB integration", () => {
     await expect(verify()).rejects.toThrow();
   });
 
+  it("creates an email-only customer from a code sent by email, with the email confirmed and no phone", async () => {
+    await getAuth().api.sendVerificationOTP({ body: { email: "only-email@example.test", type: "sign-in" }, headers: requestHeaders });
+    expect(await User.countDocuments()).toBe(0);
+    await expect(
+      getAuth().api.signInEmailOTP({ body: { email: "only-email@example.test", otp: "000000" }, headers: requestHeaders }),
+    ).rejects.toThrow();
+    const result = await getAuth().api.signInEmailOTP({
+      body: { email: "only-email@example.test", otp: "246810", name: "Only Email" },
+      headers: requestHeaders,
+    });
+    expect(result.user).toBeTruthy();
+    const customer = await User.findOne({ email: "only-email@example.test" });
+    expect(customer?.name).toBe("Only Email");
+    expect(customer?.phone).toBeFalsy();
+    expect(customer?.emailVerified).toBe(true);
+    expect(customer?.roles).toEqual(["customer"]);
+    expect(customer?.active).toBe(true);
+  });
+
   it("locks a mock challenge after five invalid attempts", async () => {
     await send();
     for (let attempt = 0; attempt < 5; attempt += 1)

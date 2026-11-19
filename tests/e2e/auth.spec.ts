@@ -7,25 +7,32 @@ const uri = "mongodb://127.0.0.1:27028/ags_test_e2e?replicaSet=ags-local";
 const CUSTOMER = { phone: "9000000031", email: "auth-customer@e2e.test", name: "Auth Customer" };
 const STAFF = { phone: "9000000032", email: "auth-admin@e2e.test", name: "Auth Admin" };
 const PAUSED = { phone: "9000000033", name: "Paused Person" };
+// signs up with an email and nothing else
+const EMAIL_ONLY = { email: "auth-email-only@e2e.test", name: "Email Only" };
+// an account that never set a password (made by the shop, say)
+const NO_PASSWORD = { phone: "9000000034", name: "No Password Yet" };
 const PASSWORD = "Local-test-password-123";
 const OTP = "246810";
-const phones = [CUSTOMER.phone, STAFF.phone, PAUSED.phone];
+// the test server's address (playwright.config.ts can move it off 3002 with E2E_PORT)
+const ORIGIN = process.env.E2E_ORIGIN ?? "http://127.0.0.1:3002";
+const phones = [CUSTOMER.phone, STAFF.phone, PAUSED.phone, NO_PASSWORD.phone];
 
 test.describe.configure({ mode: "serial" });
 
 test.beforeAll(async () => {
   await mongoose.connect(uri);
-  await User.deleteMany({ phone: { $in: phones } });
+  await User.deleteMany({ $or: [{ phone: { $in: phones } }, { email: { $in: [CUSTOMER.email, EMAIL_ONLY.email] } }] });
   // OTP sends are limited per phone per 15 minutes; earlier runs must not eat this run's budget
   for (const name of ["ratelimits", "authRateLimits"])
     await mongoose.connection.collection(name).deleteMany({});
   await User.create([
     { ...STAFF, roles: ["customer", "admin"], passwordHash: await bcrypt.hash(PASSWORD, 12) },
     { ...PAUSED, roles: ["customer"], active: false },
+    { ...NO_PASSWORD, roles: ["customer"] },
   ]);
 });
 test.afterAll(async () => {
-  await User.deleteMany({ phone: { $in: phones } });
+  await User.deleteMany({ $or: [{ phone: { $in: phones } }, { email: { $in: [CUSTOMER.email, EMAIL_ONLY.email] } }] });
   await mongoose.disconnect();
 });
 
@@ -42,10 +49,12 @@ async function menu(page: Page) {
   return details;
 }
 
-test("signs up by OTP with a password and lands on the account", async ({ page }) => {
+test("signs up with just a mobile number: the number first, then a code, a name and a password", async ({ page }) => {
   await page.goto("/signup");
-  await page.getByLabel("Email address").fill(CUSTOMER.email);
   await page.getByLabel("Mobile number").fill(CUSTOMER.phone);
+  // the number is checked as soon as it's whole: nobody has it, so this is a new account
+  await expect(page.getByText("There’s no account with this number yet.")).toBeVisible();
+  await expect(page.getByLabel("Email address")).toHaveCount(0);
   await page.getByRole("button", { name: "Start account creation" }).click();
   await page.getByLabel("Your name").fill(CUSTOMER.name);
   await page.getByLabel("Create password").fill(PASSWORD);
@@ -64,6 +73,33 @@ test("signs up by OTP with a password and lands on the account", async ({ page }
     await expect(page).toHaveURL("/");
   } else await signOut(page);
   const stored = await User.findOne({ phone: CUSTOMER.phone });
+  expect(stored?.roles).toEqual(["customer"]);
+  // no email was asked for: the account carries the phone stand-in until they add one
+  expect(stored?.email).toBe(`${CUSTOMER.phone}@phone.ags.invalid`);
+  // the tests below sign in with an email too: give the account the one it would add later
+  await User.updateOne({ phone: CUSTOMER.phone }, { email: CUSTOMER.email, emailVerified: false });
+});
+
+test("signs up with just an email: the code comes by email, and no number is needed", async ({ page }) => {
+  await page.goto("/signup");
+  await page.getByRole("button", { name: "Email", exact: true }).click();
+  await page.getByLabel("Email address").fill(EMAIL_ONLY.email);
+  await expect(page.getByText("There’s no account with this email yet.")).toBeVisible();
+  await page.getByRole("button", { name: "Start account creation" }).click();
+  await expect(page.getByText(`Enter the code we emailed to ${EMAIL_ONLY.email}.`)).toBeVisible();
+  await page.getByLabel("Your name").fill(EMAIL_ONLY.name);
+  await page.getByLabel("Create password").fill(PASSWORD);
+  await page.getByLabel("Confirm password").fill(PASSWORD);
+  await page.getByLabel("Verification code").fill(OTP);
+  await page.getByRole("button", { name: "Verify & continue" }).click();
+  await expect(page).toHaveURL("/");
+  await page.goto("/account");
+  await expect(page.getByRole("heading", { name: `Hello, ${EMAIL_ONLY.name}` })).toBeVisible();
+  await signOut(page);
+  const stored = await User.findOne({ email: EMAIL_ONLY.email });
+  expect(stored?.phone).toBeFalsy();
+  // the code proved the email is theirs
+  expect(stored?.emailVerified).toBe(true);
   expect(stored?.roles).toEqual(["customer"]);
 });
 
@@ -88,8 +124,7 @@ test("email and password signs a customer in", async ({ page }) => {
   await page.getByRole("button", { name: "Email", exact: true }).click();
   // the browser stops a malformed address before it is sent, and marks the box
   await page.getByLabel("Email address").fill("not-an-email");
-  await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
-  await page.getByRole("button", { name: "Sign in with email" }).click();
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
   await expect(page).toHaveURL("/login");
   expect(await page.getByLabel("Email address").evaluate((box) => box.matches(":user-invalid"))).toBe(true);
   await page.getByLabel("Email address").fill(CUSTOMER.email);
@@ -102,12 +137,11 @@ test("email and password signs a customer in", async ({ page }) => {
 test("a code only resets the password: no code sign-in, a paused account is refused", async ({ page }) => {
   await page.goto("/login");
   await expect(page.getByRole("button", { name: /Use OTP|Sign in with OTP/ })).toHaveCount(0);
-  await page.getByRole("button", { name: /Forgot your password/ }).click();
   await page.getByLabel("Mobile number").fill(PAUSED.phone);
-  await page.getByRole("button", { name: "Send code" }).click();
   await expect(page.locator(".error-message")).toContainText("not active");
+  await expect(page.getByLabel("Password", { exact: true })).toHaveCount(0);
   await page.getByLabel("Mobile number").fill(CUSTOMER.phone);
-  await page.getByRole("button", { name: "Send code" }).click();
+  await page.getByRole("button", { name: "Forgot your password?" }).click();
   // the code alone is not enough: the new password comes with it
   await page.getByLabel("Verification code").fill(OTP);
   await page.getByLabel("New password").fill(PASSWORD);
@@ -115,10 +149,24 @@ test("a code only resets the password: no code sign-in, a paused account is refu
   await page.getByRole("button", { name: "Save password & sign in" }).click();
   await expect(page).toHaveURL("/");
   await signOut(page);
-  await page.goto("/login");
+  // an existing number on the sign-up page goes to its password, not to a second account
+  await page.goto("/signup");
   await page.getByLabel("Mobile number").fill(CUSTOMER.phone);
   await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await expect(page).toHaveURL("/");
+  await signOut(page);
+});
+
+test("an account with no password yet gets a code to set one", async ({ page }) => {
+  await page.goto("/login");
+  await page.getByLabel("Mobile number").fill(NO_PASSWORD.phone);
+  await expect(page.getByText("This account has no password yet.")).toBeVisible();
+  await page.getByRole("button", { name: "Send code" }).click();
+  await page.getByLabel("Verification code").fill(OTP);
+  await page.getByLabel("New password").fill(PASSWORD);
+  await page.getByLabel("Confirm password").fill(PASSWORD);
+  await page.getByRole("button", { name: "Save password & sign in" }).click();
   await expect(page).toHaveURL("/");
   await signOut(page);
 });
@@ -183,7 +231,7 @@ test("Continue with Google sends people to Google with this site's callback", as
       page.getByRole("button", { name: "Continue with Google" }).click(),
     );
     expect(google.searchParams.get("client_id")).toBe("e2e-google-client.apps.googleusercontent.com");
-    expect(google.searchParams.get("redirect_uri")).toBe("http://127.0.0.1:3002/api/auth/callback/google");
+    expect(google.searchParams.get("redirect_uri")).toBe(`${ORIGIN}/api/auth/callback/google`);
     expect(google.searchParams.get("prompt")).toBe("select_account");
     expect(google.searchParams.get("state")).toBeTruthy();
   }
@@ -205,8 +253,7 @@ test("a signed-in customer can connect Google from the account page", async ({ p
   await page.getByRole("button", { name: "Email", exact: true }).click();
   // the browser stops a malformed address before it is sent, and marks the box
   await page.getByLabel("Email address").fill("not-an-email");
-  await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
-  await page.getByRole("button", { name: "Sign in with email" }).click();
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
   await expect(page).toHaveURL("/login");
   expect(await page.getByLabel("Email address").evaluate((box) => box.matches(":user-invalid"))).toBe(true);
   await page.getByLabel("Email address").fill(CUSTOMER.email);
@@ -220,7 +267,7 @@ test("a signed-in customer can connect Google from the account page", async ({ p
   const google = await googleRedirect(page, () =>
     methods.getByRole("button", { name: "Connect Google" }).click(),
   );
-  expect(google.searchParams.get("redirect_uri")).toBe("http://127.0.0.1:3002/api/auth/callback/google");
+  expect(google.searchParams.get("redirect_uri")).toBe(`${ORIGIN}/api/auth/callback/google`);
   await signOut(page);
 });
 
@@ -298,8 +345,7 @@ test("the address form pre-fills the account number, and a Google-only account c
   await page.getByRole("button", { name: "Email", exact: true }).click();
   // the browser stops a malformed address before it is sent, and marks the box
   await page.getByLabel("Email address").fill("not-an-email");
-  await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
-  await page.getByRole("button", { name: "Sign in with email" }).click();
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
   await expect(page).toHaveURL("/login");
   expect(await page.getByLabel("Email address").evaluate((box) => box.matches(":user-invalid"))).toBe(true);
   await page.getByLabel("Email address").fill(CUSTOMER.email);
@@ -357,8 +403,7 @@ test("the account page shows whether the email is confirmed and sends a confirma
   await page.getByRole("button", { name: "Email", exact: true }).click();
   // the browser stops a malformed address before it is sent, and marks the box
   await page.getByLabel("Email address").fill("not-an-email");
-  await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
-  await page.getByRole("button", { name: "Sign in with email" }).click();
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
   await expect(page).toHaveURL("/login");
   expect(await page.getByLabel("Email address").evaluate((box) => box.matches(":user-invalid"))).toBe(true);
   await page.getByLabel("Email address").fill(CUSTOMER.email);

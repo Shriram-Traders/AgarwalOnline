@@ -44,6 +44,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     });
   } catch (error) {
     log("error", "bill-pdf.failed", { error, orderId: String(order._id), key });
-    return plainText("The PDF couldn't be made just now. Try again, or use Print bill.", 503);
+    // staff also get the browser's own first words, so a failure on the live site can be told apart
+    // without Vercel's logs; kept short, as the page shows the server's words only up to 200 letters
+    const reason = staff && error instanceof Error ? error.message.split("\n")[0].replace(/\s+/g, " ").slice(0, 90) : "";
+    return plainText(`The PDF couldn't be made just now. Try again, or use Print bill.${reason ? ` (Reason: ${reason})` : ""}`, 503);
   }
 }

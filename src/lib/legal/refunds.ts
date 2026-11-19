@@ -47,7 +47,7 @@ export const refundsDoc: LegalBuilder = {
         blocks: [
           {
             rows: [
-              ["Money you paid", "In cash or by bank transfer. The reference is noted on your order."],
+              ["Money you paid", f.upiAtDoor ? "In cash, by UPI or by bank transfer. The reference is noted on your order." : "In cash or by bank transfer. The reference is noted on your order."],
               ["Items not packed", "Taken off your bill, so you never pay for them."],
             ],
           },

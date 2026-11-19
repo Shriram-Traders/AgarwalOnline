@@ -11,6 +11,7 @@ const SAVED: Record<SectionKey, string> = {
   bill: "Bill settings saved. Every bill opened from now on uses them.",
   slip: "Packing slip settings saved.",
   quotation: "Quotation settings saved. Quotations sent from now on use them.",
+  payments: "Saved. Delivery partners see it on their next order.",
   storefront: "Shop front saved. Shoppers see it within a minute.",
   messages: "Customer messages saved. They go out from the next order update.",
   numbers: "Numbering saved. New orders and quotations use it.",

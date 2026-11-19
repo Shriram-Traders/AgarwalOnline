@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronRight, Star, Store, Truck } from "lucide-react";
+import { Bell, BellRing, ChevronRight, Star, Store, Truck } from "lucide-react";
 import { productImages } from "@/lib/catalog/images";
 import { currentUser } from "@/lib/auth/session";
 import { ActionForm } from "@/components/action-form";
@@ -12,6 +12,8 @@ import { ProductReview } from "@/lib/reviews/models";
 import { Order } from "@/lib/commerce/models";
 import { ProductVariant, User } from "@/lib/db/models";
 import { WishlistItem } from "@/lib/engagement/models";
+import { waitingFor } from "@/lib/engagement/stock-alerts";
+import { stockAlertAction } from "@/lib/engagement/actions";
 import { reviewAction, reportReviewAction } from "@/lib/reviews/actions";
 import { relatedFor } from "@/lib/catalog/related";
 import { RelatedRows } from "@/components/related-rows";
@@ -50,7 +52,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
   if (!p) notFound();
   const mr = locale === "mr";
   const image = p.image ?? productImages[p.slug];
-  const [reviews, related, rules, saved, categories, myLists, variantIds, seller] = await Promise.all([
+  const [reviews, related, rules, saved, categories, myLists, variantIds, seller, waiting] = await Promise.all([
     ProductReview.find({ productId: p.id, status: "published" })
       .sort({ createdAt: -1 })
       .limit(20),
@@ -65,6 +67,8 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
     user ? ProductVariant.find({ productId: p.id }).distinct("_id") : [],
     // another shop provides it: Product info names who sells it, which is still us
     p.provider ? taxProfile() : null,
+    // sold-out packs they've asked to hear about
+    waitingFor(user?.id, p.variants.filter((v) => v.available <= 0).map((v) => v.id)),
   ]);
   const [myBaskets, myBoards] = myLists ?? [null, null];
   const listChoices = myBaskets ? [...myBaskets.owned, ...myBaskets.shared] : [];
@@ -205,7 +209,35 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
                       mr={mr}
                     />
                   ) : (
-                    <span className="status-pill">{mr ? "संपले" : "Sold out"}</span>
+                    <div className="stock-alert">
+                      <span className="status-pill">{mr ? "संपले" : "Sold out"}</span>
+                      {/* one notification when it's back; signed out, sign in first and come back here */}
+                      {!user ? (
+                        <Link className="secondary-button" href={`/login?then=${encodeURIComponent(`/products/${p.slug}`)}`}>
+                          <Bell size={16} aria-hidden="true" /> Tell me when it’s back
+                        </Link>
+                      ) : waiting.has(v.id) ? (
+                        <ActionForm action={stockAlertAction} submit="Don’t tell me" className="stock-alert-form" buttonClassName="text-button">
+                          <p className="stock-alert-on">
+                            <BellRing size={16} aria-hidden="true" /> We’ll tell you when it’s back
+                          </p>
+                          <input type="hidden" name="variantId" value={v.id} />
+                          <input type="hidden" name="want" value="0" />
+                        </ActionForm>
+                      ) : (
+                        <ActionForm
+                          action={stockAlertAction}
+                          submit="Tell me when it’s back"
+                          submitIcon={<Bell size={16} aria-hidden="true" />}
+                          className="stock-alert-form"
+                          buttonClassName="secondary-button"
+                        >
+                          <input type="hidden" name="variantId" value={v.id} />
+                          <input type="hidden" name="want" value="1" />
+                          <input type="hidden" name="then" value={`/products/${p.slug}`} />
+                        </ActionForm>
+                      )}
+                    </div>
                   )}
                 </div>
               );

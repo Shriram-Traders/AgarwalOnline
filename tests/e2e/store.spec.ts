@@ -142,7 +142,6 @@ async function login(page: import("@playwright/test").Page) {
     await page.getByRole("button", { name: "Sign in", exact: true }).click();
   } else {
     await page.goto("/signup");
-    await page.getByLabel("Email address").fill("neighbour@e2e.test");
     await page.getByLabel("Mobile number").fill("9000000088");
     await page.getByRole("button", { name: "Start account creation" }).click();
     await page.getByLabel("Your name").fill("Neighbour");

@@ -14,6 +14,7 @@ import {
   Package,
   Palette,
   Plus,
+  QrCode,
   ReceiptText,
   School,
   ShieldCheck,
@@ -246,6 +247,13 @@ export default async function StoreSettings({
         },
         { id: "slots", title: "Delivery slots", Icon: CalendarClock, line: hub.weekly.lines.at(-1) },
         { id: "areas", title: "Service areas", Icon: MapPin, line: hub.areas.lines[0], warnings: hub.areas.warnings },
+        {
+          id: "payments",
+          title: CUSTOMIZE_TITLES.payments,
+          Icon: QrCode,
+          line: saved.payments.upiAtDoor && saved.quotation.upiId ? `Cash or UPI to ${saved.quotation.upiId}` : "Cash only",
+          warnings: saved.payments.upiAtDoor && !saved.quotation.upiId ? ["UPI is switched on, but there’s no UPI ID yet"] : undefined,
+        },
       ],
     },
     {

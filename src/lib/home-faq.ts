@@ -12,6 +12,8 @@ export type FaqFacts = {
   freeFromPaise: number;
   /** Online payment switched on (paymentsEnabled). */
   online: boolean;
+  /** Paying the rider by UPI at the door is on (the shop has a UPI ID). */
+  upi?: boolean;
 };
 
 /**
@@ -85,7 +87,9 @@ export function homeFaq(locale: Locale, f: FaqFacts): { q: string; a: string }[]
       q: "How do I pay?",
       a: f.online
         ? "Pay cash to the delivery partner when your order arrives, or pay online at checkout."
-        : "Cash on delivery: pay the delivery partner when your order arrives. Please keep the exact amount ready.",
+        : f.upi
+          ? "Pay when your order arrives: cash to the delivery partner, or UPI straight to the shop by scanning the QR code they show you."
+          : "Cash on delivery: pay the delivery partner when your order arrives. Please keep the exact amount ready.",
     },
     {
       q: "What if something is missing, damaged or wrong?",

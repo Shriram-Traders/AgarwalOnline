@@ -36,6 +36,7 @@ import { getEnv } from "../env";
 import { rateLimit } from "../auth/rate-limit";
 import { sendCode } from "../auth/sms";
 import { notify } from "../engagement/service";
+import { doorUpi } from "../settings/shop";
 import { returnOffer } from "../promotions/service";
 import { Promotion } from "../promotions/models";
 import { lineFacts } from "../documents/line-facts";
@@ -1173,8 +1174,12 @@ export async function completeDelivery(actorId: string, input: unknown) {
       orderId: objectId,
       code: z.string().regex(/^\d{6}$/),
       cashPaise: z.coerce.number().int().min(0),
+      // how the customer paid at the door: cash to the rider, or UPI straight to the shop
+      method: z.enum(["cash", "upi"]).catch("cash"),
     })
     .parse(input);
+  if (data.method === "upi" && !(await doorUpi()))
+    throw Error("This shop doesn’t take UPI at the door yet. Collect cash, or call the shop.");
   const order = await Order.findOne({
     _id: data.orderId,
     assignedTo: actorId,
@@ -1197,7 +1202,7 @@ export async function completeDelivery(actorId: string, input: unknown) {
       deliveryStatus: "out-for-delivery",
     }).session(session);
     if (!current) throw Error("This delivery has already changed.");
-    await finishDelivery(current, { actorId, riderId: actorId, cashPaise: data.cashPaise }, session);
+    await finishDelivery(current, { actorId, riderId: actorId, cashPaise: data.cashPaise, method: data.method }, session);
   });
 }
 /**
@@ -1241,7 +1246,13 @@ export async function confirmDeliveryByOwner(actorId: string, input: unknown) {
  */
 async function finishDelivery(
   current: OrderDoc,
-  { actorId, riderId, cashPaise, note }: { actorId: string; riderId: string; cashPaise: number; note?: string },
+  {
+    actorId,
+    riderId,
+    cashPaise,
+    note,
+    method = "cash",
+  }: { actorId: string; riderId: string; cashPaise: number; note?: string; method?: "cash" | "upi" },
   session: mongoose.ClientSession,
 ) {
   const previous = current.deliveryStatus;
@@ -1289,6 +1300,7 @@ async function finishDelivery(
           expectedPaise: current.totalPaise,
           collectedPaise: cashPaise,
           collectedAt: new Date(),
+          method,
         },
       ],
       { session },

@@ -1201,6 +1201,12 @@ tbody tr:hover { background: var(--canvas); }
 .variant-card .form-stack > p { grid-column: 1 / -1; }
 .variant-card .form-stack > .primary-button { min-width: 0; }
 .variant-card .form-stack input { width: 88px; }
+/* a sold-out pack: the pill, then Tell me when it's back (or that we will, with Don't tell me) */
+.stock-alert { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px 12px; }
+.stock-alert > .secondary-button, .stock-alert-form .secondary-button { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; }
+.stock-alert-form { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 4px 12px; margin: 0; }
+.stock-alert-form .text-button { min-height: 44px; }
+.stock-alert-on { display: inline-flex; align-items: center; gap: 6px; margin: 0; color: var(--brand); font-weight: 600; }
 .product-delivery-note { margin-top: 14px; border-left: 3px solid var(--offer); }
 .reviews-section .section-heading strong { font-family: var(--font-display); font-size: 1.4rem; font-weight: 800; color: var(--gold); }
 .reviews-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
@@ -1855,7 +1861,7 @@ body:has(.team-page) .footer-credit { display: none; }
   .aisle-label strong { font-size: 0.74rem; font-weight: 600; }
   .aisle-label small { display: none; }
   /* two cards visible, the third peeking */
-  .home .product-grid, .hubs {
+  .home .product-grid, .hubs, .buy-again-rail {
     display: flex;
     gap: 12px;
     margin: 0 calc(-1 * var(--gutter));
@@ -1865,8 +1871,8 @@ body:has(.team-page) .footer-credit { display: none; }
     scroll-padding-inline-start: var(--gutter);
     scrollbar-width: none;
   }
-  .home .product-grid::-webkit-scrollbar, .hubs::-webkit-scrollbar { display: none; }
-  .home .product-card { flex: 0 0 46%; scroll-snap-align: start; }
+  .home .product-grid::-webkit-scrollbar, .hubs::-webkit-scrollbar, .buy-again-rail::-webkit-scrollbar { display: none; }
+  .home .product-card, .buy-again-rail .product-card { flex: 0 0 46%; scroll-snap-align: start; }
   .home .product-grid > :nth-child(n + 9) { display: revert; }
   /* delivery promise over the area, like a q-commerce header */
   .location { flex-direction: column; align-items: flex-end; justify-self: end; gap: 1px; min-width: 0; line-height: 1.2; text-align: right; white-space: normal; }
@@ -1988,6 +1994,9 @@ body:has(.team-page) .footer-credit { display: none; }
   .variant-card:only-child .form-stack label { font-size: 0; gap: 0; } /* "Quantity" stays the accessible name */
   .variant-card:only-child .form-stack input { font-size: 1rem; padding-inline: 8px; text-align: center; }
   .variant-card:only-child .form-stack > .primary-button { padding-inline: 16px; }
+  /* sold out in the pinned bar: the button says it all, and may take a second line */
+  .variant-card:only-child .stock-alert { flex: 0 1 auto; }
+  .variant-card:only-child .stock-alert > .status-pill { display: none; }
   /* the pinned buy bar replaces the basket bar here; the basket tab still carries the count */
   body:has(.variant-card:only-child) .cart-bar { display: none; }
   /* the brand and its delivery line on top, then Help and Policies as two headed columns, then the
@@ -2311,7 +2320,7 @@ table.order-lines { min-width: 0; font-size: 0.92rem; }
 .order-history-main { display: grid; gap: 2px; min-width: 0; }
 .order-history-main small { color: var(--muted); }
 .order-history-total { white-space: nowrap; }
-.account-history { margin: 24px 0; }
+.account-history, .account-again { margin: 24px 0; }
 .account-history .section-heading { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
 .order-status-line { flex-wrap: wrap; }
 @media (max-width: 760px) {

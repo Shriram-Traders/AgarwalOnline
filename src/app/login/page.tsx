@@ -25,7 +25,7 @@ export default async function Login({
     <section className="auth-card">
       <span className="eyebrow">{mr ? "तुमचे अग्रवाल ऑनलाइन खाते" : "YOUR AGARWAL ONLINE ACCOUNT"}</span>
       <h1>{mr ? "पुन्हा स्वागत आहे." : "Good to see you."}</h1>
-      <p>{mr ? "मोबाईल क्रमांक किंवा ईमेल आणि पासवर्डने साइन इन करा. दुकानाचे कर्मचारीही येथूनच साइन इन करतात." : "Sign in with your mobile number or email and your password. Store staff sign in here too."}</p>
+      <p>{mr ? "तुमचा मोबाईल क्रमांक किंवा ईमेल टाका. खाते असल्यास पासवर्ड विचारू; नसल्यास इथेच तयार करा. दुकानाचे कर्मचारीही येथूनच साइन इन करतात." : "Enter your mobile number or your email. If you have an account we’ll ask for your password; if not, you can create one right here. Store staff sign in here too."}</p>
       {googleError && (
         <p role="alert" className="error-message">
           {googleError}

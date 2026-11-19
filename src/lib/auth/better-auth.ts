@@ -3,14 +3,14 @@ import { ObjectId } from "mongodb";
 import { betterAuth } from "better-auth";
 import { APIError, createAuthMiddleware } from "better-auth/api";
 import { nextCookies } from "better-auth/next-js";
-import { phoneNumber } from "better-auth/plugins";
+import { emailOTP, phoneNumber } from "better-auth/plugins";
 import { mongodbAdapter } from "@better-auth/mongo-adapter";
 import { getEnv } from "../env";
 import { mongoClient } from "../db/connect";
 import { originVariants } from "./origin";
 import { sendCode } from "./sms";
 import { sendEmail } from "../email/send";
-import { verificationEmail } from "../email/templates";
+import { codeEmail, verificationEmail } from "../email/templates";
 import { log } from "../logger";
 import { digest } from "./crypto";
 
@@ -197,6 +197,19 @@ function buildAuth() {
       }),
     },
     plugins: [
+      // an email address can make an account, or set a new password, with a 6-digit code by email,
+      // as a mobile number does by WhatsApp/SMS (sendOTPAction, verifyOTPAction)
+      emailOTP({
+        otpLength: 6,
+        expiresIn: 10 * 60,
+        allowedAttempts: 5,
+        storeOTP: "hashed",
+        // tests and local development: the same fixed code as phone codes, and the email goes to the log
+        ...(env.MOCK_OTP === "true" ? { generateOTP: () => env.MOCK_OTP_CODE } : {}),
+        sendVerificationOTP: async ({ email, otp }) => {
+          await sendEmail({ to: email, ...codeEmail(otp) });
+        },
+      }),
       phoneNumber({
         otpLength: 6,
         expiresIn: 5 * 60,

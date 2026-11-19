@@ -66,7 +66,8 @@ export const shippingDoc: LegalBuilder = {
         id: "handover",
         title: "Receiving your order",
         blocks: [
-          "Your delivery partner brings the order to the address you chose. Give them the 6-digit delivery code only when you have the order: it confirms the delivery. The code is on your order page from the moment you order, and we send the same code to the order's phone number when it leaves the shop. Anyone at the address who has the code can receive it. For cash on delivery, please have the exact amount ready.",
+          "Your delivery partner brings the order to the address you chose. Give them the 6-digit delivery code only when you have the order: it confirms the delivery. The code is on your order page from the moment you order, and we send the same code to the order's phone number when it leaves the shop. Anyone at the address who has the code can receive it. For cash on delivery, please have the exact amount ready" +
+            (f.upiAtDoor ? ", or pay by UPI with the QR code the delivery partner shows you." : "."),
         ],
       },
       {

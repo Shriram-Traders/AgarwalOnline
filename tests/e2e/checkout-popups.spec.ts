@@ -126,7 +126,6 @@ test("a new shopper signs up and adds an address from checkout popups, then uses
   await join.getByRole("link", { name: "Create an account" }).click();
 
   await expect(page).toHaveURL("/signup?then=%2Fcheckout");
-  await page.getByLabel("Email address").fill("new-shopper@e2e.test");
   await page.getByLabel("Mobile number").fill("9000000077");
   await page.getByRole("button", { name: "Start account creation" }).click();
   await page.getByLabel("Your name").fill("New Shopper");

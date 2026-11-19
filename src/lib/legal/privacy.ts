@@ -49,14 +49,16 @@ export const privacyDoc: LegalBuilder = {
           {
             list: [
               "To create your account and keep it secure, including one-time sign-in codes.",
-              "To take, pack, deliver and bill your orders, and to collect cash on delivery.",
+              f.upiAtDoor
+                ? "To take, pack, deliver and bill your orders, and to collect payment on delivery. When you pay by UPI, your payment app shows us your name and UPI ID with the payment, as any UPI payment does."
+                : "To take, pack, deliver and bill your orders, and to collect cash on delivery.",
               "To make refunds.",
               "To answer chats, sort out complaints and arrange returns.",
               "To show product reviews and to learn from order ratings.",
               "To send messages you need: sign-in codes, delivery codes, account emails and school quotations.",
               "To show \"Buy it again\" and \"Picked for you\" from your own past orders, on this site only.",
               "To let a family share its orders, and to tell parents when their child's school kit is ready.",
-              "To send the notifications you turned on, such as order updates, in the app and on your device.",
+              "To send the notifications you turned on, such as order updates, in the app and on your device; an alert when an item you asked about is back in stock; and one reminder about items left in your basket, which you can turn off in Edit profile on [your account](/account).",
               "To count visits and see which pages people use, with Google Analytics.",
               "To prevent fraud and misuse and to keep the site secure.",
               "To meet legal duties, such as GST and accounting records and consumer law.",

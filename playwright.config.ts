@@ -1,8 +1,13 @@
 import { defineConfig, devices } from "@playwright/test";
+// the test server's port: 3002, unless another project's server holds it (E2E_PORT=3012 npx playwright test …)
+const PORT = process.env.E2E_PORT ?? "3002";
+const ORIGIN = `http://127.0.0.1:${PORT}`;
+// for a spec that checks a full address
+process.env.E2E_ORIGIN = ORIGIN;
 const appEnv = {
   NEXT_TEST_BUILD: "true",
   MONGODB_URI: "mongodb://127.0.0.1:27028/ags_test_e2e?replicaSet=ags-local",
-  APP_ORIGIN: "http://127.0.0.1:3002",
+  APP_ORIGIN: ORIGIN,
   AUTH_SECRET: "e2e-local-only-secret-repeated-000000000",
   MOCK_OTP: "true",
   MOCK_OTP_CODE: "246810",
@@ -55,7 +60,7 @@ export default defineConfig({
   workers: 1,
   reporter: "list",
   use: {
-    baseURL: "http://127.0.0.1:3002",
+    baseURL: ORIGIN,
     trace: "retain-on-failure",
     // no smooth scrolling (globals.css): a click finds its button, then presses and releases. If the page is still
     // gliding, the release can land off the button, and the click does nothing without any error or retry
@@ -68,8 +73,8 @@ export default defineConfig({
   ],
   webServer: [
     {
-      command: "npm run dev -- --port 3002",
-      url: "http://127.0.0.1:3002/login",
+      command: `npm run dev -- --port ${PORT}`,
+      url: `${ORIGIN}/login`,
       reuseExistingServer: false,
       env: appEnv,
       timeout: 120000, // a cold .next-e2e compile after large edits can take over a minute

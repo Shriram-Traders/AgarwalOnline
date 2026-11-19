@@ -30,6 +30,10 @@
  * 2026-11-17.1: one delivery code per order: on the order page from the start, the same code sent
  * by MiniMoth when the order leaves the shop and on every resend, worked out rather than stored, and
  * a few tries at a time instead of a five-minute expiry.
+ *
+ * 2026-11-19.1: two notifications: "back in stock" for an item the shopper asked about, and one
+ * reminder about items left in the basket (off in Edit profile). Once the owner switches on UPI at the door, paying
+ * at the door by UPI to the store (the rider's QR code), and UPI among the ways refunds are paid.
  */
-export const POLICY_VERSION = "2026-11-17.1";
-export const LAST_UPDATED = { en: "17 November 2026", mr: "17 नोव्हेंबर 2026" } as const;
+export const POLICY_VERSION = "2026-11-19.1";
+export const LAST_UPDATED = { en: "19 November 2026", mr: "19 नोव्हेंबर 2026" } as const;

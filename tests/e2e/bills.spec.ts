@@ -2,10 +2,15 @@
 // name shows one bill per seller, each with Print bill and Share PDF on WhatsApp, on the order page, in
 // the order history, the family's spend list, on the staff order page and the packing slip. Share hands the phone's share list a
 // real PDF (stubbed here), or on a computer saves the PDF and opens WhatsApp Web with the view-only link,
-// which works signed out. A PDF that can't be made says why and leaves the page as it was; a phone browser
+// which works signed out. A PDF that can't be made says why, and Share sends that link instead (so does a PDF
+// too slow for a phone's share list); a phone browser
 // that can't share files saves the PDF and offers Open WhatsApp. An admin's change to a provider's tax
 // details waits for the owner.
 import { test, expect, type Browser, type Page } from "@playwright/test";
+
+const ORIGIN = process.env.E2E_ORIGIN ?? "http://127.0.0.1:3002";
+// what WhatsApp gets with a bill's view-only link
+const LINK_TEXT = new RegExp(`^Bill for order AGS-20261107-00031\\. ${ORIGIN.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&")}/b/[A-Za-z0-9_-]{24}$`);
 import { readFileSync } from "node:fs";
 import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
@@ -126,7 +131,7 @@ const mobile = () => test.info().project.name === "mobile";
 
 async function signedIn(browser: Browser, page: Page, who: { email: string }) {
   const context = await browser.newContext({
-    baseURL: "http://127.0.0.1:3002",
+    baseURL: ORIGIN,
     viewport: page.viewportSize()!,
     isMobile: mobile(),
     hasTouch: mobile(),
@@ -138,11 +143,14 @@ async function signedIn(browser: Browser, page: Page, who: { email: string }) {
   // a phone's share list, stubbed: it records the files it was handed
   await context.addInitScript(() => {
     const shared: { name: string; type: string; size: number; head: string }[][] = [];
-    Object.assign(window, { __shared: shared });
+    // what went to the share list as words alone: the bill's link, when there was no PDF to hand over
+    const sharedText: string[] = [];
+    Object.assign(window, { __shared: shared, __sharedText: sharedText });
     Object.defineProperty(navigator, "canShare", { value: (data: { files?: File[] }) => Boolean(data?.files?.length), configurable: true });
     Object.defineProperty(navigator, "share", {
       configurable: true,
-      value: async (data: { files: File[] }) => {
+      value: async (data: { files?: File[]; text?: string }) => {
+        if (!data.files) return void sharedText.push(data.text ?? "");
         shared.push(
           await Promise.all(
             data.files.map(async (file) => ({ name: file.name, type: file.type, size: file.size, head: await file.slice(0, 5).text() })),
@@ -220,7 +228,7 @@ test("the order page gives each seller's bill its own row, with Print bill and S
     // WhatsApp took the waiting window's place: Back there doesn't land on an empty page
     expect(await whatsapp.evaluate(() => history.length)).toBe(1);
     const text = decodeURIComponent(new URL(whatsapp.url()).searchParams.get("text")!);
-    expect(text).toMatch(/^Bill for order AGS-20261107-00031\. http:\/\/127\.0\.0\.1:3002\/b\/[A-Za-z0-9_-]{24}$/);
+    expect(text).toMatch(LINK_TEXT);
     await expect(agarwal.locator(".bill-actions-status")).toContainText("The PDF is in your downloads");
   }
 
@@ -282,12 +290,30 @@ test("a PDF that can't be made says why, and the page stays as it was", async ({
   await failing(200, "<html>Sign in</html>", "application/pdf");
   await kale.getByRole("button", { name: "Download PDF" }).click();
   await expect(kale.locator(".bill-actions-status")).toContainText("Couldn’t make the PDF just now");
-  // Share says the same, and on a computer leaves no window behind
+  // Share still gets the bill to WhatsApp: its view-only link, after the reason
   await failing(503, "The PDF couldn't be made just now. Try again, or use Print bill.");
-  const windows = customer.context().pages().length;
-  await kale.getByRole("button", { name: "Share PDF on WhatsApp" }).click();
-  await expect(kale.locator(".bill-actions-status")).toHaveText("The PDF couldn't be made just now. Try again, or use Print bill.");
-  await expect.poll(() => customer.context().pages().length).toBe(windows);
+  const sharedText = () => customer.evaluate(() => (window as unknown as { __sharedText: string[] }).__sharedText);
+  if (mobile()) {
+    await kale.getByRole("button", { name: "Share PDF on WhatsApp" }).click();
+    await expect.poll(sharedText).toEqual([expect.stringMatching(LINK_TEXT)]);
+    await expect(kale.locator(".bill-actions-status")).toHaveText("Shared a link to the bill: whoever opens it can download the PDF.");
+    // a PDF slower than the share list waits for (the live server starting up): the link goes instead
+    await customer.unroute(pdf);
+    await customer.route(pdf, async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 6000));
+      await route.continue().catch(() => {});
+    });
+    await kale.getByRole("button", { name: "Share PDF on WhatsApp" }).click();
+    await expect.poll(() => sharedText().then((texts) => texts.length), { timeout: 10_000 }).toBe(2);
+    await failing(503, "The PDF couldn't be made just now. Try again, or use Print bill.");
+  } else {
+    const [whatsapp] = await Promise.all([customer.context().waitForEvent("page"), kale.getByRole("button", { name: "Share PDF on WhatsApp" }).click()]);
+    await expect.poll(() => whatsapp.url(), { timeout: 30_000 }).toMatch(/^https:\/\/wa\.me\/\?text=.*%2Fb%2F/);
+    await expect(kale.locator(".bill-actions-status")).toHaveText(
+      "The PDF couldn't be made just now. Try again, or use Print bill. WhatsApp opens with a link to the bill.",
+    );
+    await whatsapp.close();
+  }
   await expect(kale.getByRole("button", { name: "Share PDF on WhatsApp" })).toBeEnabled();
   expect(customer.url()).toBe(before);
 
@@ -389,7 +415,7 @@ test("the view-only link opens the bills signed out, and only with the right cod
   const order = await Order.findById(orderId);
   const code = order.billShareToken ?? "AbCdEfGhIjKlMnOpQrStUvWx";
   if (!order.billShareToken) await Order.updateOne({ _id: orderId }, { $set: { billShareToken: code } });
-  const context = await browser.newContext({ baseURL: "http://127.0.0.1:3002", viewport: page.viewportSize()!, isMobile: mobile(), acceptDownloads: true });
+  const context = await browser.newContext({ baseURL: ORIGIN, viewport: page.viewportSize()!, isMobile: mobile(), acceptDownloads: true });
   const guest = await context.newPage();
   await guest.goto(`/b/${code}`);
   await expect(guest.getByRole("heading", { level: 1, name: "Your bills" })).toBeVisible();

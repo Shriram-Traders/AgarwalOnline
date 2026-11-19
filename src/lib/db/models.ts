@@ -33,6 +33,9 @@ const userSchema = new Schema(
       enum: ["contact", "best-match", "no-substitutions"],
       default: "contact",
     },
+    // one notification about items left in the basket (lib/commerce/basket-reminder.ts); off in Edit profile
+    basketReminders: { type: Boolean, default: true },
+    basketRemindedAt: Date,
     defaultAddressId: { type: Schema.Types.ObjectId, ref: "Address" },
   },
   opts,

@@ -23,17 +23,19 @@ export async function profileAction(
           .catch("contact"),
       })
       .parse(Object.fromEntries(form));
+    // a checkbox sends nothing when it's off
+    const reminders = { basketReminders: form.get("basketReminders") === "on" };
     const before = await User.findById(user.id).select("name");
     if (!before) throw Error("UNAUTHENTICATED");
     await User.updateOne(
       { _id: user.id, active: true },
-      { $set: Object.fromEntries(Object.entries(data).filter(([, value]) => value !== undefined)) },
+      { $set: { ...Object.fromEntries(Object.entries(data).filter(([, value]) => value !== undefined)), ...reminders } },
     );
     await AuditLog.create({
       actorId: user.id,
       action: "profile.update",
       target: user.id,
-      details: { before: { name: before.name }, after: data },
+      details: { before: { name: before.name }, after: { ...data, ...reminders } },
     });
     revalidatePath("/account");
     return { success: "Profile updated." };

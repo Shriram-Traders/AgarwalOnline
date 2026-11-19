@@ -60,7 +60,9 @@ export const termsDoc: LegalBuilder = {
         id: "payment",
         title: "Payment",
         blocks: [
-          "We take **cash on delivery** only: pay the delivery partner the exact amount shown on your order. It may not be available in every area or above a set amount; see [Shipping & Delivery](/p/shipping-and-delivery).",
+          f.upiAtDoor
+            ? "You **pay on delivery**: give the delivery partner the exact amount shown on your order in cash, or pay it by UPI straight to the store by scanning the QR code they show you. Pay by UPI only for your own order's amount, and show them the payment went through. Cash on delivery may not be available in every area or above a set amount; see [Shipping & Delivery](/p/shipping-and-delivery)."
+            : "We take **cash on delivery** only: pay the delivery partner the exact amount shown on your order. It may not be available in every area or above a set amount; see [Shipping & Delivery](/p/shipping-and-delivery).",
         ],
       },
       {

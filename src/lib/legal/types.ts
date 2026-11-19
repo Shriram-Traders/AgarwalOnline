@@ -37,6 +37,8 @@ export type LegalFacts = {
   areas: LegalArea[];
   evidenceDays: number;
   auditDays: number;
+  /** Customers can pay at the door by UPI (the shop has a UPI ID in Settings): riders show a QR code. */
+  upiAtDoor: boolean;
 };
 
 /** The site is English only (2026-11-12): each policy has one text. */

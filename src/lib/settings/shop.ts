@@ -217,6 +217,7 @@ export const SECTIONS = {
       upiId: {
         kind: "text",
         label: "UPI ID",
+        hint: "Also where UPI at the door is paid, once it’s switched on in Settings → Paying at the door.",
         default: "",
         max: 60,
         pattern: /^[\w.-]{2,}@[A-Za-z]{2,}$/,
@@ -231,6 +232,16 @@ export const SECTIONS = {
         default: "",
         max: 300,
         long: true,
+      },
+    },
+  },
+  payments: {
+    fields: {
+      upiAtDoor: {
+        kind: "check",
+        label: "Delivery partners can take UPI at the door",
+        hint: "Cash always works. With this on, the partner can also show a QR code for the order’s amount, paid straight to the shop’s UPI ID; you tick off each payment in Cash on delivery once it’s in your account.",
+        default: false,
       },
     },
   },
@@ -712,6 +723,12 @@ async function readSection<K extends SectionKey>(section: K): Promise<SectionVal
  */
 export function shopSettings<K extends SectionKey>(section: K, fresh = false): Promise<SectionValues<K>> {
   return fresh ? readSection(section) : shared(`shop-settings-${section}`, () => readSection(section));
+}
+
+/** Where UPI at the door is paid, or null while it's switched off or the shop has no UPI ID. */
+export async function doorUpi() {
+  const [{ upiAtDoor }, { upiId, accountName }] = await Promise.all([shopSettings("payments"), shopSettings("quotation")]);
+  return upiAtDoor && upiId ? { upiId, accountName } : null;
 }
 
 /** An owner saves one section. Recorded in the audit trail with what it was before. */

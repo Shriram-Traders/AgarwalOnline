@@ -130,7 +130,6 @@ test("whole journey: sign up, shop, pay, pack, deliver, reconcile", async ({ bro
 
   // --- sign up -----------------------------------------------------------
   await page.goto("/signup");
-  await page.getByLabel("Email address").fill("neighbour@e2e.test");
   await page.getByLabel("Mobile number").fill("9000000088");
   await page.getByRole("button", { name: "Start account creation" }).click();
   await page.getByLabel("Your name").fill("Neighbour");

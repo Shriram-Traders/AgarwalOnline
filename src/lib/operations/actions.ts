@@ -94,6 +94,7 @@ export async function operationAction(
         "start-handover",
         "confirm-handover",
         "reconcile",
+        "confirm-upi",
         "resolve-discrepancy",
         "cancel",
         "retry-delivery",
@@ -163,6 +164,7 @@ export async function operationAction(
           orderId,
           code: form.get("code"),
           cashPaise: paiseFromRupees(form.get("cashRupees")) ?? null,
+          method: form.get("method") ?? "cash",
         });
         landing = `/delivery?done=${encodeURIComponent(String(orderId))}`;
         break;
@@ -182,6 +184,16 @@ export async function operationAction(
           receivedPaise: paiseFromRupees(form.get("receivedRupees")) ?? null,
           note: form.get("note") ?? "",
         });
+        break;
+      // a UPI payment at the door: the owner saw it in the shop's account
+      case "confirm-upi":
+        await reconcileCOD(user.id, {
+          orderId,
+          receivedPaise: paiseFromRupees(form.get("receivedRupees")) ?? null,
+          note: "Paid by UPI",
+        });
+        // its row leaves the list with the message in it: the page says so at the top instead
+        landing = `/admin/cod?upi=${encodeURIComponent(String(orderId))}`;
         break;
       case "resolve-discrepancy":
         await resolveCODDiscrepancy(user.id, {

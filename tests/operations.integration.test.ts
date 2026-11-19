@@ -9,6 +9,7 @@ import {
   OrderTimelineEvent,
 } from "../src/lib/commerce/models";
 import { PackingChecklist, CODCollection } from "../src/lib/operations/models";
+import { SystemSetting } from "../src/lib/commerce/models";
 import {
   changeOrderStatus,
   savePacking,
@@ -254,6 +255,25 @@ describe.skipIf(!uri)("Packing, delivery and COD controls", () => {
     expect((await Order.findById(orderId)).codStatus).toBe("reconciled");
     expect((await CODCollection.findOne({ orderId })).receivedPaise).toBe(10000);
     await expect(confirmHandover(admin, { handoverId: String(handover._id) })).rejects.toThrow("already confirmed");
+  });
+  it("takes UPI at the door only once the owner switches it on and the shop has a UPI ID, and keeps it out of the rider's cash", async () => {
+    await ready();
+    await expect(completeDelivery(partner, { orderId, code: "246810", cashPaise: 10000, method: "upi" })).rejects.toThrow(
+      "doesn’t take UPI at the door",
+    );
+    // a UPI ID alone (it's also on quotations) doesn't turn it on: the owner's switch does
+    await SystemSetting.create({ key: "shop-quotation", value: { upiId: "agarwal@okaxis" } });
+    await expect(completeDelivery(partner, { orderId, code: "246810", cashPaise: 10000, method: "upi" })).rejects.toThrow(
+      "doesn’t take UPI at the door",
+    );
+    await SystemSetting.create({ key: "shop-payments", value: { upiAtDoor: true } });
+    await completeDelivery(partner, { orderId, code: "246810", cashPaise: 10000, method: "upi" });
+    expect(await CODCollection.findOne({ orderId }).lean()).toMatchObject({ method: "upi", collectedPaise: 10000 });
+    // it went straight to the shop's account: nothing for the rider to hand over
+    await expect(startHandover(partner)).rejects.toThrow("no cash with you");
+    // the owner sees it came in, and the order is settled
+    await reconcileCOD(admin, { orderId, receivedPaise: 10000, note: "Paid by UPI" });
+    expect((await Order.findById(orderId)).codStatus).toBe("reconciled");
   });
   it("records a cash discrepancy without claiming settlement", async () => {
     await ready();

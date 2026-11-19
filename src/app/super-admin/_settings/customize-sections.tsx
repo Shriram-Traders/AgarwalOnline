@@ -8,6 +8,7 @@ export const CUSTOMIZE_TITLES: Record<SectionKey, string> = {
   bill: "Bills",
   slip: "Packing slips",
   quotation: "School quotations",
+  payments: "Paying at the door",
   storefront: "Shop front and colours",
   messages: "Customer messages",
   numbers: "Order and quotation numbers",
@@ -82,6 +83,20 @@ export function CustomizeSections({ saved, tech }: { saved: Record<SectionKey, R
           How long a new quotation is valid, the bank details schools pay into and the bottom of every quotation. A
           quotation keeps what it was sent with.
         </p>
+      </Section>
+      <Section id="payments" values={saved.payments} submit="Save">
+        <p>How customers can pay the delivery partner for a cash-on-delivery order.</p>
+        {saved.quotation.upiId ? (
+          <p>
+            UPI payments go to <strong>{String(saved.quotation.upiId)}</strong>. <a href="#quotation">Change the UPI ID</a> in School
+            quotations.
+          </p>
+        ) : (
+          <p className="notice">
+            Add the shop’s UPI ID first, in <a href="#quotation">School quotations → UPI ID</a>. Until then delivery partners
+            take cash only.
+          </p>
+        )}
       </Section>
       <Section id="numbers" values={saved.numbers} submit="Save numbering">
         <p>The letters at the start of order and quotation numbers. Numbers already given out never change.</p>
