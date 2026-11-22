@@ -415,3 +415,19 @@ A provider can bill its items in its own name. The customer still places one ord
   - bills on the rider's pages (riders can't open bills yet);
   - Agarwal's own business details proposed by admins (they stay owner-only).
 - **Before real use:** have the CA check one finished provider bill and the TCS position.
+
+## Talk to the store on a phone (November 2026)
+
+A customer's conversation (`/account/support/[id]`) is the whole screen on a phone, like a messaging app (`ChatPanel` with `screen`, `src/components/chat-panel.tsx`).
+
+- **The bar:** Back to the conversation list, the title (cut with "…"), and the status, with "Reconnecting…" only when the connection drops. It also has a search button that opens a row under the bar.
+- **While it's open:** the shop's header, tabs, basket bar, assistant and footer are hidden (`html:has(.chat-panel.is-screen)`), and only the messages scroll.
+- **The keyboard:** the screen follows `visualViewport` (`--chat-vh` and `--chat-top`), so the typing box sits above the keyboard. On Android, Chrome otherwise keeps the page's height and hides the box under the keyboard.
+- **Everywhere, including the staff page and computers:**
+  - Day labels ("Today", "Yesterday", "13 Nov").
+  - The typing box grows to about five lines.
+  - Your messages are in the shop's brand colours.
+  - A short chat sits at the bottom.
+  - The connection pill and the search button wrap instead of running off a narrow screen, which was the original Android bug.
+  - A closed chat shows Reopen above the typing box.
+- **Tests:** `tests/e2e/support-chat.spec.ts` (a 360px phone and a computer). `store.spec.ts` waits for Send rather than the "Connected" pill, which a phone no longer shows.
