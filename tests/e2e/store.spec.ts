@@ -339,12 +339,11 @@ test("Super Admin manages staff and reviews the audit trail", async ({
   // the list answers as you type: no Find button to press
   await page.getByLabel("Name, phone or email").fill("Picker");
   await expect(page).toHaveURL(/find=Picker/);
-  await page.getByLabel("Role for Picker Candidate").selectOption("delivery");
-  await page
-    .locator("form", { has: page.getByLabel("Role for Picker Candidate") })
-    .getByRole("button", { name: "Save role" })
-    .click();
-  await page.getByRole("button", { name: /^Yes, / }).click();
+  // one short row per account; Add opens the roles in a sheet, which is the confirming step
+  await page.getByRole("button", { name: "Add Picker Candidate to the team" }).click();
+  const sheet = page.getByRole("dialog", { name: "Add Picker Candidate as" });
+  await sheet.getByLabel(/Delivery partner/).check();
+  await sheet.getByRole("button", { name: "Add to team" }).click();
   await expect(page.getByRole("status")).toContainText("Picker Candidate is now on the team");
   expect((await User.findOne({ phone: "9000000085" }))!.roles).toEqual(["customer", "delivery"]);
 
@@ -611,12 +610,12 @@ test("customer and support exchange messages in real time", async ({
     await support.getByRole("button", { name: "Sign in with email" }).click();
     await expect(support).toHaveURL("/admin");
     await support.goto(`/admin/support/${conversationId}`);
-    await expect(
-      page.getByText("Connected to the store", { exact: true }),
-    ).toBeVisible();
+    // Send works only once the chat has reached the store (on a phone the connection shows in the
+    // chat's own bar only when it drops, so there is no "Connected" pill to wait for)
     await page
       .getByLabel("Your message", { exact: true })
       .fill("Can you help with my grocery list?");
+    await expect(page.getByRole("button", { name: "Send", exact: true })).toBeEnabled();
     await page.getByRole("button", { name: "Send", exact: true }).click();
     await expect(
       support.getByText("Can you help with my grocery list?", { exact: true }),

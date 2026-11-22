@@ -1558,24 +1558,50 @@ a.order-row:hover { border-color: var(--ink); color: var(--ink); }
 .queue-heading { margin-top: 28px; }
 
 /* ---------- Chat ---------- */
-.chat-panel { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto auto auto; height: min(70vh, 640px); height: min(70dvh, 640px); overflow: hidden; border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--surface); }
-.chat-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
-.chat-toolbar > span { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: var(--r-pill); font-size: 0.78rem; font-weight: 600; }
+/* A conversation (chat-panel.tsx): a card of a fixed height on computers and the staff page, the whole
+   screen on a customer's phone (.is-screen, in the phone block further down). Only the messages scroll. */
+.chat-panel { display: flex; flex-direction: column; height: min(70vh, 640px); height: min(70dvh, 640px); overflow: hidden; border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--surface); }
+.chat-bar { display: none; }
+/* the connection pill and the search button share a row, and wrap rather than run off a narrow screen */
+.chat-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; padding: 8px 8px 8px 16px; border-bottom: 1px solid var(--line); }
+.chat-toolbar > span { display: inline-flex; align-items: center; gap: 6px; min-width: 0; padding: 4px 10px; border-radius: var(--r-pill); font-size: 0.78rem; font-weight: 600; }
 .chat-toolbar > span.muted { background: var(--brand-soft); }
-.chat-toolbar input { max-width: 240px; min-height: 40px; padding: 8px 12px; border: 1px solid var(--line-strong); border-radius: var(--r); background: var(--paper); font-size: 0.85rem; }
-.chat-toolbar input:focus { border-color: var(--accent); box-shadow: var(--ring); }
-.chat-messages { display: flex; flex-direction: column; gap: 8px; padding: 16px; overflow-y: auto; background: var(--canvas); }
+.chat-icon-button { flex: none; display: inline-grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 0; border-radius: var(--r-pill); background: transparent; color: inherit; cursor: pointer; }
+.chat-icon-button:hover { background: var(--brand-soft); }
+.chat-icon-button:focus-visible { outline: none; box-shadow: var(--ring); }
+.chat-icon-button[aria-expanded="true"] { background: var(--brand-soft); color: var(--brand); }
+.chat-search { display: flex; align-items: center; gap: 8px; padding: 2px 4px 2px 16px; border-bottom: 1px solid var(--line); background: var(--paper); color: var(--muted); }
+.chat-search:focus-within { box-shadow: inset 0 -2px 0 var(--brand); }
+.chat-search input { flex: 1 1 auto; min-width: 0; min-height: 40px; padding: 8px 4px; border: 0; background: transparent; color: var(--ink); font: inherit; font-size: 0.95rem; }
+.chat-search input:focus { outline: none; }
+/* the row has its own close button: not a second, browser-drawn clear button beside it */
+.chat-search input::-webkit-search-cancel-button { display: none; -webkit-appearance: none; appearance: none; }
+.chat-messages { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 8px; padding: 16px; overflow-y: auto; overscroll-behavior: contain; background: var(--canvas); }
+/* a short chat sits at the bottom, by the typing box, as in a messaging app; a long one scrolls */
+.chat-messages > :first-child { margin-top: auto; }
+/* "Today", "Yesterday", "13 Nov" above each day's messages */
+.chat-day { align-self: center; margin: 6px 0 2px; }
+.chat-day span { display: inline-block; padding: 2px 10px; border-radius: var(--r-pill); background: var(--surface); box-shadow: 0 0 0 1px var(--line); color: var(--muted); font-size: 0.72rem; font-weight: 600; }
+.chat-empty { margin: auto 0; text-align: center; }
 .chat-message { width: fit-content; max-width: 78%; margin: 0; padding: 10px 14px; border-radius: var(--r-lg) var(--r-lg) var(--r-lg) var(--r-sm); background: var(--surface); border: 1px solid var(--line); }
-.chat-message.mine { align-self: flex-end; border-radius: var(--r-lg) var(--r-lg) var(--r-sm) var(--r-lg); background: var(--ink); border-color: var(--ink); color: var(--canvas); }
+/* your own messages in the shop's colour (Settings → Shop front and colours) */
+.chat-message.mine { align-self: flex-end; border-radius: var(--r-lg) var(--r-lg) var(--r-sm) var(--r-lg); background: var(--brand); border-color: var(--brand); color: var(--on-brand); }
 .chat-message.internal { border: 1px dashed #ceb89f; border: 1px dashed color-mix(in oklab, var(--warning) 40%, var(--paper)); background: var(--warning-bg); color: var(--warning); }
 .chat-message small { display: block; font-size: 0.7rem; opacity: 0.8; }
 .chat-message small:first-child { margin-bottom: 2px; font-weight: 700; }
-.chat-message p { margin: 0 0 4px; overflow-wrap: anywhere; }
+.chat-message p { margin: 0 0 4px; overflow-wrap: anywhere; white-space: pre-wrap; }
 .typing-label { margin: 0; padding: 4px 16px; color: var(--muted); font-size: 0.78rem; }
 .chat-panel > .error-message { margin: 8px 16px 0; }
-.chat-compose { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: end; padding: 12px 16px; border-top: 1px solid var(--line); }
+/* Reopen conversation, above the typing box of a closed chat */
+.chat-notice { padding: 12px 16px 0; border-top: 1px solid var(--line); }
+.chat-notice .chat-reopen { gap: 8px; }
+.chat-notice .chat-reopen p { margin: 0; font-size: 0.85rem; }
+.chat-compose { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: end; padding: 10px 12px; border-top: 1px solid var(--line); background: var(--surface); }
+.chat-notice + .chat-compose { border-top: 0; }
 .chat-compose .internal-toggle { grid-column: 1 / -1; }
-.chat-compose textarea { min-height: 48px; max-height: 160px; }
+/* one line to start, growing with the text to about five, then it scrolls (chat-panel.tsx sets the height) */
+.chat-compose textarea { min-height: 44px; max-height: calc(5 * 1.4em + 22px); padding: 10px 16px; border-radius: 22px; line-height: 1.4; resize: none; overflow-y: auto; }
+.chat-send { min-height: 44px; gap: 6px; border-radius: var(--r-pill); }
 
 /* ---------- Footer ---------- */
 .site-footer { margin-top: auto; border-top: 1px solid var(--line); background: var(--canvas); color: var(--ink-2); font-size: 0.9rem; }
@@ -3733,6 +3759,39 @@ table.slip-lines { width: 100%; min-width: 0; margin: 16px 0; border-collapse: c
 /* Support chat: a real message area on every screen, and the connection pill on one line */
 .chat-panel { height: max(440px, min(70vh, 640px)); height: max(440px, min(70dvh, 640px)); }
 .chat-toolbar .success-message, .chat-toolbar .muted { white-space: nowrap; }
+@media (max-width: 760px) {
+  /* A customer's conversation on a phone is the whole screen, like a messaging app: its own bar on top
+     (Back, the title, the status, search), only the messages scroll, and the typing box sits right above
+     the keyboard. --chat-vh and --chat-top follow the part of the screen the phone shows (chat-panel.tsx).
+     The shop's header, tabs, basket bar and floating buttons step aside while it's open. */
+  html:has(.chat-panel.is-screen), html:has(.chat-panel.is-screen) body { overflow: hidden; }
+  html:has(.chat-panel.is-screen) :is(.header, .top-strip, .mobile-nav, .cart-bar, .assistant-launcher, .site-footer) { display: none; }
+  .chat-page > .workspace-heading { display: none; }
+  .chat-panel.is-screen {
+    position: fixed;
+    top: var(--chat-top, 0px);
+    left: 0;
+    right: 0;
+    z-index: calc(var(--z-nav) + 1);
+    height: 100vh;
+    height: var(--chat-vh, 100dvh);
+    border: 0;
+    border-radius: 0;
+  }
+  .chat-panel.is-screen .chat-bar { display: flex; align-items: center; gap: 2px; padding: calc(4px + env(safe-area-inset-top)) 4px 4px; background: var(--band); color: var(--on-band); }
+  .chat-panel.is-screen .chat-bar .chat-icon-button:hover { background: rgba(15, 23, 42, 0.08); background: color-mix(in srgb, var(--on-band) 12%, transparent); }
+  .chat-panel.is-screen .chat-bar .chat-icon-button[aria-expanded="true"] { background: rgba(15, 23, 42, 0.12); background: color-mix(in srgb, var(--on-band) 16%, transparent); color: inherit; }
+  .chat-bar-title { flex: 1 1 auto; min-width: 0; padding: 0 4px; }
+  .chat-bar-title h1 { margin: 0; overflow: hidden; font-size: 1.05rem; line-height: 1.3; letter-spacing: -0.01em; white-space: nowrap; text-overflow: ellipsis; }
+  .chat-bar-title p { display: flex; flex-wrap: wrap; align-items: center; gap: 0 4px; margin: 0; font-size: 0.78rem; line-height: 1.3; }
+  .chat-panel.is-screen .chat-toolbar { display: none; }
+  .chat-panel.is-screen .chat-messages { padding: 12px; }
+  .chat-panel.is-screen .chat-message { max-width: 85%; }
+  .chat-panel.is-screen .chat-compose { padding: 8px 8px calc(8px + env(safe-area-inset-bottom)); }
+  /* Send is a round icon on a phone; its name stays for screen readers */
+  .chat-send { width: 44px; padding: 0; }
+  .chat-send-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
+}
 
 /* Floating buttons step out of each other's way: the assistant sits above a pinned "Buy this board" */
 body:has(.buy-bar) .assistant-launcher { bottom: 92px; }
