@@ -25,6 +25,7 @@ import {
 import { User } from "@/lib/db/models";
 import { staffAction } from "@/lib/staff/actions";
 import { PhoneInput } from "@/components/phone-input";
+import { AddToTeam, type RoleChoice } from "./add-to-team";
 export const metadata = { title: "Staff & roles", robots: { index: false } };
 
 const labels: Record<string, string> = {
@@ -94,6 +95,18 @@ const CAN: Partial<Record<Permission, string>> = {
 
 /** Accounts made from a phone number get a stand-in address like 9000000001@phone.ags.invalid. */
 const placeholderEmail = (email?: string) => !email || email.endsWith(".invalid");
+
+/** The roles "Add a staff member" offers, worded as in the role guide beside the team list. */
+const roleChoices: RoleChoice[] = staffRoles.map((role) => ({ value: role, label: labels[role], summary: SUMMARY[role] }));
+
+/** "Aaditya samadhiya" → "AS", for the circle beside a name. */
+const initials = (name: string) =>
+  name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((word) => word[0]!.toUpperCase())
+    .join("") || "?";
 
 export default async function StaffManagement({
   searchParams,
@@ -313,89 +326,44 @@ export default async function StaffManagement({
             )}
           </span>
         </p>
-        <DataTable
-          bare
-          caption="Accounts without a staff role, with a role to give each one"
-          rows={candidates}
-          rowKey={(person) => String(person._id)}
-          columns={[
-            {
-              header: "Person",
-              cell: (person) => (
-                <span className="product-cell">
-                  <span>
-                    <strong>{person.name}</strong>
-                    <small>
-                      {[
-                        person.phone,
-                        person.email?.endsWith(".invalid")
-                          ? null
-                          : person.email,
-                      ]
-                        .filter(Boolean)
-                        .join(" · ")}
-                    </small>
+        {/* a picker, not a list of records: one short row per account and one Add button, which
+            opens the roles in a sheet (no form per row, no export, no "Customer" on every row) */}
+        {candidates.length ? (
+          <ul className="staff-picker" aria-label="Accounts without a staff role">
+            {candidates.map((person) => {
+              const email = placeholderEmail(person.email) ? null : person.email;
+              const contact = [person.phone, email].filter(Boolean).join(" · ");
+              return (
+                <li key={String(person._id)}>
+                  <span className="staff-picker-initials" aria-hidden="true">
+                    {initials(person.name)}
                   </span>
-                </span>
-              ),
-            },
-            {
-              header: "Joined",
-              cell: (person) => <When at={person.createdAt} />,
-            },
-            {
-              // this list only holds accounts without a staff role
-              header: "Role now",
-              text: () => "Customer",
-              cell: () => <StatusPill>Customer</StatusPill>,
-            },
-            {
-              // they have no staff role yet: this is where one is given
-              header: "Give a role",
-              cell: (person) => (
-                <ActionForm
-                  action={staffAction}
-                  submit="Save role"
-                  className="form-stack inline-grant"
-                  buttonClassName="secondary-button compact-button"
-                  confirmMessage={`${person.name} gets the role you picked: a staff role opens the store workspace. You can change it later.`}
-                >
-                  <input type="hidden" name="operation" value="grant" />
-                  <input
-                    type="hidden"
-                    name="userId"
-                    value={String(person._id)}
-                  />
-                  <label className="sr-only" htmlFor={`role-${person._id}`}>
-                    Role for {person.name}
-                  </label>
-                  <select
-                    id={`role-${person._id}`}
-                    name="role"
-                    defaultValue=""
-                    required
-                  >
-                    {pickARole(staffRoles)}
-                  </select>
-                </ActionForm>
-              ),
-            },
-          ]}
-          empty={
-            <EmptyState
-              icon={UsersRound}
-              title={onTeam.length ? "Nobody new matches" : term ? "Nobody matches" : "No other accounts yet"}
-              body={
-                onTeam.length
-                  ? "Everyone this matches is already on the team, listed above."
-                  : term
-                    ? "Check the spelling or search by phone. If they have never signed up, create an account below."
-                    : "When customers sign up they appear here, ready to be added."
-              }
-              heading="h3"
-            />
-          }
-        />
+                  <span className="staff-picker-who">
+                    <strong>{person.name}</strong>
+                    {contact && <small>{contact}</small>}
+                  </span>
+                  <small className="staff-picker-joined">
+                    Joined <When at={person.createdAt} />
+                  </small>
+                  <AddToTeam person={{ id: String(person._id), name: person.name, contact }} roles={roleChoices} />
+                </li>
+              );
+            })}
+          </ul>
+        ) : (
+          <EmptyState
+            icon={UsersRound}
+            title={onTeam.length ? "Nobody new matches" : term ? "Nobody matches" : "No other accounts yet"}
+            body={
+              onTeam.length
+                ? "Everyone this matches is already on the team, listed above."
+                : term
+                  ? "Check the spelling or search by phone. If they have never signed up, create an account below."
+                  : "When customers sign up they appear here, ready to be added."
+            }
+            heading="h3"
+          />
+        )}
       </div>
 
       <details className="panel create-staff">

@@ -1,6 +1,7 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
-import { Send, WifiOff } from "lucide-react";
+import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
+import Link from "next/link";
+import { ArrowLeft, Search, Send, WifiOff, X } from "lucide-react";
 import type { MessageDTO } from "@/lib/chat/service";
 import { PolicyNotice } from "./policy-notice";
 type Sync = {
@@ -51,16 +52,49 @@ function messageId() {
   const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
+/** The day a message was sent, in India: "2026-11-18". */
+const istDay = (at: string | Date) =>
+  new Date(at).toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+/** The chip above a day's messages: "Today", "Yesterday", "13 Nov", or "13 Nov 2025" in another year. */
+function dayLabel(day: string) {
+  const today = istDay(new Date());
+  if (day === today) return "Today";
+  if (day === istDay(new Date(Date.now() - 86_400_000))) return "Yesterday";
+  const date = new Date(`${day}T12:00:00+05:30`);
+  return date.toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "short",
+    ...(day.slice(0, 4) !== today.slice(0, 4) ? { year: "numeric" } : {}),
+    timeZone: "Asia/Kolkata",
+  });
+}
+/** A typing box that grows with its text, up to the CSS max-height, then scrolls. */
+function fitHeight(box: HTMLTextAreaElement | null) {
+  if (!box) return;
+  box.style.height = "auto";
+  box.style.height = `${box.scrollHeight + 2}px`;
+}
+/**
+ * A conversation with the store. On a customer's phone (`screen`) it is the whole screen, like a
+ * messaging app: a bar with Back, the title, the status and search; the messages; the typing box
+ * just above the keyboard. Elsewhere (computers, the staff page) it is a card inside the page.
+ */
 export function ChatPanel({
   conversationId,
   userId,
   staff,
   initial,
+  screen,
+  notice,
 }: {
   conversationId: string;
   userId: string;
   staff: boolean;
   initial: Sync;
+  /** The customer's page: draw the phone's top bar with these. */
+  screen?: { title: string; status: string; backHref: string };
+  /** Shown above the typing box, such as Reopen conversation on a closed chat. */
+  notice?: React.ReactNode;
 }) {
   const [messages, setMessages] = useState(initial.messages);
   const [connected, setConnected] = useState(false);
@@ -71,9 +105,14 @@ export function ChatPanel({
   const [typing, setTyping] = useState(initial.typing);
   const [receipts, setReceipts] = useState(initial.receipts);
   const [query, setQuery] = useState("");
+  const [searching, setSearching] = useState(false);
   const cursor = useRef(initial.cursor);
   const wake = useRef<() => void>(() => {});
+  const panel = useRef<HTMLElement>(null);
+  const log = useRef<HTMLDivElement>(null);
   const end = useRef<HTMLDivElement>(null);
+  const box = useRef<HTMLTextAreaElement>(null);
+  const searchBox = useRef<HTMLInputElement>(null);
   const typingAt = useRef(0);
   const pending = useRef<{
     id: string;
@@ -154,6 +193,35 @@ export function ChatPanel({
   useEffect(() => {
     end.current?.scrollIntoView({ block: "nearest" });
   }, [messages.length]);
+  // the typing box grows and shrinks with what's in it, including after Send empties it
+  useLayoutEffect(() => fitHeight(box.current), [body]);
+  useEffect(() => {
+    if (searching) searchBox.current?.focus();
+  }, [searching]);
+  /*
+   * The full-screen chat follows the part of the screen the phone shows. When the keyboard opens,
+   * Chrome on Android keeps the page's height and only shrinks what's visible, so a screen sized to the
+   * page would leave the typing box under the keyboard. The newest message stays in view meanwhile.
+   */
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    const element = panel.current;
+    if (!screen || !viewport || !element) return;
+    const fit = () => {
+      const list = log.current;
+      const atEnd = !list || list.scrollHeight - list.scrollTop - list.clientHeight < 48;
+      element.style.setProperty("--chat-vh", `${Math.round(viewport.height)}px`);
+      element.style.setProperty("--chat-top", `${Math.round(viewport.offsetTop)}px`);
+      if (atEnd && list) list.scrollTop = list.scrollHeight;
+    };
+    fit();
+    viewport.addEventListener("resize", fit);
+    viewport.addEventListener("scroll", fit);
+    return () => {
+      viewport.removeEventListener("resize", fit);
+      viewport.removeEventListener("scroll", fit);
+    };
+  }, [screen]);
   async function send(event: React.FormEvent) {
     event.preventDefault();
     if (!connected || !body.trim() || busy) return;
@@ -179,54 +247,115 @@ export function ChatPanel({
       pending.current = null;
       typingAt.current = 0;
       wake.current();
-    } catch {
+    } catch (failure) {
       setError(
-        "Message was not confirmed. Your text is kept; press Send to retry.",
+        failure instanceof Error && /closed/i.test(failure.message)
+          ? failure.message
+          : "Message was not confirmed. Your text is kept; press Send to retry.",
       );
     } finally {
       setBusy(false);
     }
   }
+  function closeSearch() {
+    setSearching(false);
+    setQuery("");
+  }
+  const shown = messages.filter((m) => m.body.toLowerCase().includes(query.toLowerCase()));
+  const searchToggle = (
+    <button
+      type="button"
+      className="chat-icon-button"
+      aria-label="Search messages"
+      aria-expanded={searching}
+      aria-controls="chat-search-row"
+      onClick={() => (searching ? closeSearch() : setSearching(true))}
+    >
+      <Search size={19} aria-hidden="true" />
+    </button>
+  );
   return (
-    <section className="chat-panel">
+    <section ref={panel} className={screen ? "chat-panel is-screen" : "chat-panel"} aria-label="Conversation with the store">
+      {screen && (
+        // on a phone the conversation's own bar takes the place of the page heading and the shop's header
+        <div className="chat-bar">
+          <Link href={screen.backHref} className="chat-icon-button" aria-label="Back to your conversations">
+            <ArrowLeft size={20} aria-hidden="true" />
+          </Link>
+          <div className="chat-bar-title">
+            <h1>{screen.title}</h1>
+            <p>
+              {screen.status}
+              {!connected && (
+                <>
+                  {" · "}
+                  <WifiOff size={12} aria-hidden="true" /> Reconnecting…
+                </>
+              )}
+            </p>
+          </div>
+          {searchToggle}
+        </div>
+      )}
       <div className="chat-toolbar">
         <span className={connected ? "success-message" : "muted"}>
           {connected ? (
             "Connected to the store"
           ) : (
             <>
-              <WifiOff size={14} /> Reconnecting
+              <WifiOff size={14} aria-hidden="true" /> Reconnecting
             </>
           )}
         </span>
-        <label className="sr-only" htmlFor="chat-search">
-          Search loaded messages
-        </label>
-        <input
-          id="chat-search"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search messages…"
-        />
+        {searchToggle}
       </div>
+      {searching && (
+        <div className="chat-search" id="chat-search-row">
+          <label className="sr-only" htmlFor="chat-search">
+            Search loaded messages
+          </label>
+          <Search size={16} aria-hidden="true" />
+          <input
+            ref={searchBox}
+            id="chat-search"
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") closeSearch();
+            }}
+            placeholder="Search messages"
+            autoComplete="off"
+          />
+          <button type="button" className="chat-icon-button" aria-label="Close search" onClick={closeSearch}>
+            <X size={18} aria-hidden="true" />
+          </button>
+        </div>
+      )}
       <div
+        ref={log}
         className="chat-messages"
         role="log"
         aria-label="Conversation messages"
         aria-live="polite"
       >
-        {messages
-          .filter((m) => m.body.toLowerCase().includes(query.toLowerCase()))
-          .map((m) => {
-            const read = receipts.some(
-              (r) => r.userId !== userId && r.read >= m.sequence,
-            );
-            const delivered = receipts.some(
-              (r) => r.userId !== userId && r.delivered >= m.sequence,
-            );
-            return (
+        {shown.map((m, index) => {
+          const read = receipts.some(
+            (r) => r.userId !== userId && r.read >= m.sequence,
+          );
+          const delivered = receipts.some(
+            (r) => r.userId !== userId && r.delivered >= m.sequence,
+          );
+          const day = istDay(m.createdAt);
+          const newDay = index === 0 || istDay(shown[index - 1].createdAt) !== day;
+          return (
+            <Fragment key={m.id}>
+              {newDay && (
+                <p className="chat-day">
+                  <span suppressHydrationWarning>{dayLabel(day)}</span>
+                </p>
+              )}
               <article
-                key={m.id}
                 className={`chat-message ${m.senderId === userId ? "mine" : ""} ${m.internal ? "internal" : ""}`}
               >
                 <small>
@@ -244,16 +373,20 @@ export function ChatPanel({
                     : ""}
                 </small>
               </article>
-            );
-          })}
+            </Fragment>
+          );
+        })}
+        {query && !shown.length && messages.length > 0 && (
+          <p className="muted chat-empty">No messages match “{query}”.</p>
+        )}
         {!messages.length &&
           (staff ? (
-            <p className="muted">No messages yet. The customer’s first message shows here, and your reply goes below.</p>
+            <p className="muted chat-empty">No messages yet. The customer’s first message shows here, and your reply goes below.</p>
           ) : (
-            <>
+            <div className="chat-empty">
               <p className="muted">Tell us how we can help.</p>
               <PolicyNotice kind="chat" />
-            </>
+            </div>
           ))}
         <div ref={end} />
       </div>
@@ -263,6 +396,7 @@ export function ChatPanel({
           {error}
         </p>
       )}
+      {notice && <div className="chat-notice">{notice}</div>}
       <form onSubmit={send} className="chat-compose">
         {staff && (
           <label className="internal-toggle">
@@ -278,6 +412,7 @@ export function ChatPanel({
           Your message
         </label>
         <textarea
+          ref={box}
           id="chat-message"
           value={body}
           onChange={(e) => {
@@ -294,15 +429,16 @@ export function ChatPanel({
           placeholder={
             internal ? "Private note for the store team…" : "Write a message…"
           }
-          rows={2}
+          rows={1}
           required
         />
         <button
-          className="primary-button"
+          className="primary-button chat-send"
           disabled={!connected || busy || !body.trim()}
+          aria-busy={busy}
         >
-          <Send size={17} />
-          {busy ? "Sending…" : "Send"}
+          <Send size={18} aria-hidden="true" />
+          <span className="chat-send-label">{busy ? "Sending…" : "Send"}</span>
         </button>
       </form>
     </section>

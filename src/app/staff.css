@@ -196,3 +196,42 @@
 @media (pointer: coarse) {
   .finder-scopes button { min-height: 40px; }
 }
+
+/* ---------- Staff & roles: "Add a staff member" ---------- */
+/* A picker, not a list of records: one short row per account and one Add button, which opens the
+   roles in a sheet (add-to-team.tsx). Long emails are cut short instead of pushing the row wider. */
+.staff-picker { display: grid; margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--line); }
+.staff-picker > li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: 2px 14px; min-height: 60px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.staff-picker-initials { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; background: var(--brand-tint); color: var(--brand); font-size: 0.78rem; font-weight: 700; }
+.staff-picker-who { display: grid; min-width: 0; }
+.staff-picker-who :is(strong, small) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.staff-picker-who strong { color: var(--ink); }
+.staff-picker-who small, .staff-picker-joined { color: var(--muted); font-size: 0.82rem; }
+.staff-picker-joined { white-space: nowrap; }
+@media (max-width: 760px) {
+  /* the joined date goes under the contact line; the button keeps its place on the right */
+  .staff-picker > li { grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "face who add" "face joined add"; column-gap: 12px; }
+  .staff-picker-initials { grid-area: face; }
+  .staff-picker-who { grid-area: who; }
+  .staff-picker-joined { grid-area: joined; }
+  .staff-picker-add { grid-area: add; min-height: 44px; }
+}
+
+/* the role sheet: one card per role, the picked one lit, and one wide "Add to team" */
+.role-sheet { display: grid; gap: 16px; }
+.sheet-modal > .role-sheet-contact { margin: -4px 0 14px; color: var(--muted); font-size: 0.9rem; overflow-wrap: anywhere; }
+.role-sheet > :is(.error-message, .success-message) { margin: 0; }
+.role-choices { display: grid; gap: 8px; min-width: 0; margin: 0; padding: 0; border: 0; }
+.role-choices label { display: grid; grid-template-columns: auto auto minmax(0, 1fr); align-items: start; gap: 10px; min-height: 44px; padding: 12px 14px; border: 1px solid var(--line-strong); border-radius: var(--r-md); background: var(--paper); color: var(--ink); cursor: pointer; }
+.role-choices label:hover { border-color: var(--ink); }
+.role-choices label:has(:checked) { border-color: var(--brand); background: var(--brand-tint); box-shadow: inset 0 0 0 1px var(--brand); }
+.role-choices label:has(:focus-visible) { outline: 2px solid var(--brand); outline-offset: 2px; }
+.role-choices input { margin-top: 1px; accent-color: var(--brand); }
+.role-choices svg { margin-top: 1px; color: var(--brand); }
+.role-choices strong { display: block; font-weight: 600; }
+.role-choices small { display: block; margin-top: 2px; color: var(--muted); font-size: 0.82rem; line-height: 1.4; }
+.role-sheet > .primary-button { width: 100%; min-height: 48px; }
+@media (max-width: 760px) {
+  /* a small phone scrolls the four roles: "Add to team" stays pinned at the sheet's foot, never below the screen */
+  .role-sheet > .primary-button { position: sticky; bottom: 0; z-index: 1; box-shadow: 0 0 0 10px var(--surface), 0 34px 0 14px var(--surface); }
+}

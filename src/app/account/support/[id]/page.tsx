@@ -11,6 +11,10 @@ import { ActionForm } from "@/components/action-form";
 import { conversationStatusAction } from "@/lib/chat/actions";
 import { displayStatus } from "@/lib/display";
 export const metadata = { title: "Conversation with the store", robots: { index: false } };
+/**
+ * One conversation with the store. On a phone it fills the screen like a messaging app (the chat's
+ * own bar replaces this heading and the shop's header and tabs); on a computer it's a card on the page.
+ */
 export default async function Conversation({
   params,
 }: {
@@ -29,27 +33,29 @@ export default async function Conversation({
     conversationId: id,
     after: 0,
   });
+  const status = displayStatus(conversation.status);
   return (
-    <section className="page-container">
+    <section className="page-container chat-page">
       <PageHeading
         eyebrow="Your store is here to help"
         title={conversation.title}
-        lead={displayStatus(conversation.status)}
+        lead={status}
       />
-      {["closed", "resolved"].includes(conversation.status) && (
-        <ActionForm
-          action={conversationStatusAction}
-          submit="Reopen conversation"
-        >
-          <input type="hidden" name="conversationId" value={id} />
-          <input type="hidden" name="status" value="open" />
-        </ActionForm>
-      )}
       <ChatPanel
         conversationId={id}
         userId={user.id}
         staff={false}
         initial={initial}
+        screen={{ title: conversation.title, status, backHref: "/account/support" }}
+        notice={
+          ["closed", "resolved"].includes(conversation.status) ? (
+            <ActionForm action={conversationStatusAction} submit="Reopen conversation" className="form-stack chat-reopen">
+              <input type="hidden" name="conversationId" value={id} />
+              <input type="hidden" name="status" value="open" />
+              <p className="muted">This conversation is {status.toLowerCase()}. Reopen it to send a message.</p>
+            </ActionForm>
+          ) : null
+        }
       />
     </section>
   );
